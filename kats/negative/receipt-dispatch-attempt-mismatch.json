@@ -1,0 +1,5 @@
+{
+  "name": "receipt-dispatch-attempt-mismatch",
+  "expected_code": "receipt/dispatch-attempt-mismatch",
+  "mutation_description": "Change dispatch attempt_id while retaining its attempted_as parent."
+}

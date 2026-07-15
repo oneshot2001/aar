@@ -1,0 +1,5 @@
+{
+  "name": "replay-parent-binding",
+  "expected_code": "replay/parent-binding",
+  "mutation_description": "Replace intended_parents without changing parent edges."
+}

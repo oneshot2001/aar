@@ -1,0 +1,5 @@
+{
+  "name": "schema-digest-size",
+  "expected_code": "schema/digest-size",
+  "mutation_description": "Shorten selector_commitment to 31 bytes."
+}

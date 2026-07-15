@@ -1,0 +1,5 @@
+{
+  "name": "replay-invocation-mismatch",
+  "expected_code": "replay/invocation-mismatch",
+  "mutation_description": "Change one receipt invocation id inside a shared correlation flow."
+}

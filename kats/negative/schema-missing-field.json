@@ -1,0 +1,5 @@
+{
+  "name": "schema-missing-field",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "Remove required top-level created_at."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "hash-mismatch",
+  "expected_code": "hash/mismatch",
+  "mutation_description": "Flip the adjacent structured-claim digest without changing its canonical bytes."
+}

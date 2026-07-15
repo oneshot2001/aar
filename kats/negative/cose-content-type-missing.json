@@ -1,0 +1,5 @@
+{
+  "name": "cose-content-type-missing",
+  "expected_code": "cose/content-type-missing",
+  "mutation_description": "Remove protected content type label 3."
+}

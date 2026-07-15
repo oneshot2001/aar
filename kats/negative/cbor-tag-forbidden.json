@@ -1,0 +1,5 @@
+{
+  "name": "cbor-tag-forbidden",
+  "expected_code": "cbor/tag-forbidden",
+  "mutation_description": "Wrap the bundle in CBOR tag 0."
+}

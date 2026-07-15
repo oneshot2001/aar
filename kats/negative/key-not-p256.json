@@ -1,0 +1,5 @@
+{
+  "name": "key-not-p256",
+  "expected_code": "key/not-p256",
+  "mutation_description": "Carry a non-P-256 SPKI under a matching kid and select it from the request."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "cose-alg-in-unprotected",
+  "expected_code": "cose/alg-in-unprotected",
+  "mutation_description": "Put alg label 1 in the unprotected map."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "schema-unsorted-set",
+  "expected_code": "schema/unsorted-set",
+  "mutation_description": "Reverse the otherwise valid selector receipt-kind set."
+}

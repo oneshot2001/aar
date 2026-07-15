@@ -1,0 +1,5 @@
+{
+  "name": "cose-receipt-coordinate-missing",
+  "expected_code": "cose/receipt-coordinate-missing",
+  "mutation_description": "Remove protected receipt epoch-sequence coordinate."
+}

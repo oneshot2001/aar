@@ -1,0 +1,5 @@
+{
+  "name": "cbor-duplicate-key",
+  "expected_code": "cbor/duplicate-key",
+  "mutation_description": "Repeat the top-level v key."
+}

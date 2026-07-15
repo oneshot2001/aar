@@ -1,0 +1,5 @@
+{
+  "name": "key-not-found",
+  "expected_code": "key/not-found",
+  "mutation_description": "Change a request protected kid to an unavailable 32-byte kid."
+}

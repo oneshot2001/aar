@@ -1,0 +1,5 @@
+{
+  "name": "bundle-selector-commitment",
+  "expected_code": "bundle/selector-commitment",
+  "mutation_description": "Replace the fixed-size selector commitment with a different digest."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "receipt-decision-presentation",
+  "expected_code": "receipt/decision-presentation",
+  "mutation_description": "Remove presentation from a permit_with_approval authorization."
+}

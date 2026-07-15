@@ -1,0 +1,5 @@
+{
+  "name": "request-commitment-mismatch",
+  "expected_code": "request/commitment-mismatch",
+  "mutation_description": "Replace an agent root request commitment and re-sign/re-identify the receipt."
+}

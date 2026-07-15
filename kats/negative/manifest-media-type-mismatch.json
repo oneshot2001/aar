@@ -1,0 +1,5 @@
+{
+  "name": "manifest-media-type-mismatch",
+  "expected_code": "manifest/media-type-mismatch",
+  "mutation_description": "Change a supplied canonical payload media type while preserving its digest."
+}

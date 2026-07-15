@@ -1,0 +1,5 @@
+{
+  "name": "bundle-dependency-missing",
+  "expected_code": "bundle/dependency-missing",
+  "mutation_description": "Remove the request envelope required by an agent_request root."
+}

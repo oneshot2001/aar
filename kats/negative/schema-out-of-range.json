@@ -1,0 +1,5 @@
+{
+  "name": "schema-out-of-range",
+  "expected_code": "schema/out-of-range",
+  "mutation_description": "Exceed the 256 bundle-range occurrence bound."
+}

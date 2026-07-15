@@ -1,0 +1,5 @@
+{
+  "name": "resource-proofs-too-large",
+  "expected_code": "resource/proofs-too-large",
+  "mutation_description": "Add valid-shape unique Merkle proofs until aggregate deterministic encoding exceeds 4 MiB."
+}

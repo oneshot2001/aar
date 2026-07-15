@@ -1,0 +1,5 @@
+{
+  "name": "schema-unknown-field",
+  "expected_code": "schema/unknown-field",
+  "mutation_description": "Add one field to the closed top-level bundle map."
+}

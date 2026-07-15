@@ -1,0 +1,5 @@
+{
+  "name": "replay-expired",
+  "expected_code": "replay/expired",
+  "mutation_description": "Move a root receipt expires_at to its committed_at."
+}

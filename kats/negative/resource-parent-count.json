@@ -1,0 +1,5 @@
+{
+  "name": "resource-parent-count",
+  "expected_code": "resource/parent-count",
+  "mutation_description": "Give one receipt 65 parent entries."
+}

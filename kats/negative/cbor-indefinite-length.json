@@ -1,0 +1,5 @@
+{
+  "name": "cbor-indefinite-length",
+  "expected_code": "cbor/indefinite-length",
+  "mutation_description": "Use an indefinite-length top-level array."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "receipt-attempt-disposition",
+  "expected_code": "receipt/attempt-disposition",
+  "mutation_description": "Add refusal_reason to an eligible_for_dispatch attempt."
+}

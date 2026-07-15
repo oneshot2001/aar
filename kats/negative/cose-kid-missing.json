@@ -1,0 +1,5 @@
+{
+  "name": "cose-kid-missing",
+  "expected_code": "cose/kid-missing",
+  "mutation_description": "Remove protected kid label 4."
+}

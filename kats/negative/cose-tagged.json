@@ -1,0 +1,5 @@
+{
+  "name": "cose-tagged",
+  "expected_code": "cose/tagged",
+  "mutation_description": "Tag the serialized COSE_Sign1 with tag 18."
+}

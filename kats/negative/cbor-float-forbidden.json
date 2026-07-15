@@ -1,0 +1,5 @@
+{
+  "name": "cbor-float-forbidden",
+  "expected_code": "cbor/float-forbidden",
+  "mutation_description": "Use a top-level IEEE-754 float."
+}

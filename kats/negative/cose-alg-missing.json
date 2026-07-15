@@ -1,0 +1,5 @@
+{
+  "name": "cose-alg-missing",
+  "expected_code": "cose/alg-missing",
+  "mutation_description": "Remove protected alg label 1."
+}

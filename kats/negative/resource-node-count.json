@@ -1,0 +1,5 @@
+{
+  "name": "resource-node-count",
+  "expected_code": "resource/node-count",
+  "mutation_description": "Replace receipts with 10,001 compact, uniquely identified envelope shells."
+}

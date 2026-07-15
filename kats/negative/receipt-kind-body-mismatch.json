@@ -1,0 +1,5 @@
+{
+  "name": "receipt-kind-body-mismatch",
+  "expected_code": "receipt/kind-body-mismatch",
+  "mutation_description": "Put an inference body under a root observation kind."
+}

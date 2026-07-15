@@ -1,0 +1,5 @@
+{
+  "name": "sig-zero-rs",
+  "expected_code": "sig/zero-rs",
+  "mutation_description": "Set r and s to zero in a 64-byte P1363 signature."
+}

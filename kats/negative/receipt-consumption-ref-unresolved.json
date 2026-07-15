@@ -1,0 +1,5 @@
+{
+  "name": "receipt-consumption-ref-unresolved",
+  "expected_code": "receipt/consumption-ref-unresolved",
+  "mutation_description": "Point an inference consumption reference at an unknown digest."
+}

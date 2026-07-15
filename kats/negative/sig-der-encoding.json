@@ -1,0 +1,5 @@
+{
+  "name": "sig-der-encoding",
+  "expected_code": "sig/der-encoding",
+  "mutation_description": "Replace P1363 with a syntactically valid DER ECDSA pair."
+}

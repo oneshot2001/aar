@@ -1,0 +1,5 @@
+{
+  "name": "schema-duplicate-entry",
+  "expected_code": "schema/duplicate-entry",
+  "mutation_description": "Repeat the single selector subject id."
+}

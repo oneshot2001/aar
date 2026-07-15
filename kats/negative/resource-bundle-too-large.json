@@ -1,0 +1,5 @@
+{
+  "name": "resource-bundle-too-large",
+  "expected_code": "resource/bundle-too-large",
+  "mutation_description": "Append bytes until the exact input exceeds the fixed bundle limit."
+}

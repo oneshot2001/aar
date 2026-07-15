@@ -1,0 +1,5 @@
+{
+  "name": "cbor-malformed",
+  "expected_code": "cbor/malformed",
+  "mutation_description": "Use a reserved CBOR simple value."
+}

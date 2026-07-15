@@ -1,0 +1,5 @@
+{
+  "name": "sig-bad-length",
+  "expected_code": "sig/bad-length",
+  "mutation_description": "Shorten the signature to a non-DER 63-byte string."
+}

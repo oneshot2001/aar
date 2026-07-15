@@ -1,0 +1,5 @@
+{
+  "name": "cbor-trailing-bytes",
+  "expected_code": "cbor/trailing-bytes",
+  "mutation_description": "Append one complete scalar after the valid bundle."
+}

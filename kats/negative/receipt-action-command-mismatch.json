@@ -1,0 +1,5 @@
+{
+  "name": "receipt-action-command-mismatch",
+  "expected_code": "receipt/action-command-mismatch",
+  "mutation_description": "Change normalized action name to another valid action without changing command."
+}

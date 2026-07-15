@@ -1,0 +1,5 @@
+{
+  "name": "resource-cbor-depth",
+  "expected_code": "resource/cbor-depth",
+  "mutation_description": "Wrap a scalar in 33 nested arrays."
+}

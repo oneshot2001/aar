@@ -1,0 +1,5 @@
+{
+  "name": "schema-enum-unknown",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Use an unknown claimed profile."
+}

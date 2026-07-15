@@ -1,0 +1,5 @@
+{
+  "name": "cose-payload-not-detached",
+  "expected_code": "cose/payload-not-detached",
+  "mutation_description": "Embed an empty bstr instead of CBOR null."
+}

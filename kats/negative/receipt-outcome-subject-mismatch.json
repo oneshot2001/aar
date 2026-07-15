@@ -1,0 +1,5 @@
+{
+  "name": "receipt-outcome-subject-mismatch",
+  "expected_code": "receipt/outcome-subject-mismatch",
+  "mutation_description": "Change outcome subject while retaining its observed_outcome parent."
+}

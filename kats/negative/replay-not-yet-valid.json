@@ -1,0 +1,5 @@
+{
+  "name": "replay-not-yet-valid",
+  "expected_code": "replay/not-yet-valid",
+  "mutation_description": "Move a root receipt issued_at after its committed_at."
+}

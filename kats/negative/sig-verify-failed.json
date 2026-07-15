@@ -1,0 +1,5 @@
+{
+  "name": "sig-verify-failed",
+  "expected_code": "sig/verify-failed",
+  "mutation_description": "Flip one bit in a valid low-S P1363 signature."
+}

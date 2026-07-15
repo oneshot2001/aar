@@ -1,0 +1,5 @@
+{
+  "name": "identity-receipt-id-mismatch",
+  "expected_code": "identity/receipt-id-mismatch",
+  "mutation_description": "Replace a receipt_id and re-sign without recomputing it."
+}

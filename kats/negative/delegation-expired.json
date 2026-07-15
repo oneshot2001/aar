@@ -1,0 +1,5 @@
+{
+  "name": "delegation-expired",
+  "expected_code": "delegation/expired",
+  "mutation_description": "Move delegation not_after before carried attempts."
+}

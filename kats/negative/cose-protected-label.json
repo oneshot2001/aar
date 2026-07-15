@@ -1,0 +1,5 @@
+{
+  "name": "cose-protected-label",
+  "expected_code": "cose/protected-label",
+  "mutation_description": "Add an unrecognized protected label."
+}

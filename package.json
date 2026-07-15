@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "generate": "bun run harness/generate.ts",
+    "generate-negative": "bun run harness/generate-negative.ts",
     "test": "bun test harness"
   },
   "dependencies": {

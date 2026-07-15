@@ -1,0 +1,5 @@
+{
+  "name": "replay-one-time-reused",
+  "expected_code": "replay/one-time-reused",
+  "mutation_description": "Mark two different root receipts one-time under their shared replay coordinate."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "receipt-signer-role-mismatch",
+  "expected_code": "receipt/signer-role-mismatch",
+  "mutation_description": "Name outcome_observer as an inference issuer while retaining the agent signing key."
+}

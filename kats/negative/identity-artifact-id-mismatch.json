@@ -1,0 +1,5 @@
+{
+  "name": "identity-artifact-id-mismatch",
+  "expected_code": "identity/artifact-id-mismatch",
+  "mutation_description": "Replace delegation_id and re-sign without recomputing it."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "receipt-manifest-inconsistent",
+  "expected_code": "receipt/manifest-inconsistent",
+  "mutation_description": "Change a root observation consumption ordinal and recompute its direct commitment."
+}

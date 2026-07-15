@@ -1,0 +1,5 @@
+{
+  "name": "cbor-non-canonical",
+  "expected_code": "cbor/non-canonical",
+  "mutation_description": "Encode integer 2 with a non-shortest argument."
+}

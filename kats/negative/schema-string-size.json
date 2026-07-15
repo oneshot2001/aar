@@ -1,0 +1,5 @@
+{
+  "name": "schema-string-size",
+  "expected_code": "schema/string-size",
+  "mutation_description": "Set a canonical manifest media type to the empty string."
+}

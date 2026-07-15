@@ -1,0 +1,5 @@
+{
+  "name": "cose-content-type-wrong",
+  "expected_code": "cose/content-type-wrong",
+  "mutation_description": "Select the request schema for a credential payload."
+}

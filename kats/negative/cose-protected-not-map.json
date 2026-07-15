@@ -1,0 +1,5 @@
+{
+  "name": "cose-protected-not-map",
+  "expected_code": "cose/protected-not-map",
+  "mutation_description": "Put an array inside the protected bstr."
+}

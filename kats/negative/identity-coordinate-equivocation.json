@@ -1,0 +1,5 @@
+{
+  "name": "identity-coordinate-equivocation",
+  "expected_code": "identity/coordinate-equivocation",
+  "mutation_description": "Give two distinct receipts the same issuer sequence and re-sign/re-identify the changed receipt."
+}

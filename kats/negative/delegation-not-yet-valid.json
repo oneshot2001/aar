@@ -1,0 +1,5 @@
+{
+  "name": "delegation-not-yet-valid",
+  "expected_code": "delegation/not-yet-valid",
+  "mutation_description": "Move delegation not_before after carried attempts."
+}

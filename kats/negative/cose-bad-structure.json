@@ -1,0 +1,5 @@
+{
+  "name": "cose-bad-structure",
+  "expected_code": "cose/bad-structure",
+  "mutation_description": "Replace COSE_Sign1 with an empty array."
+}

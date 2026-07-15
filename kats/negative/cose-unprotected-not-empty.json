@@ -1,0 +1,5 @@
+{
+  "name": "cose-unprotected-not-empty",
+  "expected_code": "cose/unprotected-not-empty",
+  "mutation_description": "Put non-alg label 2 in the unprotected map."
+}

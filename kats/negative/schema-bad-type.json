@@ -1,0 +1,5 @@
+{
+  "name": "schema-bad-type",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "Change created_at from uint to text."
+}

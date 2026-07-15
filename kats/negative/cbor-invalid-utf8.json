@@ -1,0 +1,5 @@
+{
+  "name": "cbor-invalid-utf8",
+  "expected_code": "cbor/invalid-utf8",
+  "mutation_description": "Encode a one-byte text string containing invalid UTF-8."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "resource-edge-count",
+  "expected_code": "resource/edge-count",
+  "mutation_description": "Use 782 compact receipt shells with 64 parents each plus one with 3, totaling 50,051 edges."
+}

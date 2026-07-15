@@ -1,0 +1,5 @@
+{
+  "name": "cose-alg-wrong",
+  "expected_code": "cose/alg-wrong",
+  "mutation_description": "Change protected alg to -8."
+}

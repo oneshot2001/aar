@@ -1,0 +1,5 @@
+{
+  "name": "resource-proof-too-large",
+  "expected_code": "resource/proof-too-large",
+  "mutation_description": "Repeat valid manifest range entries until one encoded proof object exceeds 65,536 bytes."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "delegation-scope",
+  "expected_code": "delegation/scope",
+  "mutation_description": "Restrict delegation actions to the other valid action."
+}
