@@ -1,0 +1,714 @@
+{
+  "checks": {
+    "id_digest_recomputation": {
+      "failed": 0,
+      "passed": 43,
+      "skipped": 0
+    },
+    "round_trip": {
+      "failed": 0,
+      "passed": 43,
+      "skipped": 0
+    },
+    "signature_recomputation": {
+      "failed": 0,
+      "passed": 43,
+      "skipped": 0
+    }
+  },
+  "divergence_count": 0,
+  "divergences": [],
+  "fixtures": [
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 53,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 27,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/outcome-device-acknowledged-declared-independently-sensed.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 54,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 27,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/outcome-independently-sensed-satisfied.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 32,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 15,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/provenance-provider-attested-satisfied.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 31,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 15,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/provenance-proxy-captured-declared-provider-attested.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 31,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 15,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/provenance-proxy-captured-satisfied.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 30,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 15,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/provenance-self-asserted-declared-proxy-captured.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 30,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 15,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/time-asserted-declared-boot-bound.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 31,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 15,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/time-boot-bound-declared-externally-anchored.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 31,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 15,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/time-boot-bound-satisfied.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 45,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 21,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/time-externally-anchored-satisfied.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 8,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/anchor-record-rfc6962.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 73,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 33,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/bundle-valid-subset.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/credential-agent-signing-aar-2a.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/credential-agent-signing-successor-aar-2.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/credential-anchor-signing-aar-3.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/credential-approver-signing-aar-2a.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/credential-authority-signing-aar-2a.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/credential-credential-issuing-aar-2a.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/credential-ep-signing-aar-2a.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/credential-outcome-signing-aar-3.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/credential-status-signing-aar-2a.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/credential-verifier-signing-aar-1.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 2,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/delegation-camera-view.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 4,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/epoch-event-anchor-submitted.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 4,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/epoch-event-close.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 4,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/epoch-event-fork-declared.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 2,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/epoch-event-open.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 5,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/epoch-manifest-populated.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 4,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/merkle-batch-membership-only.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 0,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/merkle-membership-proof.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 5,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/receipt-action-attempt-triggered-refusal.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 5,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/receipt-action-attempt.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 5,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 3,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/receipt-authorization-standing-root.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 4,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 2,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/receipt-authorization-supports.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 2,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/receipt-dispatch.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/receipt-inference-human-root.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/receipt-inference-requested.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/receipt-observation-agent-root.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 3,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/receipt-observation-derived.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 2,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/receipt-outcome-observation.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 2,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/request-envelope-agent.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 2,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/rotation-agent-successor.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 2,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 1,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/status-snapshot-good.cbor"
+    }
+  ],
+  "fixtures_checked": 43,
+  "schema_version": 1,
+  "slice": "C1"
+}
