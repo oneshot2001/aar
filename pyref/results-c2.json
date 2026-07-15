@@ -1,349 +1,8 @@
 {
   "deterministic": true,
   "deterministic_fixtures": 188,
-  "divergence_count": 20,
-  "divergences": [
-    {
-      "ambiguity_hypothesis": "The verdict result/reason agrees, but the C2 reporter selected the class dimension from the boundary's left-hand label (for example `proxy_captured_to_provider_attested`) and therefore reported the outcome dimension as `not_evaluated`. This is likely a pyref boundary-reporting bug, not a wire-verdict disagreement.",
-      "expected": {
-        "class": "provider_attested",
-        "code": null,
-        "deterministic": true,
-        "result": "conformant"
-      },
-      "fixture": "kats/class-boundary/provenance-provider-attested-satisfied.cbor",
-      "produced": {
-        "class": "not_evaluated",
-        "code": null,
-        "deterministic": true,
-        "result": "conformant"
-      },
-      "spec_sentence": "Step 19 recomputes the maximum declared and structurally supported evidence classes."
-    },
-    {
-      "ambiguity_hypothesis": "The verdict result/reason agrees, but the C2 reporter selected the class dimension from the boundary's left-hand label (for example `proxy_captured_to_provider_attested`) and therefore reported the outcome dimension as `not_evaluated`. This is likely a pyref boundary-reporting bug, not a wire-verdict disagreement.",
-      "expected": {
-        "class": "proxy_captured",
-        "code": null,
-        "deterministic": true,
-        "result": "conformant"
-      },
-      "fixture": "kats/class-boundary/provenance-proxy-captured-satisfied.cbor",
-      "produced": {
-        "class": "not_evaluated",
-        "code": null,
-        "deterministic": true,
-        "result": "conformant"
-      },
-      "spec_sentence": "Step 19 recomputes the maximum declared and structurally supported evidence classes."
-    },
-    {
-      "ambiguity_hypothesis": "The verdict result/reason agrees, but the C2 reporter selected the class dimension from the boundary's left-hand label (for example `proxy_captured_to_provider_attested`) and therefore reported the outcome dimension as `not_evaluated`. This is likely a pyref boundary-reporting bug, not a wire-verdict disagreement.",
-      "expected": {
-        "class": "boot_bound",
-        "code": null,
-        "deterministic": true,
-        "result": "conformant"
-      },
-      "fixture": "kats/class-boundary/time-boot-bound-satisfied.cbor",
-      "produced": {
-        "class": "not_evaluated",
-        "code": null,
-        "deterministic": true,
-        "result": "conformant"
-      },
-      "spec_sentence": "Step 19 recomputes the maximum declared and structurally supported evidence classes."
-    },
-    {
-      "ambiguity_hypothesis": "The verdict result/reason agrees, but the C2 reporter selected the class dimension from the boundary's left-hand label (for example `proxy_captured_to_provider_attested`) and therefore reported the outcome dimension as `not_evaluated`. This is likely a pyref boundary-reporting bug, not a wire-verdict disagreement.",
-      "expected": {
-        "class": "externally_anchored",
-        "code": null,
-        "deterministic": true,
-        "result": "conformant"
-      },
-      "fixture": "kats/class-boundary/time-externally-anchored-satisfied.cbor",
-      "produced": {
-        "class": "not_evaluated",
-        "code": null,
-        "deterministic": true,
-        "result": "conformant"
-      },
-      "spec_sentence": "Step 19 recomputes the maximum declared and structurally supported evidence classes."
-    },
-    {
-      "ambiguity_hypothesis": "Pyref compares each carried range against every objective manifest entry in the half-open temporal slice before checking extra carried artifacts. The fixture appears to treat that range as boundary-complete under a narrower selector reading, while D-19 says ranges carry nonmatching kinds/subjects as well.",
-      "expected": {
-        "class": null,
-        "code": "bundle/artifact-out-of-scope",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/bundle-artifact-out-of-scope.cbor",
-      "produced": {
-        "class": null,
-        "code": "bundle/range-boundary",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "spec_sentence": "Steps 3, 7, and 18 validate selector commitments, dependencies, ranges, coverage, and scope."
-    },
-    {
-      "ambiguity_hypothesis": "Changing and re-identifying the stapled snapshot leaves the clean-room reading of the decision's exact status_snapshot_id reference unresolved, making status-missing earlier than the intended status/lease defect. The fixture may intend the mutated snapshot to replace that reference implicitly, which the spec does not state.",
-      "expected": {
-        "class": null,
-        "code": "credential/compromised",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/credential-compromised.cbor",
-      "produced": {
-        "class": null,
-        "code": "credential/status-missing",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "spec_sentence": "Step 8 enforces credential paths, roots, rotations, status, compromise, and lease maxima."
-    },
-    {
-      "ambiguity_hypothesis": "Changing and re-identifying the stapled snapshot leaves the clean-room reading of the decision's exact status_snapshot_id reference unresolved, making status-missing earlier than the intended status/lease defect. The fixture may intend the mutated snapshot to replace that reference implicitly, which the spec does not state.",
-      "expected": {
-        "class": null,
-        "code": "credential/lease-expired",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/credential-lease-expired.cbor",
-      "produced": {
-        "class": null,
-        "code": "credential/status-missing",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "spec_sentence": "Step 8 enforces credential paths, roots, rotations, status, compromise, and lease maxima."
-    },
-    {
-      "ambiguity_hypothesis": "Changing and re-identifying the stapled snapshot leaves the clean-room reading of the decision's exact status_snapshot_id reference unresolved, making status-missing earlier than the intended status/lease defect. The fixture may intend the mutated snapshot to replace that reference implicitly, which the spec does not state.",
-      "expected": {
-        "class": null,
-        "code": "credential/lease-too-long",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/credential-lease-too-long.cbor",
-      "produced": {
-        "class": null,
-        "code": "credential/status-missing",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "spec_sentence": "Step 8 enforces credential paths, roots, rotations, status, compromise, and lease maxima."
-    },
-    {
-      "ambiguity_hypothesis": "Changing and re-identifying the stapled snapshot leaves the clean-room reading of the decision's exact status_snapshot_id reference unresolved, making status-missing earlier than the intended status/lease defect. The fixture may intend the mutated snapshot to replace that reference implicitly, which the spec does not state.",
-      "expected": {
-        "class": null,
-        "code": "credential/revoked",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/credential-revoked.cbor",
-      "produced": {
-        "class": null,
-        "code": "credential/status-missing",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "spec_sentence": "Step 8 enforces credential paths, roots, rotations, status, compromise, and lease maxima."
-    },
-    {
-      "ambiguity_hypothesis": "Changing and re-identifying the stapled snapshot leaves the clean-room reading of the decision's exact status_snapshot_id reference unresolved, making status-missing earlier than the intended status/lease defect. The fixture may intend the mutated snapshot to replace that reference implicitly, which the spec does not state.",
-      "expected": {
-        "class": null,
-        "code": "credential/status-stale",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/credential-status-stale.cbor",
-      "produced": {
-        "class": null,
-        "code": "credential/status-missing",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "spec_sentence": "Step 8 enforces credential paths, roots, rotations, status, compromise, and lease maxima."
-    },
-    {
-      "ambiguity_hypothesis": "Changing and re-identifying the stapled snapshot leaves the clean-room reading of the decision's exact status_snapshot_id reference unresolved, making status-missing earlier than the intended status/lease defect. The fixture may intend the mutated snapshot to replace that reference implicitly, which the spec does not state.",
-      "expected": {
-        "class": null,
-        "code": "credential/status-unknown",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/credential-status-unknown.cbor",
-      "produced": {
-        "class": null,
-        "code": "credential/status-missing",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "spec_sentence": "Step 8 enforces credential paths, roots, rotations, status, compromise, and lease maxima."
-    },
-    {
-      "ambiguity_hypothesis": "The mutated top-level delegation artifact is not the byte-identical delegation embedded in the carried authorization. Pyref applies attempt-time delegation checks to the embedded dominating delegation and treats the unreferenced top-level artifact as validly signed content; the fixture appears to require lifecycle/scope evaluation of every carried delegation even when it is not selected by an authorization path.",
-      "expected": {
-        "class": null,
-        "code": "delegation/chain-invalid",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/delegation-chain-invalid.cbor",
-      "produced": {
-        "class": null,
-        "code": null,
-        "deterministic": true,
-        "result": "conformant"
-      },
-      "spec_sentence": "Step 13 requires one dominating valid delegation whose scope contains the action flow."
-    },
-    {
-      "ambiguity_hypothesis": "The mutated top-level delegation artifact is not the byte-identical delegation embedded in the carried authorization. Pyref applies attempt-time delegation checks to the embedded dominating delegation and treats the unreferenced top-level artifact as validly signed content; the fixture appears to require lifecycle/scope evaluation of every carried delegation even when it is not selected by an authorization path.",
-      "expected": {
-        "class": null,
-        "code": "delegation/expired",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/delegation-expired.cbor",
-      "produced": {
-        "class": null,
-        "code": null,
-        "deterministic": true,
-        "result": "conformant"
-      },
-      "spec_sentence": "Step 13 requires one dominating valid delegation whose scope contains the action flow."
-    },
-    {
-      "ambiguity_hypothesis": "The mutated top-level delegation artifact is not the byte-identical delegation embedded in the carried authorization. Pyref applies attempt-time delegation checks to the embedded dominating delegation and treats the unreferenced top-level artifact as validly signed content; the fixture appears to require lifecycle/scope evaluation of every carried delegation even when it is not selected by an authorization path.",
-      "expected": {
-        "class": null,
-        "code": "delegation/not-yet-valid",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/delegation-not-yet-valid.cbor",
-      "produced": {
-        "class": null,
-        "code": null,
-        "deterministic": true,
-        "result": "conformant"
-      },
-      "spec_sentence": "Step 13 requires one dominating valid delegation whose scope contains the action flow."
-    },
-    {
-      "ambiguity_hypothesis": "The mutated top-level delegation artifact is not the byte-identical delegation embedded in the carried authorization. Pyref applies attempt-time delegation checks to the embedded dominating delegation and treats the unreferenced top-level artifact as validly signed content; the fixture appears to require lifecycle/scope evaluation of every carried delegation even when it is not selected by an authorization path.",
-      "expected": {
-        "class": null,
-        "code": "delegation/scope",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/delegation-scope.cbor",
-      "produced": {
-        "class": null,
-        "code": null,
-        "deterministic": true,
-        "result": "conformant"
-      },
-      "spec_sentence": "Step 13 requires one dominating valid delegation whose scope contains the action flow."
-    },
-    {
-      "ambiguity_hypothesis": "Pyref checked the close event's declared anchor deadline before comparing receipt commit time with the changed manifest close. Step 14 lists late-arrival routing before anchor deadline, so this is likely a pyref intra-step ordering bug exposed by a fixture carrying both consequences of the close-time mutation.",
-      "expected": {
-        "class": null,
-        "code": "epoch/late-insertion",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/epoch-late-insertion.cbor",
-      "produced": {
-        "class": null,
-        "code": "epoch/anchor-deadline",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "spec_sentence": "Step 14 validates event chains, epoch transitions, duration, spans, deadlines, late arrivals, and forks."
-    },
-    {
-      "ambiguity_hypothesis": "The changed signed index entry bytes no longer recompute to the carried root. Pyref follows step 15's literal order, 'Recompute entry leaves and root, then require sort order, contiguous leaf indices, unique ...', so it reports root mismatch before the fixture's intended later index defect.",
-      "expected": {
-        "class": null,
-        "code": "manifest/index-duplicate",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/manifest-index-duplicate.cbor",
-      "produced": {
-        "class": null,
-        "code": "manifest/index-root-mismatch",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "spec_sentence": "Steps 7, 15, and 19 validate manifest payloads, objective indexes, and required evidence artifacts."
-    },
-    {
-      "ambiguity_hypothesis": "The changed signed index entry bytes no longer recompute to the carried root. Pyref follows step 15's literal order, 'Recompute entry leaves and root, then require sort order, contiguous leaf indices, unique ...', so it reports root mismatch before the fixture's intended later index defect.",
-      "expected": {
-        "class": null,
-        "code": "manifest/index-gap",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/manifest-index-gap.cbor",
-      "produced": {
-        "class": null,
-        "code": "manifest/index-root-mismatch",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "spec_sentence": "Steps 7, 15, and 19 validate manifest payloads, objective indexes, and required evidence artifacts."
-    },
-    {
-      "ambiguity_hypothesis": "The changed signed index entry bytes no longer recompute to the carried root. Pyref follows step 15's literal order, 'Recompute entry leaves and root, then require sort order, contiguous leaf indices, unique ...', so it reports root mismatch before the fixture's intended later index defect.",
-      "expected": {
-        "class": null,
-        "code": "manifest/index-order",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/manifest-index-order.cbor",
-      "produced": {
-        "class": null,
-        "code": "manifest/index-root-mismatch",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "spec_sentence": "Steps 7, 15, and 19 validate manifest payloads, objective indexes, and required evidence artifacts."
-    },
-    {
-      "ambiguity_hypothesis": "The changed signed index entry bytes no longer recompute to the carried root. Pyref follows step 15's literal order, 'Recompute entry leaves and root, then require sort order, contiguous leaf indices, unique ...', so it reports root mismatch before the fixture's intended later index defect.",
-      "expected": {
-        "class": null,
-        "code": "manifest/index-receipt-mismatch",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "fixture": "kats/negative/manifest-index-receipt-mismatch.cbor",
-      "produced": {
-        "class": null,
-        "code": "manifest/index-root-mismatch",
-        "deterministic": true,
-        "result": "nonconformant"
-      },
-      "spec_sentence": "Steps 7, 15, and 19 validate manifest payloads, objective indexes, and required evidence artifacts."
-    }
-  ],
+  "divergence_count": 0,
+  "divergences": [],
   "entry_point_findings": 1,
   "evaluation_time": 7636552,
   "fixtures": [
@@ -382,8 +41,8 @@
       "expected_result": "conformant",
       "first_failure_step": null,
       "fixture": "kats/class-boundary/provenance-provider-attested-satisfied.cbor",
-      "matched": false,
-      "produced_class": "not_evaluated",
+      "matched": true,
+      "produced_class": "provider_attested",
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
@@ -410,8 +69,8 @@
       "expected_result": "conformant",
       "first_failure_step": null,
       "fixture": "kats/class-boundary/provenance-proxy-captured-satisfied.cbor",
-      "matched": false,
-      "produced_class": "not_evaluated",
+      "matched": true,
+      "produced_class": "proxy_captured",
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
@@ -466,8 +125,8 @@
       "expected_result": "conformant",
       "first_failure_step": null,
       "fixture": "kats/class-boundary/time-boot-bound-satisfied.cbor",
-      "matched": false,
-      "produced_class": "not_evaluated",
+      "matched": true,
+      "produced_class": "boot_bound",
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
@@ -480,8 +139,8 @@
       "expected_result": "conformant",
       "first_failure_step": null,
       "fixture": "kats/class-boundary/time-externally-anchored-satisfied.cbor",
-      "matched": false,
-      "produced_class": "not_evaluated",
+      "matched": true,
+      "produced_class": "externally_anchored",
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
@@ -620,12 +279,12 @@
       "expected_result": "nonconformant",
       "first_failure_step": 18,
       "fixture": "kats/negative/bundle-artifact-out-of-scope.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": "bundle/range-boundary",
+      "produced_code": "bundle/artifact-out-of-scope",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4aeb36266b18b26d10226b4998744b73c65f2fb7e3d65f1260187e9b32d5b643"
+      "verdict_sha256": "af4d58b52aee13dd491649e97f6f735f0c3be7e93857faf04f9b59eb0753cf6b"
     },
     {
       "deterministic": true,
@@ -1082,12 +741,12 @@
       "expected_result": "nonconformant",
       "first_failure_step": 8,
       "fixture": "kats/negative/credential-compromised.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": "credential/status-missing",
+      "produced_code": "credential/compromised",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3228d1dbb9dcc77eb5570c659a6fc0299299e16fde050e58f914dcbc2d62de64"
+      "verdict_sha256": "ade8fd81bb9471497de3f1845ed02e284ec69bc10af3727dafc6495f1b87ae36"
     },
     {
       "deterministic": true,
@@ -1124,12 +783,12 @@
       "expected_result": "nonconformant",
       "first_failure_step": 8,
       "fixture": "kats/negative/credential-lease-expired.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": "credential/status-missing",
+      "produced_code": "credential/lease-expired",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "d9722d7f4f416bdbb0dccd74138b602641b455efc4017d8fd634f6c5f73a710d"
+      "verdict_sha256": "42783cc75f750cf45414d0c0621a28407285538cf61b45a7d062197e5f433d6b"
     },
     {
       "deterministic": true,
@@ -1138,12 +797,12 @@
       "expected_result": "nonconformant",
       "first_failure_step": 8,
       "fixture": "kats/negative/credential-lease-too-long.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": "credential/status-missing",
+      "produced_code": "credential/lease-too-long",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "abece341ea2ff5fc8bd360cc058dc7bc617ad3b4396be13bc79c41ad4fbe3430"
+      "verdict_sha256": "1501714e7d95ba8aef255c3b94044a35db6633cbee83dcd9fbfbb5944fdde5a6"
     },
     {
       "deterministic": true,
@@ -1180,12 +839,12 @@
       "expected_result": "nonconformant",
       "first_failure_step": 8,
       "fixture": "kats/negative/credential-revoked.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": "credential/status-missing",
+      "produced_code": "credential/revoked",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "a865e11b4c35e18944abf97975efd2297366c576d83eb4bbfc63cfbf9b3ef33d"
+      "verdict_sha256": "5d88c3d2a3327a4d430d084f5184986782667817d4feb7fea89697816a72a6bb"
     },
     {
       "deterministic": true,
@@ -1264,12 +923,12 @@
       "expected_result": "nonconformant",
       "first_failure_step": 8,
       "fixture": "kats/negative/credential-status-stale.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": "credential/status-missing",
+      "produced_code": "credential/status-stale",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "af9d00fc205031a5c62f31d245b5bc4b4760fda590c655c734b0175c8a3de0c8"
+      "verdict_sha256": "a9bfe8aca67a98aa28db7cbbff942bab2968945f44574d68261bd3a96f85f992"
     },
     {
       "deterministic": true,
@@ -1278,12 +937,12 @@
       "expected_result": "nonconformant",
       "first_failure_step": 8,
       "fixture": "kats/negative/credential-status-unknown.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": "credential/status-missing",
+      "produced_code": "credential/status-unknown",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "978a754bf00ef43a78c8288d9d9d9628fad7528c04236f6c2f4d44a56109e192"
+      "verdict_sha256": "89f0b51da03e932d83d7333eb00fcf5b20b8540542933faa65c275711dbc362c"
     },
     {
       "deterministic": true,
@@ -1304,56 +963,56 @@
       "expected_class": null,
       "expected_code": "delegation/chain-invalid",
       "expected_result": "nonconformant",
-      "first_failure_step": null,
+      "first_failure_step": 13,
       "fixture": "kats/negative/delegation-chain-invalid.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": null,
-      "produced_result": "conformant",
+      "produced_code": "delegation/chain-invalid",
+      "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "9738e6447e944f7178dc233f63428df4f2ccf9396fe9753b615ee3176ae8f04e"
+      "verdict_sha256": "2ca2709f7f182f5dee3d89a28afc3afd5a688905f8c2bce237dfbd196946a441"
     },
     {
       "deterministic": true,
       "expected_class": null,
       "expected_code": "delegation/expired",
       "expected_result": "nonconformant",
-      "first_failure_step": null,
+      "first_failure_step": 13,
       "fixture": "kats/negative/delegation-expired.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": null,
-      "produced_result": "conformant",
+      "produced_code": "delegation/expired",
+      "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "ebea085fb7d7e17c0a41f52bf608d0de9c2d868eb961e28f78cc3e7dead081c2"
+      "verdict_sha256": "c97ec20de6780e220367a672b9d67a3fdc0a9713296b8ce682bc12856ac49eab"
     },
     {
       "deterministic": true,
       "expected_class": null,
       "expected_code": "delegation/not-yet-valid",
       "expected_result": "nonconformant",
-      "first_failure_step": null,
+      "first_failure_step": 13,
       "fixture": "kats/negative/delegation-not-yet-valid.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": null,
-      "produced_result": "conformant",
+      "produced_code": "delegation/not-yet-valid",
+      "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "fa8765a61e04b321b1d11fe2d371542503b9d24b115c35dd0765fdc6195aa864"
+      "verdict_sha256": "6cd8b195e314e1eb06a3a7689e68a0c9f860b57352bbf801c88e3b9021130831"
     },
     {
       "deterministic": true,
       "expected_class": null,
       "expected_code": "delegation/scope",
       "expected_result": "nonconformant",
-      "first_failure_step": null,
+      "first_failure_step": 13,
       "fixture": "kats/negative/delegation-scope.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": null,
-      "produced_result": "conformant",
+      "produced_code": "delegation/scope",
+      "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "49da45ff92e4a64b107025202cf98259ca11b4a0f8dfecbcf75bf1a9c87898c5"
+      "verdict_sha256": "0845b28b219d4dbdf7084753d02e9e57e7686937521460db376a20326246b729"
     },
     {
       "deterministic": true,
@@ -1432,12 +1091,12 @@
       "expected_result": "nonconformant",
       "first_failure_step": 14,
       "fixture": "kats/negative/epoch-late-insertion.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": "epoch/anchor-deadline",
+      "produced_code": "epoch/late-insertion",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "e238e836ed18df2876af20ca90a8cce3fe4f04e7b673e9f9e71d257dfd9c4bdd"
+      "verdict_sha256": "a8d870bdeafbfbe197b70d30b6e5ebfab42dedb15eab9d21a7c84457de1ed329"
     },
     {
       "deterministic": true,
@@ -1782,12 +1441,12 @@
       "expected_result": "nonconformant",
       "first_failure_step": 15,
       "fixture": "kats/negative/manifest-index-duplicate.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": "manifest/index-root-mismatch",
+      "produced_code": "manifest/index-duplicate",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "ca7d303093c21a670612079ff51014d9858241a64d30198c78b53ad1428c4162"
+      "verdict_sha256": "152901af9a41b02a88a2327c22652cb55ccc9e5a031064c37fd6c8d52f1d887f"
     },
     {
       "deterministic": true,
@@ -1796,12 +1455,12 @@
       "expected_result": "nonconformant",
       "first_failure_step": 15,
       "fixture": "kats/negative/manifest-index-gap.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": "manifest/index-root-mismatch",
+      "produced_code": "manifest/index-gap",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "7683e38168cf27ad09e2bd06aa68307bf825b1c80d4225d17953a50eba33fdd5"
+      "verdict_sha256": "5c5044b9b8985fac263400e92159945a7e9c67ad5b60d9565a30b22eb5cb211d"
     },
     {
       "deterministic": true,
@@ -1810,12 +1469,12 @@
       "expected_result": "nonconformant",
       "first_failure_step": 15,
       "fixture": "kats/negative/manifest-index-order.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": "manifest/index-root-mismatch",
+      "produced_code": "manifest/index-order",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "da5df5e0fa91c52ae9dc5f7b3e7abde7a02dbb38ae9d787255d5734c8b2f1de3"
+      "verdict_sha256": "bbf0224b80e8343968001bcb353ceee57a787eaac29a77fdc879ad4914974086"
     },
     {
       "deterministic": true,
@@ -1824,12 +1483,12 @@
       "expected_result": "nonconformant",
       "first_failure_step": 15,
       "fixture": "kats/negative/manifest-index-receipt-mismatch.cbor",
-      "matched": false,
+      "matched": true,
       "produced_class": null,
-      "produced_code": "manifest/index-root-mismatch",
+      "produced_code": "manifest/index-receipt-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "a2ca7ae9eab8fc8682cf0b7bb7d5fd057ec7ba27a0b210cb9c82006496a7210b"
+      "verdict_sha256": "7f304c609ec6832c89a1e0a407a1275dffa9de37311c6d5172725b6a279f2d06"
     },
     {
       "deterministic": true,
@@ -2981,8 +2640,8 @@
     }
   ],
   "fixtures_evaluated": 188,
-  "matches": 168,
-  "mismatches": 20,
+  "matches": 188,
+  "mismatches": 0,
   "schema_version": 1,
   "slice": "C2"
 }

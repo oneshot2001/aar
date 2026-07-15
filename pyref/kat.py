@@ -720,10 +720,10 @@ def _boundary_class(sidecar: dict[str, Any], evaluation: Evaluation) -> tuple[st
     expected = sidecar.get("expected_class")
     if expected is None:
         return None, None
-    boundary = sidecar.get("boundary", "")
-    if boundary.startswith("time"):
+    family = sidecar.get("name", "").split("-", 1)[0]
+    if family == "time":
         produced = evaluation.verdict["limits"]["maximum_time_class"]
-    elif boundary.startswith("provenance"):
+    elif family == "provenance":
         produced = evaluation.verdict["limits"]["maximum_provenance_class"]
     else:
         produced = evaluation.verdict["limits"]["maximum_outcome_level"]
@@ -742,7 +742,11 @@ def _write_c2_divergences(divergences: list[dict[str, Any]]) -> None:
         "",
         "## C2 entry-point finding",
         "",
-        "CONFORMANCE section 5 defines a W-12 verdict over a bundle, while the C2 corpus also requires verdicts for standalone `aar-wire-object` fixtures. For those fixtures, the runner requires byte-identical membership in (or deterministically augments) the published positive bundle KAT, uses that bundle's trust/scope context, and binds `bundle_digest` to the exact standalone fixture bytes. This is a clean-room corpus-entry-point interpretation requiring gate adjudication.",
+        "The standalone `aar-wire-object` entry-point convention was accepted by the gate: fixtures use the published positive bundle's trust/scope context while `bundle_digest` binds the exact standalone bytes. This remains a KAT-runner convention, not a production-verifier rule.",
+        "",
+        "## Adjudication history",
+        "",
+        "The 20 Run A divergences were adjudicated and closed by [`spec/GATE4-SLICE-C2-REVIEW.md`](../spec/GATE4-SLICE-C2-REVIEW.md).",
         "",
         "## C2 verdict/reason divergences",
         "",

@@ -202,6 +202,7 @@ class State:
     credentials_by_kid: dict[bytes, Envelope] = field(default_factory=dict)
     credentials_by_id: dict[bytes, Envelope] = field(default_factory=dict)
     receipts_by_id: dict[bytes, Envelope] = field(default_factory=dict)
+    embedded_delegations: dict[bytes, Envelope] = field(default_factory=dict)
     payloads_by_digest: dict[bytes, dict[str, Any]] = field(default_factory=dict)
     observations: list[str] = field(default_factory=list)
     classes: dict[str, str] = field(default_factory=lambda: {
@@ -352,8 +353,6 @@ def _resource_checks(bundle: dict[str, Any]) -> None:
 def _trust_policy_checks(state: State) -> None:
     assert state.bundle is not None
     trust = state.bundle["trust_inputs"]
-    if trust["evaluation_time"] != state.evaluated_at:
-        _fail("schema/out-of-range", 5)
     store = _closed_map(trust["trust_store"], {"digest", "snapshot_id", "created_at", "roots"})
     _check_fixed(store["digest"], 32)
     _check_fixed(store["snapshot_id"], 32)
@@ -366,8 +365,12 @@ def _trust_policy_checks(state: State) -> None:
         _closed_map(root, {"root_id", "root_kid", "tenant_id", "allowed_sites", "allowed_key_usages"})
         for name, size in (("root_id", 32), ("root_kid", 32), ("tenant_id", 16)):
             _check_fixed(root[name], size)
+    selector = state.bundle["selector"]
+    for root in store["roots"]:
         if root["tenant_id"] != selector["tenant_id"] or selector["site_id"] not in root["allowed_sites"]:
             _fail("credential/root-not-accepted", 5)
+    if trust["evaluation_time"] != state.evaluated_at:
+        _fail("schema/out-of-range", 5)
     heads = trust["expected_anchor_heads"]
     if not heads:
         _fail("schema/missing-field", 5, indeterminate=True)
@@ -574,6 +577,11 @@ def _envelope_checks(state: State) -> None:
                 state.credentials_by_id[envelope.payload["credential_id"]] = envelope
             elif category == "receipts":
                 state.receipts_by_id[envelope.payload["receipt_id"]] = envelope
+                if envelope.payload["kind"] == "authorization":
+                    delegation = envelope.payload.get("body", {}).get("delegation")
+                    if delegation is not None:
+                        nested = _validate_envelope(state, "delegations", index, delegation)
+                        state.embedded_delegations[envelope.payload["receipt_id"]] = nested
                 presentation = envelope.payload.get("body", {}).get("presentation")
                 if presentation is not None:
                     nested = _validate_envelope(state, "presentations", index, presentation)
@@ -638,6 +646,10 @@ def _content_commitments(state: State) -> None:
                     if hashes.sha256(item["canonical_cbor"]) != item["digest"]:
                         _fail("hash/mismatch", 7)
 
+    for envelope in state.embedded_delegations.values():
+        if hashes.artifact_id(envelope.payload, "delegation_id") != envelope.payload["delegation_id"]:
+            _fail("identity/artifact-id-mismatch", 7)
+
     for payload in state.bundle["artifacts"]["manifest_payloads"]:
         if hashes.sha256(payload["canonical_bytes"]) != payload["digest"]:
             _fail("hash/mismatch", 7)
@@ -683,6 +695,18 @@ def _credential_lifecycle(state: State) -> None:
                  for envelope in state.envelopes[category]}
     used_kids.update(envelope.protected[4] for envelope in state.envelopes["presentations"])
 
+    role_kids: dict[str, set[bytes]] = defaultdict(set)
+    for envelope in credentials:
+        role = envelope.payload["principal_role"]
+        if role in {"agent", "enforcement_point", "authority_source"}:
+            role_kids[role].add(envelope.payload["subject_kid"])
+    roles = tuple(role_kids)
+    for index, left in enumerate(roles):
+        for right in roles[index + 1:]:
+            if role_kids[left] & role_kids[right]:
+                _fail("credential/role-key-reuse", 8)
+
+    terminals: dict[bytes, dict[str, Any]] = {}
     for envelope in credentials:
         credential = envelope.payload
         path = credential["path"]
@@ -700,7 +724,11 @@ def _credential_lifecycle(state: State) -> None:
             if parent.payload["subject_kid"] != expected_issuer:
                 _fail("credential/path-invalid", 8)
             expected_issuer = parent.payload["issuer_kid"]
-        terminal = by_id[path[-1]].payload if path else credential
+        terminals[credential["credential_id"]] = by_id[path[-1]].payload if path else credential
+
+    for envelope in credentials:
+        credential = envelope.payload
+        terminal = terminals[credential["credential_id"]]
         # The wire carries both a credential trust_anchor_id and a trust-store
         # root_id, but the normative path rule says acceptance terminates by
         # root key/tenant/site; it defines no equality between those two IDs.
@@ -710,17 +738,6 @@ def _credential_lifecycle(state: State) -> None:
                 or (credential["subject_kid"] in used_kids
                     and credential["key_usage"] not in root["allowed_key_usages"]):
             _fail("credential/root-not-accepted", 8)
-
-    role_kids: dict[str, set[bytes]] = defaultdict(set)
-    for envelope in credentials:
-        role = envelope.payload["principal_role"]
-        if role in {"agent", "enforcement_point", "authority_source"}:
-            role_kids[role].add(envelope.payload["subject_kid"])
-    roles = tuple(role_kids)
-    for index, left in enumerate(roles):
-        for right in roles[index + 1:]:
-            if role_kids[left] & role_kids[right]:
-                _fail("credential/role-key-reuse", 8)
 
     rotations = [envelope.payload for envelope in state.envelopes["rotations"]]
     by_pair: dict[tuple[bytes, bytes], list[dict[str, Any]]] = defaultdict(list)
@@ -739,38 +756,39 @@ def _credential_lifecycle(state: State) -> None:
                     or current["effective_at"] <= previous["effective_at"]:
                 _fail("credential/rotation-rollback", 8)
 
-    snapshots = {envelope.payload["snapshot_id"]: envelope.payload
-                 for envelope in state.envelopes["status_snapshots"]}
-    referenced: set[bytes] = set()
-    for receipt in state.envelopes["receipts"]:
-        decision = receipt.payload.get("body", {}).get("decision")
-        if isinstance(decision, dict):
-            referenced.update(decision.get("status_snapshot_ids", []))
-    for snapshot_id in referenced:
-        if snapshot_id not in snapshots:
-            _fail("credential/status-missing", 8)
-    for snapshot in snapshots.values():
-        credential = by_id.get(snapshot["credential_id"])
-        if credential is None:
-            _fail("credential/status-missing", 8)
+    snapshot_envelopes = state.envelopes["status_snapshots"]
+    for envelope in snapshot_envelopes:
+        snapshot = envelope.payload
         profile = snapshot["profile"]
         max_age = 300 if profile in {"AAR-2A", "AAR-3"} else 86_400
         max_lease = 3_600 if profile in {"AAR-2A", "AAR-3"} else 86_400
+        if snapshot["lease_not_after"] - snapshot["lease_not_before"] > max_lease:
+            _fail("credential/lease-too-long", 8)
         if state.evaluated_at - snapshot["produced_at"] > max_age \
                 or state.evaluated_at > snapshot["next_update"]:
             _fail("credential/status-stale", 8)
-        if snapshot["lease_not_after"] - snapshot["lease_not_before"] > max_lease:
-            _fail("credential/lease-too-long", 8)
-        if state.evaluated_at < snapshot["lease_not_before"]:
-            _fail("credential/not-yet-valid", 8)
-        if state.evaluated_at > snapshot["lease_not_after"]:
-            _fail("credential/lease-expired", 8)
         if snapshot["status"] == "revoked":
             _fail("credential/revoked", 8)
         if snapshot["status"] == "compromised" and state.evaluated_at >= snapshot.get("compromise_at", 0):
             _fail("credential/compromised", 8)
         if snapshot["status"] == "unknown":
             _fail("credential/status-unknown", 8)
+        if state.evaluated_at < snapshot["lease_not_before"]:
+            _fail("credential/not-yet-valid", 8)
+        if state.evaluated_at >= snapshot["lease_not_after"]:
+            _fail("credential/lease-expired", 8)
+
+    snapshots = {envelope.payload["snapshot_id"]: envelope.payload for envelope in snapshot_envelopes}
+    for snapshot in snapshots.values():
+        if snapshot["credential_id"] not in by_id:
+            _fail("credential/status-missing", 8)
+    for receipt in state.envelopes["receipts"]:
+        decision = receipt.payload.get("body", {}).get("decision")
+        if not isinstance(decision, dict):
+            continue
+        for snapshot_id in decision.get("status_snapshot_ids", []):
+            if snapshot_id not in snapshots:
+                _fail("credential/status-missing", 8)
 
 
 def _emission_identity(state: State) -> None:
@@ -1075,9 +1093,11 @@ def _authorization_dominance(state: State, graph: dict[bytes, list[bytes]]) -> N
                 or attempt.payload["body"]["authorization_id"] != authorization.payload["receipt_id"]:
             _fail("graph/dominator-missing", 13)
         auth_body = authorization.payload["body"]
-        delegation_value = auth_body.get("delegation")
-        delegation_payload = _loose_payload(delegation_value)
-        if delegation_payload is None:
+        delegation = state.embedded_delegations.get(authorization.payload["receipt_id"])
+        if delegation is None:
+            _fail("graph/dominator-missing", 13)
+        delegation_payload = delegation.payload
+        if auth_body["decision"].get("delegation_id") != delegation_payload["delegation_id"]:
             _fail("graph/dominator-missing", 13)
         attempt_body = attempt.payload["body"]
         action = attempt_body["action"]
@@ -1114,22 +1134,10 @@ def _epoch_state_machine(state: State) -> None:
     for envelope in state.envelopes["epoch_manifests"]:
         manifest = envelope.payload
         manifests_by_group[(manifest["epoch_owner_kid"], manifest["epoch_id"])].append(envelope)
-    if any(len(items) > 1 for items in manifests_by_group.values()):
-        _fail("epoch/fork", 14)
-
-    owners: dict[bytes, list[Envelope]] = defaultdict(list)
-    for envelope in state.envelopes["epoch_manifests"]:
-        owners[envelope.payload["epoch_owner_kid"]].append(envelope)
-    for items in owners.values():
-        ordered = sorted(items, key=lambda env: env.payload["opened_at"])
-        for previous, current in zip(ordered, ordered[1:]):
-            if current.payload["epoch_id"] <= previous.payload["epoch_id"]:
-                _fail("epoch/id-nonmonotonic", 14)
-            if current.payload.get("predecessor_manifest_digest") != hashes.sha256(previous.payload_bytes):
-                _fail("epoch/predecessor-mismatch", 14)
-
+    ordered_events: dict[tuple[bytes, int], list[Envelope]] = {}
     for key, events in groups.items():
         ordered = sorted(events, key=lambda env: env.payload["event_seq"])
+        ordered_events[key] = ordered
         for index, envelope in enumerate(ordered):
             event = envelope.payload
             if event["event_seq"] != index:
@@ -1138,33 +1146,86 @@ def _epoch_state_machine(state: State) -> None:
             expected = None if index == 0 else hashes.sha256(ordered[index - 1].payload_bytes)
             if previous != expected:
                 _fail("epoch/event-chain", 14)
+
+    primary_manifests: dict[tuple[bytes, int], Envelope] = {}
+    for key, manifests in manifests_by_group.items():
+        close_ids = {
+            event.payload["body"]["manifest_id"]
+            for event in ordered_events.get(key, [])
+            if event.payload["event"] == "close"
+        }
+        primary_manifests[key] = next(
+            (manifest for manifest in manifests if manifest.payload["manifest_id"] in close_ids),
+            manifests[0],
+        )
+
+    owners: dict[bytes, list[Envelope]] = defaultdict(list)
+    for (owner, _), envelope in primary_manifests.items():
+        owners[owner].append(envelope)
+
+    ordered_manifests: dict[bytes, list[Envelope]] = {}
+    for items in owners.values():
+        ordered = sorted(items, key=lambda env: env.payload["opened_at"])
+        ordered_manifests[ordered[0].payload["epoch_owner_kid"]] = ordered
+        for previous, current in zip(ordered, ordered[1:]):
+            if current.payload["epoch_id"] <= previous.payload["epoch_id"]:
+                _fail("epoch/id-nonmonotonic", 14)
+
+    for ordered in ordered_manifests.values():
+        for previous, current in zip(ordered, ordered[1:]):
+            if current.payload.get("predecessor_manifest_digest") != hashes.sha256(previous.payload_bytes):
+                _fail("epoch/predecessor-mismatch", 14)
+
+    open_close: dict[tuple[bytes, int], tuple[dict[str, Any], dict[str, Any]]] = {}
+    for key, ordered in ordered_events.items():
         opens = [env for env in ordered if env.payload["event"] == "open"]
         closes = [env for env in ordered if env.payload["event"] == "close"]
         if len(opens) != 1 or len(closes) != 1 or opens[0].payload["event_seq"] >= closes[0].payload["event_seq"]:
             _fail("epoch/open-close", 14)
-        opened, closed = opens[0].payload, closes[0].payload
+        open_close[key] = opens[0].payload, closes[0].payload
+
+    for opened, closed in open_close.values():
         if closed["occurred_at"] - opened["occurred_at"] > 86_400:
             _fail("epoch/duration-exceeded", 14)
-        if closed["body"]["anchor_deadline"] != closed["occurred_at"] + 86_400:
-            _fail("epoch/anchor-deadline", 14)
-        submitted = [env.payload for env in ordered if env.payload["event"] == "anchor_submitted"]
-        if any(event["body"]["submitted_at"] > closed["body"]["anchor_deadline"] for event in submitted):
-            _fail("epoch/anchor-deadline", 14)
-        manifest_items = manifests_by_group.get(key, [])
-        if manifest_items:
-            manifest = manifest_items[0].payload
-            if closed["body"]["manifest_id"] != manifest["manifest_id"]:
-                _fail("epoch/span-count-mismatch", 14)
-            if closed["body"]["item_count"] != manifest["item_count"] \
-                    or closed["body"]["last_epoch_seq"] != manifest["sequence_span"]["last"] \
-                    or opened["body"]["first_epoch_seq"] != manifest["sequence_span"]["first"]:
-                _fail("epoch/span-count-mismatch", 14)
+
+    for key, (opened, closed) in open_close.items():
+        manifest_env = primary_manifests.get(key)
+        if manifest_env is None:
+            continue
+        manifest = manifest_env.payload
+        if closed["body"]["manifest_id"] != manifest["manifest_id"]:
+            _fail("epoch/span-count-mismatch", 14)
+        if closed["body"]["item_count"] != manifest["item_count"] \
+                or closed["body"]["last_epoch_seq"] != manifest["sequence_span"]["last"] \
+                or opened["body"]["first_epoch_seq"] != manifest["sequence_span"]["first"]:
+            _fail("epoch/span-count-mismatch", 14)
 
     for envelope in state.envelopes["receipts"]:
         receipt = envelope.payload
-        matching = manifests_by_group.get((receipt["binding"]["epoch_owner_kid"], receipt["binding"]["epoch_id"]), [])
-        if matching and receipt["emission"]["committed_at"] > matching[0].payload["closed_at"]:
+        matching = primary_manifests.get((receipt["binding"]["epoch_owner_kid"], receipt["binding"]["epoch_id"]))
+        if matching and receipt["emission"]["committed_at"] > matching.payload["closed_at"]:
             _fail("epoch/late-insertion", 14)
+
+    for key, (_, closed) in open_close.items():
+        manifest_env = primary_manifests.get(key)
+        if manifest_env:
+            manifest = manifest_env.payload
+            expected_deadline = manifest["closed_at"] + 86_400
+            deadline_valid = (
+                manifest["anchor_deadline"] == expected_deadline
+                and closed["body"]["anchor_deadline"] == expected_deadline
+            )
+        else:
+            expected_deadline = closed["occurred_at"] + 86_400
+            deadline_valid = closed["body"]["anchor_deadline"] == expected_deadline
+        if not deadline_valid:
+            _fail("epoch/anchor-deadline", 14)
+        submitted = [env.payload for env in ordered_events[key] if env.payload["event"] == "anchor_submitted"]
+        if any(event["body"]["submitted_at"] > closed["body"]["anchor_deadline"] for event in submitted):
+            _fail("epoch/anchor-deadline", 14)
+
+    if any(len(items) > 1 for items in manifests_by_group.values()):
+        _fail("epoch/fork", 14)
 
 
 def _manifest_index_checks(state: State) -> None:
@@ -1172,12 +1233,6 @@ def _manifest_index_checks(state: State) -> None:
         manifest = envelope.payload
         index = manifest["receipt_index"]
         entries = index["entries"]
-        if entries:
-            computed = hashes.promoted_root(
-                (hashes.manifest_index_leaf(entry) for entry in entries), hashes.manifest_index_node
-            )
-            if computed != index["root"]:
-                _fail("manifest/index-root-mismatch", 15)
         ordering = [(item["committed_at"], item["epoch_seq"], item["receipt_id"]) for item in entries]
         if ordering != sorted(ordering) or len(set(ordering)) != len(ordering):
             _fail("manifest/index-order", 15)
@@ -1207,6 +1262,12 @@ def _manifest_index_checks(state: State) -> None:
                 _fail("epoch/span-count-mismatch", 15)
         elif span != {"first": None, "last": None} or manifest["close_reason"] != "padding":
             _fail("epoch/span-count-mismatch", 15)
+        if entries:
+            computed = hashes.promoted_root(
+                (hashes.manifest_index_leaf(entry) for entry in entries), hashes.manifest_index_node
+            )
+            if computed != index["root"]:
+                _fail("manifest/index-root-mismatch", 15)
 
 
 def _audit_path_length(index: int, size: int) -> int:
@@ -1399,8 +1460,6 @@ def _bundle_ranges(state: State) -> None:
             carried_indices.add(coordinate)
             if not _verify_index_proof(item["entry"], item["inclusion"], manifest["receipt_index"]["root"]):
                 _fail("bundle/range-proof-invalid", 18)
-            if _selector_matches(selector, item["entry"]):
-                selected_ids.add(item["entry"]["receipt_id"])
         for boundary_name in ("left_boundary", "right_boundary"):
             boundary = range_proof.get(boundary_name)
             if boundary and not _verify_index_proof(boundary["entry"], boundary["inclusion"], manifest["receipt_index"]["root"]):
@@ -1409,6 +1468,9 @@ def _bundle_ranges(state: State) -> None:
                      if selector["committed_from"] <= entry["committed_at"] < selector["committed_until"]]
         if [item["entry"] for item in entries] != objective:
             _fail("bundle/range-boundary", 18)
+        for item in entries:
+            if _selector_matches(selector, item["entry"]):
+                selected_ids.add(item["entry"]["receipt_id"])
 
     if bundle["coverage"] == "complete":
         if not bundle["ranges"]:
