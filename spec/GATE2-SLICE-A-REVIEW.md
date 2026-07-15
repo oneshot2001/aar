@@ -51,6 +51,28 @@ bundles become verifiable fully offline, which is the product premise.
 `key/not-found` keeps its trigger for external keys (e.g. trust-root kids
 without carried credentials).
 
+## WQ-1 reruling (2026-07-14, after Codex circularity objection — sustained)
+As first stated, WQ-1 was circular twice: `batch_id = H(claims incl. root)`
+while every Merkle leaf includes `batch_id`; and credential `path` includes
+the credential's own ID. Corrected rulings:
+
+- **WQ-1a (Merkle):** the leaf-hash preimage EXCLUDES `batch_id` (keeps
+  tenant/site/epoch_id/tree_size/leaf_index/item_digest — context binding
+  that blocks cross-epoch/-tenant transplant is preserved). Computation
+  order: leaves → root → `batch_id = H(["AAR-BATCH-ID-v1",
+  claims-without-batch_id])`. The membership proof still carries `batch_id`;
+  the verifier requires proof.batch_id == signed batch's computed batch_id
+  AND leaf context fields equal the batch's. Same-root/same-epoch proof
+  portability between two batches signed by the same EP is accepted —
+  claims are `membership_only`.
+- **WQ-1b (credential):** `path` is the ordered ISSUER chain from immediate
+  issuer to root, EXCLUDING the subject credential itself.
+  `credential_id = H(["AAR-CREDENTIAL-ID-v1", claims-without-credential_id])`
+  is then well-defined. A credential issued directly by a trust root has
+  path length 1; a self-signed root credential uses an empty path (CDDL
+  becomes `0*8`) and is accepted only via the trust store. Pin this rule in
+  the CDDL comment.
+
 ## Fix-pass scope (slice A.1)
 1. Apply WQ-1..WQ-5 to `spec/aar-core.cddl` + `spec/CONFORMANCE.md` (preimage
    comments, two digest sentences, journal-usage paragraph, `public_key`
