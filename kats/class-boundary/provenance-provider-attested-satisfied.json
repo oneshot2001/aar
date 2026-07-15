@@ -1,0 +1,6 @@
+{
+  "name": "provenance-provider-attested-satisfied",
+  "boundary": "proxy_captured_to_provider_attested",
+  "expectation": "conformant",
+  "expected_class": "provider_attested"
+}

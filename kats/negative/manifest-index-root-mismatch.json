@@ -1,0 +1,5 @@
+{
+  "name": "manifest-index-root-mismatch",
+  "expected_code": "manifest/index-root-mismatch",
+  "mutation_description": "Replace the signed objective index root."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "anchor-consistency-invalid",
+  "expected_code": "anchor/consistency-invalid",
+  "mutation_description": "Replace the optional RFC 6962 consistency path."
+}

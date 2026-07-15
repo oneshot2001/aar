@@ -1,0 +1,5 @@
+{
+  "name": "identity-epoch-sequence-rollback",
+  "expected_code": "identity/epoch-sequence-rollback",
+  "mutation_description": "Prior evaluated state has a greater sequence for the carried epoch owner and epoch."
+}

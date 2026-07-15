@@ -1,0 +1,5 @@
+{
+  "name": "evidence-time-class-unsatisfied",
+  "expected_code": "evidence/time-class-unsatisfied",
+  "mutation_description": "Declare boot_bound time without a boot attestation ID."
+}

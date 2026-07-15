@@ -1,0 +1,5 @@
+{
+  "name": "epoch-anchor-deadline",
+  "expected_code": "epoch/anchor-deadline",
+  "mutation_description": "Change the close event's declared anchor deadline."
+}

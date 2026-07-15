@@ -1,0 +1,5 @@
+{
+  "name": "anchor-head-stale",
+  "expected_code": "anchor/head-stale",
+  "mutation_description": "Age the trusted expected head beyond 86,400 seconds."
+}

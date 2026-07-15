@@ -1,0 +1,5 @@
+{
+  "name": "graph-dominator-ambiguous",
+  "expected_code": "graph/dominator-ambiguous",
+  "mutation_description": "Give the dispatched attempt two distinct authorization parents."
+}

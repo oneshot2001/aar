@@ -1,0 +1,5 @@
+{
+  "name": "bundle-range-noncontiguous",
+  "expected_code": "bundle/range-noncontiguous",
+  "mutation_description": "Repeat a leaf index inside an otherwise valid range."
+}

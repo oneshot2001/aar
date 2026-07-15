@@ -1,0 +1,5 @@
+{
+  "name": "bundle-range-proof-invalid",
+  "expected_code": "bundle/range-proof-invalid",
+  "mutation_description": "Flip a sibling in one objective range inclusion proof."
+}

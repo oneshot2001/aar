@@ -17,6 +17,7 @@ const ARTIFACT_CONTENT_TYPES = new Set([
   "application/aar-epoch-manifest+cbor;v=0.2",
   "application/aar-anchor-record+cbor;v=0.2",
   "application/aar-merkle-batch+cbor;v=0.2",
+  "application/aar-verdict+cbor;v=0.2",
 ]);
 const RECEIPT_CONTENT_TYPE = "application/aar-receipt+cbor;v=0.2";
 

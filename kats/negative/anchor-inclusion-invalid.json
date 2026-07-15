@@ -1,0 +1,5 @@
+{
+  "name": "anchor-inclusion-invalid",
+  "expected_code": "anchor/inclusion-invalid",
+  "mutation_description": "Replace the RFC 6962 leaf digest while preserving the signed root."
+}

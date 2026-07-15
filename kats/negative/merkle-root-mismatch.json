@@ -1,0 +1,5 @@
+{
+  "name": "merkle-root-mismatch",
+  "expected_code": "merkle/root-mismatch",
+  "mutation_description": "Flip a bit in a correctly sized Merkle sibling path."
+}

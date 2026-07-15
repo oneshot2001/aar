@@ -2,7 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { decodeCbor, encodeCbor, equalBytes } from "./cbor";
 import { verifySigned } from "./crypto";
 import { buildFixtures } from "./fixtures";
+import { buildClassBoundaryFixtures } from "./negative-fixtures";
 import { TEST_KEYS } from "./testkeys";
+import { verifyBundle } from "./verifier";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("positive KAT harness", () => {
   test("generation is byte-for-byte deterministic", () => {
@@ -37,6 +44,33 @@ describe("positive KAT harness", () => {
   test("RFC 6962 and AAR Merkle proofs verify", () => {
     for (const proof of buildFixtures().proofs) {
       expect(proof.verify(), proof.name).toBe(true);
+    }
+  });
+
+  test("class-boundary KATs have their exact rejection or supported-class outcome", () => {
+    for (const fixture of buildClassBoundaryFixtures()) {
+      const result = verifyBundle(fixture.bytes);
+      if (fixture.descriptor.expectation === "reject") {
+        expect(result.ok, fixture.filename).toBe(false);
+        if (!result.ok) expect(result.reason, fixture.filename).toBe(fixture.descriptor.expected_code);
+      } else {
+        expect(result.ok, fixture.filename).toBe(true);
+        if (result.ok) {
+          const limits = result.verdict.limits as Record<string, string>;
+          expect(Object.values(limits).includes(fixture.descriptor.expected_class!), fixture.filename).toBe(true);
+        }
+      }
+    }
+  });
+
+  test("class-boundary generation is deterministic and matches generated files", () => {
+    const first = buildClassBoundaryFixtures(); const second = buildClassBoundaryFixtures();
+    expect(first.map((fixture) => fixture.filename)).toEqual(second.map((fixture) => fixture.filename));
+    for (let index = 0; index < first.length; index += 1) {
+      const fixture = first[index]!;
+      expect(equalBytes(fixture.bytes, second[index]!.bytes), fixture.filename).toBe(true);
+      expect(equalBytes(fixture.bytes, readFileSync(join(root, "kats", "class-boundary", `${fixture.filename}.cbor`))), fixture.filename).toBe(true);
+      expect(JSON.parse(readFileSync(join(root, "kats", "class-boundary", `${fixture.filename}.json`), "utf8")), fixture.filename).toEqual(fixture.descriptor);
     }
   });
 });

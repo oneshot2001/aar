@@ -1,0 +1,5 @@
+{
+  "name": "graph-dominator-wrong-attempt-authorization",
+  "expected_code": "graph/dominator-missing",
+  "mutation_description": "Bind the attempt body to a different authorization than its sole authorized_by edge."
+}

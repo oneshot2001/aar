@@ -1,0 +1,5 @@
+{
+  "name": "graph-root-forbidden",
+  "expected_code": "graph/root-forbidden",
+  "mutation_description": "Put a root descriptor on a non-root observation."
+}

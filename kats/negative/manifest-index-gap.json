@@ -1,0 +1,5 @@
+{
+  "name": "manifest-index-gap",
+  "expected_code": "manifest/index-gap",
+  "mutation_description": "Make one objective leaf index noncontiguous."
+}

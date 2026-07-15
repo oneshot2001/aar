@@ -554,6 +554,53 @@ verification; the kid-to-key self-check prevents substitution.
 points; carry JWK. The registry violates the offline premise, and alternate key
 encodings add unnecessary wire choices beside the already-defined SPKI kid.
 
+## D-42 — Key selection has no separate COSE kid-mismatch code
+
+**Decision.** Delete `cose/kid-mismatch`. The protected `kid` selects the
+verification key; failure is completely classified by `key/not-found`,
+`credential/kid-key-mismatch`, or `sig/verify-failed`.
+
+**Why.** A selected key cannot independently disagree with the value that selected
+it, so the deleted trigger had no distinct reachable state.
+
+## D-43 — Credential algorithm mismatch is a schema failure
+
+**Decision.** Delete `credential/algorithm-mismatch`. The credential schema fixes
+`cose_alg=-7` and `curve="P-256"`; any other value fails first as
+`schema/enum-unknown`.
+
+**Why.** A semantic algorithm code would duplicate an earlier closed-enum failure
+and violate first-failure ordering.
+
+## D-44 — Receipt identity reuse is relative to prior evaluated state
+
+**Decision.** `identity/reuse` means that a receipt ID names nonidentical envelope
+bytes relative to prior evaluated state.
+
+**Why.** Within one bundle, repeated primary IDs are rejected earlier as
+`schema/duplicate-entry`; prior evaluated state is the reachable identity-reuse
+boundary.
+
+## D-45 — Stateful negative KATs use paired prior-state files
+
+**Decision.** A negative KAT requiring prior evaluated state uses
+`kats/negative/stateful/{name}.bundle.cbor` with `{name}.prior.json` and a
+descriptor carrying the exact expected code.
+
+**Why.** The pair keeps the wire bundle immutable while making the verifier state
+that triggers the failure explicit and reproducible.
+
+## D-46 — Consumption is a derivation edge
+
+**Decision.** An inference that consumes an observation's content links that
+observation with `derived_from`. `requested_by` may coexist but means only that
+the inference was created in response to the parent's content. Step 10 resolves
+observation consumption manifests through `derived_from` parents only.
+
+**Why.** Consumption is derivation; keeping response-to and content-dependency
+semantics on distinct edge types prevents a request edge from silently claiming
+provenance.
+
 ## Gate-1 questions requiring an explicit disposition
 
 1. **Protected labels:** approve provisional `-70000..-70006`, switch to

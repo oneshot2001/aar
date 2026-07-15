@@ -1,0 +1,5 @@
+{
+  "name": "epoch-event-chain",
+  "expected_code": "epoch/event-chain",
+  "mutation_description": "Replace one previous_event_digest and re-sign the event."
+}

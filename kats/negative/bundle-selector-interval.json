@@ -1,0 +1,5 @@
+{
+  "name": "bundle-selector-interval",
+  "expected_code": "bundle/selector-interval",
+  "mutation_description": "Make the selector half-open interval empty."
+}

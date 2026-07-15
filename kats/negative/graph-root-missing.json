@@ -1,0 +1,5 @@
+{
+  "name": "graph-root-missing",
+  "expected_code": "graph/root-missing",
+  "mutation_description": "Remove the descriptor from a parentless observation."
+}

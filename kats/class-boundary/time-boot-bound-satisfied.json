@@ -1,0 +1,6 @@
+{
+  "name": "time-boot-bound-satisfied",
+  "boundary": "asserted_to_boot_bound",
+  "expectation": "conformant",
+  "expected_class": "boot_bound"
+}

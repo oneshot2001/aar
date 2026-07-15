@@ -1,0 +1,5 @@
+{
+  "name": "anchor-independence-invalid",
+  "expected_code": "anchor/independence-invalid",
+  "mutation_description": "Make the independence declaration's operator disagree with its planned target."
+}

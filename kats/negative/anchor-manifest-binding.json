@@ -1,0 +1,5 @@
+{
+  "name": "anchor-manifest-binding",
+  "expected_code": "anchor/manifest-binding",
+  "mutation_description": "Bind a valid recomputed anchor proof to the wrong epoch."
+}

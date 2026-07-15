@@ -1,0 +1,6 @@
+{
+  "name": "outcome-device-acknowledged-declared-independently-sensed",
+  "boundary": "device_acknowledged_to_independently_sensed",
+  "expectation": "reject",
+  "expected_code": "evidence/outcome-class-unsatisfied"
+}

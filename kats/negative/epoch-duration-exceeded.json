@@ -1,0 +1,5 @@
+{
+  "name": "epoch-duration-exceeded",
+  "expected_code": "epoch/duration-exceeded",
+  "mutation_description": "Move close more than 86,400 seconds after open."
+}

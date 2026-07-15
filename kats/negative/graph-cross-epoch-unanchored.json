@@ -1,0 +1,5 @@
+{
+  "name": "graph-cross-epoch-unanchored",
+  "expected_code": "graph/cross-epoch-unanchored",
+  "mutation_description": "Use an allowed historical edge naming nonexistent source manifest and anchor."
+}

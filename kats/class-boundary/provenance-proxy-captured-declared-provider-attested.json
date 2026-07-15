@@ -1,0 +1,6 @@
+{
+  "name": "provenance-proxy-captured-declared-provider-attested",
+  "boundary": "proxy_captured_to_provider_attested",
+  "expectation": "reject",
+  "expected_code": "evidence/provenance-class-unsatisfied"
+}

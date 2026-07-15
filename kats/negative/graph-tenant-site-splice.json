@@ -1,0 +1,5 @@
+{
+  "name": "graph-tenant-site-splice",
+  "expected_code": "graph/tenant-site-splice",
+  "mutation_description": "Move the child to another tenant while retaining its parent."
+}

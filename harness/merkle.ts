@@ -130,3 +130,45 @@ export function verifyPowerOfTwoConsistency(
 ): boolean {
   return path.length === 1 && equalBytes(hash(Uint8Array.of(1), oldRoot, path[0]!), newRoot);
 }
+
+export function verifyRfc6962Consistency(
+  oldSize: number,
+  newSize: number,
+  oldRoot: Uint8Array,
+  newRoot: Uint8Array,
+  path: readonly Uint8Array[],
+): boolean {
+  if (oldSize <= 0 || newSize < oldSize) return false;
+  if (oldSize === newSize) return path.length === 0 && equalBytes(oldRoot, newRoot);
+  let fn = oldSize - 1;
+  let sn = newSize - 1;
+  while ((fn & 1) === 1) { fn >>= 1; sn >>= 1; }
+
+  let proofIndex = 0;
+  let oldDigest: Uint8Array;
+  let newDigest: Uint8Array;
+  if (fn === 0) {
+    oldDigest = oldRoot;
+    newDigest = oldRoot;
+  } else {
+    const first = path[proofIndex++];
+    if (first === undefined) return false;
+    oldDigest = first;
+    newDigest = first;
+  }
+
+  while (proofIndex < path.length) {
+    const sibling = path[proofIndex++]!;
+    if (sn === 0) return false;
+    if ((fn & 1) === 1 || fn === sn) {
+      oldDigest = hash(Uint8Array.of(1), sibling, oldDigest);
+      newDigest = hash(Uint8Array.of(1), sibling, newDigest);
+      while ((fn & 1) === 0 && fn !== 0) { fn >>= 1; sn >>= 1; }
+    } else {
+      newDigest = hash(Uint8Array.of(1), newDigest, sibling);
+    }
+    fn >>= 1;
+    sn >>= 1;
+  }
+  return sn === 0 && equalBytes(oldDigest, oldRoot) && equalBytes(newDigest, newRoot);
+}

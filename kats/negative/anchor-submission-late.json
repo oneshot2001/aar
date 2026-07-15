@@ -1,0 +1,5 @@
+{
+  "name": "anchor-submission-late",
+  "expected_code": "anchor/submission-late",
+  "mutation_description": "Move anchor submission beyond the manifest's 86,400-second deadline."
+}

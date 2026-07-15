@@ -1,0 +1,5 @@
+{
+  "name": "evidence-outcome-class-unsatisfied",
+  "expected_code": "evidence/outcome-class-unsatisfied",
+  "mutation_description": "Declare independently_sensed without a qualifying predicate."
+}

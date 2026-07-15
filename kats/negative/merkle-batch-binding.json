@@ -1,0 +1,5 @@
+{
+  "name": "merkle-batch-binding",
+  "expected_code": "merkle/batch-binding",
+  "mutation_description": "Change the proof leaf epoch away from its signed batch."
+}

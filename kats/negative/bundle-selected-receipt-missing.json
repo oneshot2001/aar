@@ -1,0 +1,5 @@
+{
+  "name": "bundle-selected-receipt-missing",
+  "expected_code": "bundle/selected-receipt-missing",
+  "mutation_description": "Remove a selected leaf receipt that is not a graph dependency."
+}

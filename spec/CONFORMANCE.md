@@ -72,8 +72,8 @@ failure.
       its selected closed schema;
    7. resolve a P-256 verification key through the accepted credential path,
       require `SHA-256(public_key) == subject_kid`, use that carried SPKI for
-      verification, and enforce key usage, tenant/site scope, validity, status,
-      and algorithm; a request envelope requires `agent_signing` usage;
+      verification, and enforce key usage, tenant/site scope, validity, and
+      status; a request envelope requires `agent_signing` usage;
    8. compare protected receipt coordinates to payload coordinates;
    9. reconstruct COSE `Sig_structure` from the received protected and payload
       bytes and verify ES256.
@@ -275,7 +275,6 @@ emit a code for a different trigger. Where one input has several defects, sectio
 | `cose/content-type-missing` | Protected label 3 is absent. |
 | `cose/content-type-wrong` | Protected label 3 does not exactly select the detached payload schema. |
 | `cose/kid-missing` | Protected label 4 is absent. |
-| `cose/kid-mismatch` | Protected kid does not identify the key used to verify the signature. |
 | `cose/receipt-coordinate-missing` | A required AAR receipt protected label -70000 through -70006 is absent. |
 | `cose/receipt-coordinate-mismatch` | A protected principal/role/tenant/site/epoch/sequence value differs from the payload. |
 | `cose/alg-in-unprotected` | The unprotected map contains label 1. |
@@ -294,7 +293,7 @@ emit a code for a different trigger. Where one input has several defects, sectio
 | `manifest/media-type-mismatch` | A manifest reference and supplied payload have different media types. |
 | `identity/receipt-id-mismatch` | Recomputed receipt ID differs from `receipt_id`. |
 | `identity/artifact-id-mismatch` | Recomputed delegation, credential, status, rotation, epoch-event, anchor, or Merkle-batch ID differs from its declared primary ID. |
-| `identity/reuse` | One receipt ID names nonidentical envelope bytes. |
+| `identity/reuse` | One receipt ID names nonidentical envelope bytes relative to prior evaluated state. |
 | `identity/coordinate-equivocation` | One issuer or epoch coordinate names different receipt IDs. |
 | `identity/issuer-sequence-rollback` | Issuer sequence decreases relative to a prior committed receipt in evaluated state. |
 | `identity/epoch-sequence-rollback` | Epoch sequence decreases or is reused within one owner/epoch. |
@@ -311,7 +310,6 @@ emit a code for a different trigger. Where one input has several defects, sectio
 | `credential/path-invalid` | Path within its schema length is not a contiguous issuer/subject chain or contains a loop. |
 | `credential/kid-key-mismatch` | SHA-256 of the credential's carried DER SubjectPublicKeyInfo differs from `subject_kid`. |
 | `credential/usage-mismatch` | Credential key usage does not authorize the signed object/role, including an epoch event, epoch manifest, or Merkle batch not signed by its `epoch_owner_kid` with `ep_signing`, or a Merkle batch whose `signer_kid` differs from `epoch_owner_kid`. |
-| `credential/algorithm-mismatch` | Credential does not pin ES256 and P-256. |
 | `credential/not-yet-valid` | Evaluation or signing time precedes credential validity. |
 | `credential/expired` | Evaluation or signing time is after credential validity. |
 | `credential/status-missing` | A required stapled snapshot for the decision/key is absent. |

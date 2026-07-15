@@ -1,0 +1,5 @@
+{
+  "name": "anchor-target-unplanned",
+  "expected_code": "anchor/target-unplanned",
+  "mutation_description": "Change the signed anchor target ID away from the manifest plan."
+}

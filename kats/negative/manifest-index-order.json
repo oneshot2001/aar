@@ -1,0 +1,5 @@
+{
+  "name": "manifest-index-order",
+  "expected_code": "manifest/index-order",
+  "mutation_description": "Swap two objective index entries without changing their leaf indices."
+}

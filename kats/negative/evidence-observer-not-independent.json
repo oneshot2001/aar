@@ -1,0 +1,5 @@
+{
+  "name": "evidence-observer-not-independent",
+  "expected_code": "evidence/observer-not-independent",
+  "mutation_description": "Declare independently_sensed using the same failure domain as source observations."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "graph-parent-metadata-mismatch",
+  "expected_code": "graph/parent-metadata-mismatch",
+  "mutation_description": "Change the carried parent kind metadata only."
+}

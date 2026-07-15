@@ -1,0 +1,5 @@
+{
+  "name": "anchor-head-missing",
+  "expected_code": "anchor/head-missing",
+  "mutation_description": "Provide only an expected head for an unrelated anchor target."
+}

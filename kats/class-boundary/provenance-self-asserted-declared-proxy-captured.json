@@ -1,0 +1,6 @@
+{
+  "name": "provenance-self-asserted-declared-proxy-captured",
+  "boundary": "self_asserted_to_proxy_captured",
+  "expectation": "reject",
+  "expected_code": "evidence/provenance-class-unsatisfied"
+}

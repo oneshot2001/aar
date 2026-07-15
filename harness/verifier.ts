@@ -1,13 +1,17 @@
 import { p256 } from "@noble/curves/nist.js";
 import { CborScalar, CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
-import { domainHash, hash, P256_HALF_ORDER, P256_ORDER, signatureScalars } from "./crypto";
+import { deterministicId, domainHash, hash, P256_HALF_ORDER, P256_ORDER, signDetached, signatureScalars } from "./crypto";
+import { promotedRoot, rfc6962Leaf, verifyPromotedProof, verifyRfc6962Consistency, verifyRfc6962Inclusion } from "./merkle";
+import { TEST_KEYS } from "./testkeys";
 
 export type B1ReasonCode =
   | `resource/${string}` | `cbor/${string}` | `schema/${string}`
   | `cose/${string}` | `sig/${string}` | `key/${string}`
   | `hash/${string}` | `request/${string}` | `manifest/${string}`
   | `identity/${string}` | `receipt/${string}` | `credential/${string}`
-  | `replay/${string}` | `delegation/${string}` | `bundle/${string}`;
+  | `replay/${string}` | `delegation/${string}` | `bundle/${string}`
+  | `graph/${string}` | `epoch/${string}` | `merkle/${string}`
+  | `anchor/${string}` | `evidence/${string}`;
 
 export type B1Failure = {
   ok: false;
@@ -15,15 +19,17 @@ export type B1Failure = {
   reason: B1ReasonCode;
   step: number;
   path?: string;
+  verdict?: Obj;
+  verdictEnvelope?: Uint8Array;
 };
 
 export type B1Success = {
   ok: true;
-  result: "steps-1-11-passed";
-  completedThrough: 11;
-  nextStep: 12;
-  notImplemented: readonly [12, 13, 14, 15, 16, 17, 18, 19];
+  result: "conformant";
+  completedThrough: 20;
   observations: readonly string[];
+  verdict: Obj;
+  verdictEnvelope: Uint8Array;
 };
 
 export type B1Verification = B1Failure | B1Success;
@@ -47,6 +53,10 @@ export interface PriorEmission {
 export interface VerifyB1Options {
   replayState?: readonly ReplayUse[];
   priorEmissions?: readonly PriorEmission[];
+  product?: string;
+  version?: string;
+  buildDigest?: Uint8Array;
+  configDigest?: Uint8Array;
 }
 
 const LIMITS = {
@@ -57,6 +67,11 @@ const LIMITS = {
   parents: 64,
   proof: 65_536,
   proofs: 4_194_304,
+  dagDepth: 128,
+  dagWidth: 4_096,
+  manifestEntries: 10_000,
+  merkleLeaves: 1_048_576,
+  credentialPath: 8,
 } as const;
 
 type Obj = Record<string, CborValue>;
@@ -93,6 +108,10 @@ function compareEncoded(left: CborValue, right: CborValue): number {
     if (a[index] !== b[index]) return a[index]! - b[index]!;
   }
   return 0;
+}
+
+function observe(observations: string[], value: string): void {
+  if (!observations.includes(value)) observations.push(value);
 }
 
 /* Step 2 needs category precedence, not merely the first parser exception.  This
@@ -446,7 +465,7 @@ const REQUIRED_PAYLOAD_FIELDS: Record<ArtifactKind, readonly string[]> = {
 };
 
 const OPTIONAL_PAYLOAD_FIELDS: Partial<Record<ArtifactKind, readonly string[]>> = {
-  status: ["compromise_at"], delegation: ["invocation_id"], epoch_event: ["previous_event_digest"], anchor: ["consistency"], receipt: ["root", "correlation"],
+  status: ["compromise_at"], delegation: ["invocation_id"], epoch_event: ["previous_event_digest"], epoch_manifest: ["predecessor_manifest_digest"], anchor: ["consistency"], receipt: ["root", "correlation"],
 };
 
 function parseEnvelope(entry: CborValue, kind: ArtifactKind, path: string): ParsedEnvelope | B1Failure {
@@ -596,7 +615,6 @@ function validateMechanics(bundle: Obj, parsed: Parsed): B1Failure | undefined {
   for (const kind of order) for (const entry of parsed[kind]) {
     const credential = credentialsByKid.get(toHex(entry.kid));
     if (credential === undefined) return failure(6, "key/not-found", `${kind}.kid`, true);
-    if (!equalBytes(entry.kid, credential.payload.subject_kid as Uint8Array)) return failure(6, "cose/kid-mismatch", `${kind}.kid`);
     const publicKeyBytes = credential.payload.public_key;
     if (!(publicKeyBytes instanceof Uint8Array)) return failure(6, "schema/bad-type", "credential.public_key");
     if (!equalBytes(hash(publicKeyBytes), credential.payload.subject_kid as Uint8Array)) return failure(6, "credential/kid-key-mismatch", "credential.public_key");
@@ -604,7 +622,8 @@ function validateMechanics(bundle: Obj, parsed: Parsed): B1Failure | undefined {
     if (publicKey === undefined) return failure(6, "key/not-p256", "credential.public_key");
     const requiredUsage = usageFor(entry);
     if (credential.payload.key_usage !== requiredUsage) return failure(6, kind === "receipt" ? "receipt/signer-role-mismatch" : "credential/usage-mismatch", `${kind}.kid`);
-    if (credential.payload.cose_alg !== -7 || credential.payload.curve !== "P-256") return failure(6, "credential/algorithm-mismatch", "credential");
+    if (["epoch_event", "epoch_manifest", "merkle_batch"].includes(kind) && !same(entry.kid, entry.payload.epoch_owner_kid)) return failure(6, "credential/usage-mismatch", `${kind}.epoch_owner_kid`);
+    if (kind === "merkle_batch" && !same(entry.payload.signer_kid, entry.payload.epoch_owner_kid)) return failure(6, "credential/usage-mismatch", "merkle_batch.signer_kid");
     const signingTime = kind === "receipt" && object(entry.payload.emission) && uint(entry.payload.emission.committed_at) ? entry.payload.emission.committed_at : evaluationTime;
     if (!uint(credential.payload.valid_from) || !uint(credential.payload.valid_until)) return failure(6, "schema/bad-type", "credential.validity");
     if (signingTime < credential.payload.valid_from) return failure(6, "credential/not-yet-valid", "credential.valid_from");
@@ -769,10 +788,16 @@ function validateEmission(parsed: Parsed, prior: readonly PriorEmission[], obser
     const existing = byId.get(id);
     if (existing !== undefined) {
       if (!equalBytes(existing.envelopeBytes, receipt.envelopeBytes)) return failure(9, "identity/reuse", "receipts");
-      observations.push("duplicate_exact");
+      observe(observations, "duplicate_exact");
       continue;
     }
     byId.set(id, receipt);
+    for (const old of prior) {
+      if (equalBytes(old.receiptId, receipt.payload.receipt_id as Uint8Array)) {
+        if (!equalBytes(old.envelopeDigest, hash(receipt.envelopeBytes))) return failure(9, "identity/reuse", "receipts");
+        observe(observations, "duplicate_exact");
+      }
+    }
     const binding = receipt.payload.binding as Obj;
     const emission = receipt.payload.emission as Obj;
     const issuer = `${toHex(receipt.kid)}:${emission.issuer_seq as number}`;
@@ -816,6 +841,7 @@ function validateReceiptSemantics(bundle: Obj, parsed: Parsed): B1Failure | unde
       const consumption = body.consumption_manifest_id;
       let resolved = bytes(consumption, 32) && manifestDigests.has(toHex(consumption));
       if (!resolved) for (const edge of payload.parents as Obj[]) {
+        if (edge.edge_type !== "derived_from") continue;
         if (!bytes(edge.parent_id, 32)) continue;
         const parent = byId.get(toHex(edge.parent_id));
         const parentConsumption = parent?.payload.kind === "observation" ? (parent.payload.body as Obj).consumption : undefined;
@@ -915,7 +941,461 @@ function validateDelegations(parsed: Parsed): B1Failure | undefined {
   return undefined;
 }
 
-export function verifyBundleB1(input: Uint8Array, options: VerifyB1Options = {}): B1Verification {
+const EDGE_MATRIX: Readonly<Record<string, readonly [readonly string[], readonly string[]]>> = {
+  derived_from: [["observation", "inference"], ["observation", "inference"]],
+  requested_by: [["observation", "inference"], ["inference", "authorization", "action_attempt"]],
+  authorized_by: [["authorization"], ["action_attempt"]],
+  triggered_by: [["observation", "inference"], ["authorization", "action_attempt"]],
+  attempted_as: [["action_attempt"], ["dispatch"]],
+  observed_outcome: [["action_attempt", "dispatch"], ["outcome_observation"]],
+  supports: [["observation", "inference", "outcome_observation"], ["inference", "authorization", "outcome_observation"]],
+};
+
+function receiptsById(parsed: Parsed): Map<string, ParsedEnvelope> {
+  return new Map(parsed.receipt.map((entry) => [toHex(entry.payload.receipt_id as Uint8Array), entry]));
+}
+
+function validateGraph(parsed: Parsed): B1Failure | undefined {
+  const byId = receiptsById(parsed);
+  const manifests = new Map(parsed.epoch_manifest.map((entry) => [toHex(entry.payload.manifest_id as Uint8Array), entry]));
+  const anchors = new Map(parsed.anchor.map((entry) => [toHex(entry.payload.anchor_id as Uint8Array), entry]));
+
+  for (const child of parsed.receipt) for (const edgeValue of child.payload.parents as CborValue[]) {
+    const edge = edgeValue as Obj;
+    const parent = bytes(edge.parent_id, 32) ? byId.get(toHex(edge.parent_id)) : undefined;
+    if (parent === undefined) return failure(12, "graph/dangling-parent", "receipt.parents.parent_id");
+  }
+  for (const child of parsed.receipt) for (const edgeValue of child.payload.parents as CborValue[]) {
+    const edge = edgeValue as Obj;
+    const parent = byId.get(toHex(edge.parent_id as Uint8Array))!;
+    const parentBinding = parent.payload.binding as Obj;
+    if (!same(edge.parent_kind, parent.payload.kind) || !same(edge.parent_tenant_id, parentBinding.tenant_id) || !same(edge.parent_site_id, parentBinding.site_id) || !same(edge.parent_epoch_id, parentBinding.epoch_id)) {
+      return failure(12, "graph/parent-metadata-mismatch", "receipt.parents");
+    }
+  }
+  for (const child of parsed.receipt) for (const edgeValue of child.payload.parents as CborValue[]) {
+    const edge = edgeValue as Obj;
+    const parent = byId.get(toHex(edge.parent_id as Uint8Array))!;
+    const rule = EDGE_MATRIX[edge.edge_type as string];
+    if (rule === undefined || !rule[0].includes(parent.payload.kind as string) || !rule[1].includes(child.payload.kind as string)) return failure(12, "graph/edge-illegal", "receipt.parents.edge_type");
+  }
+  for (const receipt of parsed.receipt) {
+    const parents = receipt.payload.parents as CborValue[];
+    const root = receipt.payload.root;
+    if (parents.length === 0) {
+      if (!object(root)) return failure(12, "graph/root-missing", "receipt.root");
+      const allowed: Record<string, readonly string[]> = {
+        agent_request: ["observation", "inference"], human_request: ["observation", "inference", "authorization"], standing_condition_trigger: ["observation", "authorization"],
+      };
+      if (!(allowed[root.kind as string] ?? []).includes(receipt.payload.kind as string)) return failure(12, "graph/root-forbidden", "receipt.root.kind");
+    } else if (root !== undefined) return failure(12, "graph/root-forbidden", "receipt.root");
+  }
+  for (const child of parsed.receipt) for (const edgeValue of child.payload.parents as CborValue[]) {
+    const edge = edgeValue as Obj;
+    const parent = byId.get(toHex(edge.parent_id as Uint8Array))!;
+    const childBinding = child.payload.binding as Obj;
+    const parentBinding = parent.payload.binding as Obj;
+    if (!same(childBinding.tenant_id, parentBinding.tenant_id) || !same(childBinding.site_id, parentBinding.site_id)) return failure(12, "graph/tenant-site-splice", "receipt.parents");
+    const unequalEpoch = childBinding.epoch_id !== parentBinding.epoch_id;
+    if (!unequalEpoch && edge.cross_epoch !== undefined) return failure(12, "graph/cross-epoch-forbidden", "receipt.parents.cross_epoch");
+    if (!unequalEpoch) continue;
+    const cross = edge.cross_epoch;
+    const allowed = object(cross) && (
+      ((edge.edge_type === "derived_from" || edge.edge_type === "supports") && cross.reason === "historical_evidence")
+      || (edge.edge_type === "observed_outcome" && (cross.reason === "long_running_action" || cross.reason === "late_outcome"))
+    );
+    if (!allowed) return failure(12, "graph/cross-epoch-forbidden", "receipt.parents.cross_epoch");
+    const manifest = bytes(cross.source_manifest_id, 32) ? manifests.get(toHex(cross.source_manifest_id)) : undefined;
+    const anchor = bytes(cross.source_anchor_id, 32) ? anchors.get(toHex(cross.source_anchor_id)) : undefined;
+    if (parentBinding.epoch_id as number >= (childBinding.epoch_id as number) || manifest === undefined || anchor === undefined
+      || !same(manifest.payload.epoch_id, parentBinding.epoch_id) || !same(anchor.payload.manifest_id, manifest.payload.manifest_id)) {
+      return failure(12, "graph/cross-epoch-unanchored", "receipt.parents.cross_epoch");
+    }
+  }
+
+  const indegree = new Map<string, number>();
+  const children = new Map<string, string[]>();
+  const ranks = new Map<string, number>();
+  for (const receipt of parsed.receipt) {
+    const id = toHex(receipt.payload.receipt_id as Uint8Array);
+    indegree.set(id, (receipt.payload.parents as CborValue[]).length);
+    children.set(id, []);
+  }
+  for (const child of parsed.receipt) {
+    const childId = toHex(child.payload.receipt_id as Uint8Array);
+    for (const edgeValue of child.payload.parents as Obj[]) children.get(toHex(edgeValue.parent_id as Uint8Array))!.push(childId);
+  }
+  const queue = [...indegree.entries()].filter(([, count]) => count === 0).map(([id]) => id);
+  for (const id of queue) ranks.set(id, 0);
+  let visited = 0;
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    visited += 1;
+    for (const childId of children.get(id)!) {
+      ranks.set(childId, Math.max(ranks.get(childId) ?? 0, (ranks.get(id) ?? 0) + 1));
+      const next = indegree.get(childId)! - 1;
+      indegree.set(childId, next);
+      if (next === 0) queue.push(childId);
+    }
+  }
+  if (visited !== parsed.receipt.length) return failure(12, "graph/cycle", "bundle.artifacts.receipts");
+  const maximumRank = Math.max(-1, ...ranks.values());
+  if (maximumRank + 1 > LIMITS.dagDepth) return failure(12, "resource/dag-depth", "bundle.artifacts.receipts");
+  const widths = new Map<number, number>();
+  for (const rank of ranks.values()) widths.set(rank, (widths.get(rank) ?? 0) + 1);
+  if ([...widths.values()].some((width) => width > LIMITS.dagWidth)) return failure(12, "resource/dag-width", "bundle.artifacts.receipts");
+  return undefined;
+}
+
+function validateDominance(parsed: Parsed): B1Failure | undefined {
+  const byId = receiptsById(parsed);
+  const delegations = new Map(parsed.delegation.map((entry) => [toHex(entry.payload.delegation_id as Uint8Array), entry]));
+  for (const dispatch of parsed.receipt.filter((entry) => entry.payload.kind === "dispatch")) {
+    const attemptEdges = (dispatch.payload.parents as Obj[]).filter((edge) => edge.edge_type === "attempted_as");
+    const attempt = attemptEdges.length === 1 ? byId.get(toHex(attemptEdges[0]!.parent_id as Uint8Array)) : undefined;
+    if (attempt === undefined || attempt.payload.kind !== "action_attempt") return failure(13, "graph/dominator-missing", "dispatch.parents");
+    const authorizationEdges = (attempt.payload.parents as Obj[]).filter((edge) => edge.edge_type === "authorized_by");
+    if (authorizationEdges.length === 0) return failure(13, "graph/dominator-missing", "attempt.parents");
+    if (authorizationEdges.length > 1) return failure(13, "graph/dominator-ambiguous", "attempt.parents");
+    const authorization = byId.get(toHex(authorizationEdges[0]!.parent_id as Uint8Array));
+    const attemptBody = attempt.payload.body as Obj;
+    if (authorization?.payload.kind !== "authorization" || !same(attemptBody.authorization_id, authorization.payload.receipt_id)) return failure(13, "graph/dominator-missing", "attempt.body.authorization_id");
+    const decision = (authorization.payload.body as Obj).decision as Obj;
+    const delegation = bytes(decision.delegation_id, 32) ? delegations.get(toHex(decision.delegation_id)) : undefined;
+    if (delegation === undefined) return failure(13, "graph/dominator-missing", "authorization.body.decision.delegation_id");
+    const matching = parsed.delegation.filter((entry) => same(entry.payload.delegation_id, decision.delegation_id));
+    if (matching.length > 1) return failure(13, "graph/dominator-ambiguous", "authorization.body.decision.delegation_id");
+  }
+  return undefined;
+}
+
+function validateEpochs(parsed: Parsed): B1Failure | undefined {
+  const manifests = [...parsed.epoch_manifest].sort((a, b) => {
+    const owner = toHex(a.payload.epoch_owner_kid as Uint8Array).localeCompare(toHex(b.payload.epoch_owner_kid as Uint8Array));
+    return owner || (a.payload.epoch_id as number) - (b.payload.epoch_id as number);
+  });
+  const seenEpoch = new Set<string>();
+  for (const manifest of manifests) {
+    const coordinate = `${toHex(manifest.payload.epoch_owner_kid as Uint8Array)}:${manifest.payload.epoch_id as number}`;
+    if (seenEpoch.has(coordinate)) return failure(14, "epoch/fork", "bundle.artifacts.epoch_manifests");
+    seenEpoch.add(coordinate);
+  }
+  const eventGroups = new Map<string, ParsedEnvelope[]>();
+  for (const event of parsed.epoch_event) {
+    const key = `${toHex(event.payload.epoch_owner_kid as Uint8Array)}:${event.payload.epoch_id as number}`;
+    eventGroups.set(key, [...(eventGroups.get(key) ?? []), event]);
+  }
+  for (const [key, eventsValue] of eventGroups) {
+    const events = [...eventsValue].sort((a, b) => (a.payload.event_seq as number) - (b.payload.event_seq as number));
+    for (let index = 0; index < events.length; index += 1) {
+      const current = events[index]!;
+      if (current.payload.event_seq !== index) return failure(14, "epoch/event-chain", "epoch_event.event_seq");
+      if (index === 0) {
+        if (current.payload.previous_event_digest !== undefined) return failure(14, "epoch/event-chain", "epoch_event.previous_event_digest");
+      } else if (!equalBytes(current.payload.previous_event_digest as Uint8Array, hash(events[index - 1]!.payloadBytes))) return failure(14, "epoch/event-chain", "epoch_event.previous_event_digest");
+    }
+    if (events.some((entry) => entry.payload.event === "fork_declared")) return failure(14, "epoch/fork", "epoch_event.event");
+    const opens = events.filter((entry) => entry.payload.event === "open");
+    const closes = events.filter((entry) => entry.payload.event === "close");
+    if (opens.length !== 1 || closes.length !== 1 || (opens[0]!.payload.occurred_at as number) >= (closes[0]!.payload.occurred_at as number)) return failure(14, "epoch/open-close", "epoch_events");
+    if ((closes[0]!.payload.occurred_at as number) - (opens[0]!.payload.occurred_at as number) > 86_400) return failure(14, "epoch/duration-exceeded", "epoch_events");
+    const manifest = manifests.find((entry) => `${toHex(entry.payload.epoch_owner_kid as Uint8Array)}:${entry.payload.epoch_id as number}` === key);
+    if (manifest === undefined) return failure(14, "epoch/open-close", "epoch_manifest");
+    const closeBody = closes[0]!.payload.body as Obj;
+    const index = manifest.payload.receipt_index as Obj;
+    const span = manifest.payload.sequence_span as Obj;
+    if (!same(closeBody.manifest_id, manifest.payload.manifest_id) || closeBody.item_count !== manifest.payload.item_count || closeBody.last_epoch_seq !== span.last
+      || manifest.payload.item_count !== (index.entries as CborValue[]).length || index.leaf_count !== manifest.payload.item_count) return failure(14, "epoch/span-count-mismatch", "epoch_manifest");
+    if ((manifest.payload.closed_at as number) - (manifest.payload.opened_at as number) > 86_400) return failure(14, "epoch/duration-exceeded", "epoch_manifest");
+    if (manifest.payload.anchor_deadline !== (manifest.payload.closed_at as number) + 86_400 || closeBody.anchor_deadline !== manifest.payload.anchor_deadline) return failure(14, "epoch/anchor-deadline", "epoch_manifest.anchor_deadline");
+    for (const submitted of events.filter((entry) => entry.payload.event === "anchor_submitted")) if (((submitted.payload.body as Obj).submitted_at as number) > (manifest.payload.anchor_deadline as number)) return failure(14, "epoch/anchor-deadline", "epoch_event.body.submitted_at");
+  }
+  for (const manifest of manifests) {
+    const key = `${toHex(manifest.payload.epoch_owner_kid as Uint8Array)}:${manifest.payload.epoch_id as number}`;
+    if (!eventGroups.has(key)) return failure(14, "epoch/open-close", "epoch_events");
+  }
+  const byDigest = new Map(manifests.map((entry) => [toHex(hash(entry.payloadBytes)), entry]));
+  for (const current of manifests) {
+    if (current.payload.predecessor_manifest_digest === undefined) continue;
+    const prior = byDigest.get(toHex(current.payload.predecessor_manifest_digest as Uint8Array));
+    if (prior === undefined || !same(prior.payload.epoch_owner_kid, current.payload.epoch_owner_kid)) return failure(14, "epoch/predecessor-mismatch", "epoch_manifest.predecessor_manifest_digest");
+    if ((current.payload.epoch_id as number) <= (prior.payload.epoch_id as number)) return failure(14, "epoch/id-nonmonotonic", "epoch_manifest.epoch_id");
+  }
+  const byOwner = new Map<string, ParsedEnvelope[]>();
+  for (const manifest of manifests) {
+    const owner = toHex(manifest.payload.epoch_owner_kid as Uint8Array);
+    byOwner.set(owner, [...(byOwner.get(owner) ?? []), manifest]);
+  }
+  for (const ownerManifests of byOwner.values()) {
+    const first = ownerManifests.filter((entry) => entry.payload.predecessor_manifest_digest === undefined);
+    if (first.length !== 1) return failure(14, "epoch/predecessor-mismatch", "epoch_manifest.predecessor_manifest_digest");
+    if (ownerManifests.length > 1 && ownerManifests.some((entry) => entry !== first[0] && entry.payload.predecessor_manifest_digest === undefined)) return failure(14, "epoch/predecessor-mismatch", "epoch_manifest.predecessor_manifest_digest");
+  }
+  const manifestsByEpoch = new Map(manifests.map((entry) => [`${toHex(entry.payload.epoch_owner_kid as Uint8Array)}:${entry.payload.epoch_id as number}`, entry]));
+  for (const receipt of parsed.receipt) {
+    const binding = receipt.payload.binding as Obj;
+    const manifest = manifestsByEpoch.get(`${toHex(binding.epoch_owner_kid as Uint8Array)}:${binding.epoch_id as number}`);
+    if (manifest !== undefined && (receipt.payload.emission as Obj).committed_at as number > (manifest.payload.closed_at as number)) return failure(14, "epoch/late-insertion", "receipt.emission.committed_at");
+    if (binding.late_for_epoch_id !== undefined && (binding.late_for_epoch_id as number) >= (binding.epoch_id as number)) return failure(14, "epoch/late-insertion", "receipt.binding.late_for_epoch_id");
+  }
+  return undefined;
+}
+
+function compareIndexEntries(left: Obj, right: Obj): number {
+  const time = (left.committed_at as number) - (right.committed_at as number);
+  const sequence = (left.epoch_seq as number) - (right.epoch_seq as number);
+  return time || sequence || compareEncoded(left.receipt_id!, right.receipt_id!);
+}
+
+function validateManifestIndexes(parsed: Parsed): B1Failure | undefined {
+  const receipts = receiptsById(parsed);
+  for (const manifest of parsed.epoch_manifest) {
+    const index = manifest.payload.receipt_index as Obj;
+    const entries = index.entries as Obj[];
+    for (let position = 1; position < entries.length; position += 1) if (compareIndexEntries(entries[position - 1]!, entries[position]!) >= 0) return failure(15, "manifest/index-order", "epoch_manifest.receipt_index.entries");
+    for (let position = 0; position < entries.length; position += 1) if (entries[position]!.leaf_index !== position) return failure(15, "manifest/index-gap", "epoch_manifest.receipt_index.entries.leaf_index");
+    const ids = new Set<string>(); const sequences = new Set<number>();
+    for (const entry of entries) {
+      const id = toHex(entry.receipt_id as Uint8Array); const sequence = entry.epoch_seq as number;
+      if (ids.has(id) || sequences.has(sequence)) return failure(15, "manifest/index-duplicate", "epoch_manifest.receipt_index.entries");
+      ids.add(id); sequences.add(sequence);
+      const receipt = receipts.get(id);
+      const binding = receipt?.payload.binding as Obj | undefined;
+      const emission = receipt?.payload.emission as Obj | undefined;
+      if (receipt !== undefined && (entry.receipt_kind !== receipt.payload.kind || !same(entry.issuer_kid, receipt.kid) || entry.issuer_seq !== emission!.issuer_seq || entry.epoch_seq !== binding!.epoch_seq || entry.committed_at !== emission!.committed_at)) return failure(15, "manifest/index-receipt-mismatch", "epoch_manifest.receipt_index.entries");
+    }
+    const leaves = entries.map((entry) => domainHash("AAR-MANIFEST-INDEX-LEAF-v1", entry));
+    if (leaves.length === 0 || !equalBytes(index.root as Uint8Array, promotedRoot(leaves, "AAR-MANIFEST-INDEX-NODE-v1"))) return failure(15, "manifest/index-root-mismatch", "epoch_manifest.receipt_index.root");
+  }
+  return undefined;
+}
+
+function expectedPromotedSiblings(index: number, treeSize: number): number {
+  let count = 0; let position = index; let width = treeSize;
+  while (width > 1) { if (position % 2 === 1 || position + 1 < width) count += 1; position = Math.floor(position / 2); width = Math.ceil(width / 2); }
+  return count;
+}
+
+function validateMerkle(bundle: Obj, parsed: Parsed, observations: string[]): B1Failure | undefined {
+  const batches = new Map(parsed.merkle_batch.map((entry) => [toHex(entry.payload.batch_id as Uint8Array), entry]));
+  const seenLeaves = new Map<string, number>();
+  for (const proofValue of (bundle.artifacts as Obj).merkle_proofs as CborValue[]) {
+    const proof = proofValue as Obj;
+    const batch = bytes(proof.batch_id, 32) ? batches.get(toHex(proof.batch_id)) : undefined;
+    const leaf = proof.leaf as Obj;
+    if (batch === undefined || proof.tree_size !== batch.payload.tree_size || proof.leaf_index !== leaf.leaf_index || leaf.tree_size !== batch.payload.tree_size
+      || !same(leaf.tenant_id, batch.payload.tenant_id) || !same(leaf.site_id, batch.payload.site_id) || leaf.epoch_id !== batch.payload.epoch_id) return failure(16, "merkle/batch-binding", "merkle_proofs");
+    const canonicalLeaf = toHex(domainHash("AAR-MERKLE-LEAF-v1", leaf));
+    const priorIndex = seenLeaves.get(canonicalLeaf);
+    if (priorIndex !== undefined && priorIndex !== proof.leaf_index) return failure(16, "merkle/duplicate-leaf", "merkle_proofs.leaf");
+    seenLeaves.set(canonicalLeaf, proof.leaf_index as number);
+    const siblings = proof.siblings as Uint8Array[];
+    if (siblings.length > 20 || siblings.length !== expectedPromotedSiblings(proof.leaf_index as number, proof.tree_size as number)) return failure(16, "merkle/path-length", "merkle_proofs.siblings");
+    if (!verifyPromotedProof(domainHash("AAR-MERKLE-LEAF-v1", leaf), proof.leaf_index as number, proof.tree_size as number, siblings, "AAR-MERKLE-NODE-v1", batch.payload.root as Uint8Array)) return failure(16, "merkle/root-mismatch", "merkle_proofs");
+    observe(observations, "membership_only");
+  }
+  return undefined;
+}
+
+function validateAnchors(bundle: Obj, parsed: Parsed, observations: string[]): B1Failure | undefined {
+  const manifests = new Map(parsed.epoch_manifest.map((entry) => [toHex(entry.payload.manifest_id as Uint8Array), entry]));
+  const expectedHeads = ((bundle.trust_inputs as Obj).expected_anchor_heads as Obj[]);
+  const evaluation = (bundle.trust_inputs as Obj).evaluation_time as number;
+  for (const anchor of parsed.anchor) {
+    const manifest = manifests.get(toHex(anchor.payload.manifest_id as Uint8Array));
+    const plan = manifest?.payload.anchor_plan as Obj | undefined;
+    const target = anchor.payload.target as Obj;
+    const planned = (plan?.targets as Obj[] | undefined)?.find((entry) => same(entry.target_id, target.target_id));
+    if (planned === undefined || !same(planned, target)) return failure(17, "anchor/target-unplanned", "anchor.target");
+    const leafObject: Obj = { tenant_id: anchor.payload.tenant_id!, site_id: anchor.payload.site_id!, epoch_id: anchor.payload.epoch_id!, manifest_id: anchor.payload.manifest_id!, manifest_digest: anchor.payload.manifest_digest! };
+    const leafDigest = rfc6962Leaf(encodeCbor(["AAR-ANCHOR-LEAF-v1", leafObject]));
+    const inclusion = anchor.payload.inclusion as Obj;
+    if (!equalBytes(inclusion.leaf_digest as Uint8Array, leafDigest) || inclusion.tree_size !== anchor.payload.anchor_tree_size || inclusion.leaf_index !== anchor.payload.anchor_leaf_index
+      || !verifyRfc6962Inclusion(leafDigest, inclusion.leaf_index as number, inclusion.tree_size as number, inclusion.siblings as Uint8Array[], anchor.payload.anchor_root as Uint8Array)) return failure(17, "anchor/inclusion-invalid", "anchor.inclusion");
+    if (object(anchor.payload.consistency)) {
+      const proof = anchor.payload.consistency;
+      if (proof.new_tree_size !== anchor.payload.anchor_tree_size || !same(proof.new_root, anchor.payload.anchor_root)
+        || !verifyRfc6962Consistency(proof.old_tree_size as number, proof.new_tree_size as number, proof.old_root as Uint8Array, proof.new_root as Uint8Array, proof.path as Uint8Array[])) return failure(17, "anchor/consistency-invalid", "anchor.consistency");
+    }
+    if (manifest === undefined || !same(anchor.payload.tenant_id, manifest.payload.tenant_id) || !same(anchor.payload.site_id, manifest.payload.site_id) || anchor.payload.epoch_id !== manifest.payload.epoch_id
+      || !equalBytes(anchor.payload.manifest_digest as Uint8Array, hash(manifest.payloadBytes))) return failure(17, "anchor/manifest-binding", "anchor.manifest_id");
+    if ((anchor.payload.submitted_at as number) - (manifest.payload.closed_at as number) > 86_400) return failure(17, "anchor/submission-late", "anchor.submitted_at");
+    const expected = expectedHeads.find((entry) => same(entry.target_id, target.target_id));
+    if (expected === undefined) return failure(17, "anchor/head-missing", "trust_inputs.expected_anchor_heads", true);
+    if ((expected.tree_size as number) >= (anchor.payload.anchor_tree_size as number) && ((expected.tree_size !== anchor.payload.anchor_tree_size) || !same(expected.root, anchor.payload.anchor_root))) return failure(17, "anchor/head-mismatch", "trust_inputs.expected_anchor_heads");
+    if (evaluation - (expected.observed_at as number) > 86_400) return failure(17, "anchor/head-stale", "trust_inputs.expected_anchor_heads");
+    const independence = plan!.independence as Obj;
+    const groups = independence.groups as Obj[];
+    const group = groups.find((entry) => same(entry.independence_group, target.independence_group));
+    if (independence.basis !== "distinct_operator_and_failure_domain" || group === undefined || !same(group.operator_id, target.operator_id)
+      || groups.some((entry, index) => groups.some((other, otherIndex) => index !== otherIndex && (same(entry.operator_id, other.operator_id) || same(entry.failure_domain_id, other.failure_domain_id))))) return failure(17, "anchor/independence-invalid", "epoch_manifest.anchor_plan.independence");
+    observe(observations, "anchor_existence_order_only");
+  }
+  return undefined;
+}
+
+function entryMatchesSelector(entry: Obj, selector: Obj): boolean {
+  if ((entry.committed_at as number) < (selector.committed_from as number) || (entry.committed_at as number) >= (selector.committed_until as number)) return false;
+  if (!(selector.receipt_kinds as CborValue[]).some((value) => same(value, entry.receipt_kind))) return false;
+  for (const [selectorField, entryField] of [["subject_ids", "subject_ids"], ["correlation_ids", "correlation_ids"], ["issuer_kids", "issuer_kid"]] as const) {
+    const selected = selector[selectorField];
+    if (!Array.isArray(selected)) continue;
+    const values = Array.isArray(entry[entryField]) ? entry[entryField] as CborValue[] : [entry[entryField]!];
+    if (!selected.some((wanted) => values.some((value) => same(wanted, value)))) return false;
+  }
+  return true;
+}
+
+function validateRanges(bundle: Obj, parsed: Parsed, observations: string[]): B1Failure | undefined {
+  const selector = bundle.selector as Obj;
+  if ((selector.committed_from as number) >= (selector.committed_until as number)) return failure(18, "bundle/selector-interval", "bundle.selector");
+  const manifests = new Map(parsed.epoch_manifest.map((entry) => [toHex(entry.payload.manifest_id as Uint8Array), entry]));
+  const carriedReceipts = receiptsById(parsed);
+  const selectedIds = new Set<string>();
+  const previousLastByManifest = new Map<string, number>();
+  for (const rangeValue of bundle.ranges as CborValue[]) {
+    const range = rangeValue as Obj;
+    const manifest = bytes(range.manifest_id, 32) ? manifests.get(toHex(range.manifest_id)) : undefined;
+    if (manifest === undefined) return failure(18, "bundle/range-manifest-missing", "bundle.ranges.manifest_id");
+    if (!same(range.selector_commitment, bundle.selector_commitment)) return failure(18, "bundle/range-selector-mismatch", "bundle.ranges.selector_commitment");
+    const manifestKey = toHex(range.manifest_id as Uint8Array);
+    let previousLast = previousLastByManifest.get(manifestKey) ?? -1;
+    const entries = range.entries as Obj[];
+    if (entries.length > 0) {
+      if (range.first_leaf_index !== (entries[0]!.entry as Obj).leaf_index) return failure(18, "bundle/range-noncontiguous", "bundle.ranges.first_leaf_index");
+      for (let index = 0; index < entries.length; index += 1) {
+        const leaf = entries[index]!.entry as Obj;
+        if (leaf.leaf_index !== (range.first_leaf_index as number) + index || (leaf.leaf_index as number) <= previousLast) return failure(18, "bundle/range-noncontiguous", "bundle.ranges.entries");
+        previousLast = leaf.leaf_index as number;
+      }
+      previousLastByManifest.set(manifestKey, previousLast);
+    } else if (range.first_leaf_index !== undefined) return failure(18, "bundle/range-noncontiguous", "bundle.ranges.first_leaf_index");
+    const indexEntries = ((manifest.payload.receipt_index as Obj).entries as Obj[]);
+    const matching = indexEntries.filter((entry) => entryMatchesSelector(entry, selector));
+    if (entries.length !== matching.length || entries.some((wrapped, index) => !same(wrapped.entry, matching[index]))) return failure(18, "bundle/range-boundary", "bundle.ranges");
+    for (const wrapped of entries) {
+      const entry = wrapped.entry as Obj; const inclusion = wrapped.inclusion as Obj;
+      if (inclusion.tree_size !== (manifest.payload.receipt_index as Obj).leaf_count || inclusion.leaf_index !== entry.leaf_index
+        || !verifyPromotedProof(domainHash("AAR-MANIFEST-INDEX-LEAF-v1", entry), inclusion.leaf_index as number, inclusion.tree_size as number, inclusion.siblings as Uint8Array[], "AAR-MANIFEST-INDEX-NODE-v1", (manifest.payload.receipt_index as Obj).root as Uint8Array)) return failure(18, "bundle/range-proof-invalid", "bundle.ranges.entries.inclusion");
+      selectedIds.add(toHex(entry.receipt_id as Uint8Array));
+    }
+  }
+  if (bundle.coverage === "complete") {
+    if ((bundle.ranges as CborValue[]).length === 0) return failure(18, "bundle/coverage-overclaim", "bundle.coverage");
+    for (const id of selectedIds) if (!carriedReceipts.has(id)) return failure(18, "bundle/selected-receipt-missing", "bundle.artifacts.receipts");
+    const reachable = new Set(selectedIds); const queue = [...selectedIds];
+    while (queue.length > 0) {
+      const receipt = carriedReceipts.get(queue.shift()!); if (receipt === undefined) continue;
+      for (const edge of receipt.payload.parents as Obj[]) { const id = toHex(edge.parent_id as Uint8Array); if (!reachable.has(id)) { reachable.add(id); queue.push(id); } }
+    }
+    for (const receipt of parsed.receipt) {
+      const id = toHex(receipt.payload.receipt_id as Uint8Array);
+      const entry = [...parsed.epoch_manifest].flatMap((manifest) => ((manifest.payload.receipt_index as Obj).entries as Obj[])).find((candidate) => same(candidate.receipt_id, receipt.payload.receipt_id));
+      if (!reachable.has(id) && entry !== undefined && !entryMatchesSelector(entry, selector)) return failure(18, "bundle/artifact-out-of-scope", "bundle.artifacts.receipts");
+    }
+    observe(observations, "producer_declared_complete");
+  }
+  observe(observations, "ingress_completeness_not_established");
+  return undefined;
+}
+
+type EvidenceLimits = { time: string; provenance: string; outcome: string };
+
+function validateEvidence(parsed: Parsed): EvidenceLimits | B1Failure {
+  const timeRank: Record<string, number> = { asserted: 0, boot_bound: 1, externally_anchored: 2 };
+  const provenanceRank: Record<string, number> = { self_asserted: 0, proxy_captured: 1, provider_attested: 2 };
+  const outcomeRank: Record<string, number> = { accepted: 0, dispatched: 1, device_acknowledged: 2, independently_sensed: 3 };
+  let time = "not_evaluated"; let provenance = "not_evaluated"; let outcome = "not_evaluated";
+  for (const receipt of parsed.receipt) {
+    const evidence = receipt.payload.evidence as Obj;
+    const timeEvidence = evidence.time as Obj;
+    if (timeEvidence.class === "boot_bound" && !bytes(timeEvidence.boot_attestation_id, 32)) return failure(19, "evidence/time-class-unsatisfied", "receipt.evidence.time");
+    if (timeEvidence.class === "externally_anchored" && (!bytes(timeEvidence.boot_attestation_id, 32) || !bytes(timeEvidence.anchor_id, 32) || !parsed.anchor.some((entry) => same(entry.payload.anchor_id, timeEvidence.anchor_id)))) return failure(19, "evidence/time-class-unsatisfied", "receipt.evidence.time");
+    if (time === "not_evaluated" || timeRank[timeEvidence.class as string]! > timeRank[time]!) time = timeEvidence.class as string;
+    if (object(evidence.provenance)) {
+      if (evidence.provenance.class === "proxy_captured" && !bytes(evidence.provenance.capture_attestation_id, 32)) return failure(19, "evidence/provenance-class-unsatisfied", "receipt.evidence.provenance");
+      if (evidence.provenance.class === "provider_attested" && !bytes(evidence.provenance.provider_attestation_id, 32)) return failure(19, "evidence/provenance-class-unsatisfied", "receipt.evidence.provenance");
+      if (provenance === "not_evaluated" || provenanceRank[evidence.provenance.class as string]! > provenanceRank[provenance]!) provenance = evidence.provenance.class as string;
+    }
+    if (object(evidence.outcome)) {
+      const level = evidence.outcome.level as string;
+      if (level === "independently_sensed") {
+        if (!bytes(evidence.outcome.qualifying_predicate_id, 32)) return failure(19, "evidence/outcome-class-unsatisfied", "receipt.evidence.outcome");
+        const observer = (receipt.payload.body as Obj).observer as Obj;
+        const byId = receiptsById(parsed); const queue = (receipt.payload.parents as Obj[]).map((edge) => toHex(edge.parent_id as Uint8Array)); const ancestors: ParsedEnvelope[] = []; const seen = new Set<string>();
+        while (queue.length > 0) { const id = queue.shift()!; if (seen.has(id)) continue; seen.add(id); const ancestor = byId.get(id); if (ancestor === undefined) continue; ancestors.push(ancestor); for (const edge of ancestor.payload.parents as Obj[]) queue.push(toHex(edge.parent_id as Uint8Array)); }
+        const sourceDomains = ancestors.map((entry) => ((entry.payload.body as Obj).source_device as Obj | undefined)?.failure_domain_id).filter((value): value is CborValue => value !== undefined);
+        if (sourceDomains.some((domain) => same(domain, observer.failure_domain_id))) return failure(19, "evidence/observer-not-independent", "receipt.body.observer.failure_domain_id");
+      }
+      if (level === "contradicted" || level === "unknown") outcome = level;
+      else if (outcome === "not_evaluated" || outcome === "contradicted" || outcome === "unknown" || outcomeRank[level]! > (outcomeRank[outcome] ?? -1)) outcome = level;
+    }
+  }
+  return { time, provenance, outcome };
+}
+
+const VERDICT_LIMITS: Obj = {
+  exact_encoded_bundle_bytes: 16_777_216,
+  cbor_container_nesting: 32,
+  receipt_nodes: 10_000,
+  directed_graph_edges: 50_000,
+  parents_per_receipt: 64,
+  dag_depth: 128,
+  dag_width: 4_096,
+  encoded_proof_bytes: 65_536,
+  aggregate_proof_bytes: 4_194_304,
+  epoch_manifest_entries: 10_000,
+  merkle_batch_leaves: 1_048_576,
+  credential_path_length: 8,
+};
+
+function emitVerdict(input: Uint8Array, bundle: Obj, parsed: Parsed, options: VerifyB1Options, observations: string[], evidence: EvidenceLimits): B1Success {
+  const selector = bundle.selector as Obj; const trust = bundle.trust_inputs as Obj; const store = trust.trust_store as Obj;
+  const limitsDigest = hash(encodeCbor(VERDICT_LIMITS));
+  const replayState = options.replayState ?? [];
+  const replayValue = replayState.map((entry) => ({ replay_domain: entry.replayDomain, invocation_id: entry.invocationId, content_digest: entry.contentDigest }));
+  const fields: Obj = {
+    v: 2,
+    evaluated_at: trust.evaluation_time!,
+    result: "conformant",
+    bundle_digest: hash(input),
+    selector_commitment: bundle.selector_commitment!,
+    verifier: {
+      product: options.product ?? "aar-reference-verifier",
+      version: options.version ?? "0.2.0-b2",
+      build_digest: options.buildDigest ?? deterministicId("verifier-build:b2"),
+      config_digest: options.configDigest ?? deterministicId("verifier-config:b2"),
+      limits_digest: limitsDigest,
+    },
+    trust_policy: {
+      trust_store_snapshot_id: store.snapshot_id!,
+      trust_store_digest: store.digest!,
+      verifier_policy_digest: trust.verifier_policy_digest!,
+      evaluation_time: trust.evaluation_time!,
+      anchor_heads_digest: hash(encodeCbor(trust.expected_anchor_heads!)),
+      replay_state_digest: hash(encodeCbor(replayValue)),
+    },
+    scope: {
+      tenant_id: selector.tenant_id!, site_id: selector.site_id!, committed_from: selector.committed_from!, committed_until: selector.committed_until!,
+      receipt_kinds: selector.receipt_kinds!, coverage: bundle.coverage!, ingress_completeness: "not_established",
+    },
+    limits: {
+      requested_profile: bundle.claimed_profile!, evaluated_profile: bundle.claimed_profile!,
+      maximum_time_class: evidence.time, maximum_provenance_class: evidence.provenance, maximum_outcome_level: evidence.outcome,
+      technical_integrity: "satisfied", source_authenticity: "not_established",
+      custody_continuity: parsed.anchor.length > 0 ? "partially_evidenced" : "not_established",
+      discovery_completeness: bundle.coverage === "complete" ? "producer_declared_only" : "not_established",
+      legal_admissibility: "not_established",
+    },
+    observations,
+  };
+  const protectedBytes = encodeCbor(new Map<CborScalar, CborValue>([[1, -7], [3, "application/aar-verdict+cbor;v=0.2"], [4, TEST_KEYS.verifier_signing.kid]]));
+  const verdict: Obj = { verdict_id: domainHash("AAR-VERDICT-ID-v1", protectedBytes, fields), ...fields };
+  const signed = signDetached(verdict, "application/aar-verdict+cbor;v=0.2", "verifier_signing");
+  return { ok: true, result: "conformant", completedThrough: 20, observations, verdict, verdictEnvelope: signed.envelopeBytes };
+}
+
+function validateBundle(input: Uint8Array, options: VerifyB1Options = {}): B1Verification {
   if (input.length > LIMITS.bundleBytes) return failure(1, "resource/bundle-too-large", "bundle");
   const decoded = profileDecode(input, 2, "bundle");
   if (isFailure(decoded)) return decoded;
@@ -941,5 +1421,75 @@ export function verifyBundleB1(input: Uint8Array, options: VerifyB1Options = {})
   if (receiptIssue) return receiptIssue;
   const replayIssue = validateReplay(parsed, options.replayState ?? []);
   if (replayIssue) return replayIssue;
-  return { ok: true, result: "steps-1-11-passed", completedThrough: 11, nextStep: 12, notImplemented: [12, 13, 14, 15, 16, 17, 18, 19], observations };
+  const graphIssue = validateGraph(parsed);
+  if (graphIssue) return graphIssue;
+  const dominanceIssue = validateDominance(parsed);
+  if (dominanceIssue) return dominanceIssue;
+  const epochIssue = validateEpochs(parsed);
+  if (epochIssue) return epochIssue;
+  const indexIssue = validateManifestIndexes(parsed);
+  if (indexIssue) return indexIssue;
+  const merkleIssue = validateMerkle(bundle, parsed, observations);
+  if (merkleIssue) return merkleIssue;
+  const anchorIssue = validateAnchors(bundle, parsed, observations);
+  if (anchorIssue) return anchorIssue;
+  const rangeIssue = validateRanges(bundle, parsed, observations);
+  if (rangeIssue) return rangeIssue;
+  const evidence = validateEvidence(parsed);
+  if (isFailure(evidence)) return evidence;
+  const verifierCredential = parsed.credential.find((entry) => equalBytes(entry.payload.subject_kid as Uint8Array, TEST_KEYS.verifier_signing.kid));
+  if (verifierCredential === undefined || verifierCredential.payload.key_usage !== "verifier_signing") return failure(20, "key/not-found", "verifier_signing", true);
+  return emitVerdict(input, bundle, parsed, options, observations, evidence);
 }
+
+function emitFailureVerdict(input: Uint8Array, issue: B1Failure, options: VerifyB1Options): B1Failure {
+  let decoded: Obj | undefined;
+  try { const value = decodeCbor(input, { strict: true, maxDepth: LIMITS.depth }); if (object(value)) decoded = value; } catch { /* deterministic fallback below */ }
+  const selector = object(decoded?.selector) ? decoded.selector : {};
+  const trust = object(decoded?.trust_inputs) ? decoded.trust_inputs : {};
+  const store = object(trust.trust_store) ? trust.trust_store : {};
+  const zero16 = new Uint8Array(16); const zero32 = new Uint8Array(32);
+  const evaluationTime = uint(trust.evaluation_time) ? trust.evaluation_time : 0;
+  const committedFrom = uint(selector.committed_from) ? selector.committed_from : 0;
+  const committedUntil = uint(selector.committed_until) && selector.committed_until > committedFrom ? selector.committed_until : committedFrom + 1;
+  const receiptKinds = Array.isArray(selector.receipt_kinds) && selector.receipt_kinds.length > 0 ? selector.receipt_kinds : ["observation"];
+  const limitsDigest = hash(encodeCbor(VERDICT_LIMITS));
+  const fields: Obj = {
+    v: 2, evaluated_at: evaluationTime, result: issue.result, reason: issue.reason,
+    bundle_digest: hash(input), selector_commitment: bytes(decoded?.selector_commitment, 32) ? decoded!.selector_commitment! : zero32,
+    verifier: {
+      product: options.product ?? "aar-reference-verifier", version: options.version ?? "0.2.0-b2",
+      build_digest: options.buildDigest ?? deterministicId("verifier-build:b2"), config_digest: options.configDigest ?? deterministicId("verifier-config:b2"), limits_digest: limitsDigest,
+    },
+    trust_policy: {
+      trust_store_snapshot_id: bytes(store.snapshot_id, 32) ? store.snapshot_id! : zero32,
+      trust_store_digest: bytes(store.digest, 32) ? store.digest! : zero32,
+      verifier_policy_digest: bytes(trust.verifier_policy_digest, 32) ? trust.verifier_policy_digest! : zero32,
+      evaluation_time: evaluationTime,
+      anchor_heads_digest: hash(encodeCbor(Array.isArray(trust.expected_anchor_heads) ? trust.expected_anchor_heads : [])),
+      replay_state_digest: hash(encodeCbor((options.replayState ?? []).map((entry) => ({ replay_domain: entry.replayDomain, invocation_id: entry.invocationId, content_digest: entry.contentDigest })))),
+    },
+    scope: {
+      tenant_id: bytes(selector.tenant_id, 16) ? selector.tenant_id! : zero16, site_id: bytes(selector.site_id, 16) ? selector.site_id! : zero16,
+      committed_from: committedFrom, committed_until: committedUntil, receipt_kinds: receiptKinds,
+      coverage: decoded?.coverage === "complete" ? "complete" : "valid_subset", ingress_completeness: "not_established",
+    },
+    limits: {
+      requested_profile: ["AAR-1", "AAR-2", "AAR-2A", "AAR-3"].includes(decoded?.claimed_profile as string) ? decoded!.claimed_profile! : "AAR-1",
+      evaluated_profile: "below_AAR-1", maximum_time_class: "not_evaluated", maximum_provenance_class: "not_evaluated", maximum_outcome_level: "not_evaluated",
+      technical_integrity: "not_satisfied", source_authenticity: "not_established", custody_continuity: "not_established", discovery_completeness: "not_established", legal_admissibility: "not_established",
+    },
+    observations: [],
+  };
+  const protectedBytes = encodeCbor(new Map<CborScalar, CborValue>([[1, -7], [3, "application/aar-verdict+cbor;v=0.2"], [4, TEST_KEYS.verifier_signing.kid]]));
+  const verdict: Obj = { verdict_id: domainHash("AAR-VERDICT-ID-v1", protectedBytes, fields), ...fields };
+  const signed = signDetached(verdict, "application/aar-verdict+cbor;v=0.2", "verifier_signing");
+  return { ...issue, verdict, verdictEnvelope: signed.envelopeBytes };
+}
+
+export function verifyBundle(input: Uint8Array, options: VerifyB1Options = {}): B1Verification {
+  const result = validateBundle(input, options);
+  return result.ok ? result : emitFailureVerdict(input, result, options);
+}
+
+export const verifyBundleB1 = verifyBundle;

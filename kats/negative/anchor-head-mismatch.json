@@ -1,0 +1,5 @@
+{
+  "name": "anchor-head-mismatch",
+  "expected_code": "anchor/head-mismatch",
+  "mutation_description": "Change the trusted expected root at the same tree size."
+}

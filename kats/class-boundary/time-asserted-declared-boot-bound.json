@@ -1,0 +1,6 @@
+{
+  "name": "time-asserted-declared-boot-bound",
+  "boundary": "asserted_to_boot_bound",
+  "expectation": "reject",
+  "expected_code": "evidence/time-class-unsatisfied"
+}

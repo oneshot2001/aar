@@ -1,0 +1,5 @@
+{
+  "name": "epoch-open-close",
+  "expected_code": "epoch/open-close",
+  "mutation_description": "Remove close and later events so the epoch has only its open."
+}

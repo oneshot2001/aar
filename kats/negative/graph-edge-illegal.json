@@ -1,0 +1,5 @@
+{
+  "name": "graph-edge-illegal",
+  "expected_code": "graph/edge-illegal",
+  "mutation_description": "Use attempted_as between two observations."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "epoch-id-nonmonotonic",
+  "expected_code": "epoch/id-nonmonotonic",
+  "mutation_description": "Link a successor manifest whose epoch ID decreases."
+}

@@ -1,0 +1,6 @@
+{
+  "name": "outcome-independently-sensed-satisfied",
+  "boundary": "device_acknowledged_to_independently_sensed",
+  "expectation": "conformant",
+  "expected_class": "independently_sensed"
+}

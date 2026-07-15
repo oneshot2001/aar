@@ -1,0 +1,5 @@
+{
+  "name": "epoch-predecessor-mismatch",
+  "expected_code": "epoch/predecessor-mismatch",
+  "mutation_description": "Carry a later epoch naming an unknown predecessor manifest digest."
+}

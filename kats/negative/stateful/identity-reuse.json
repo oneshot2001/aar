@@ -1,0 +1,5 @@
+{
+  "name": "identity-reuse",
+  "expected_code": "identity/reuse",
+  "mutation_description": "Prior evaluated state binds the carried receipt ID to different envelope bytes."
+}

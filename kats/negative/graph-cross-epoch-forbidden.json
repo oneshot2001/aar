@@ -1,0 +1,5 @@
+{
+  "name": "graph-cross-epoch-forbidden",
+  "expected_code": "graph/cross-epoch-forbidden",
+  "mutation_description": "Move the child to a later epoch without a cross_epoch declaration."
+}

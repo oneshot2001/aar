@@ -1,0 +1,5 @@
+{
+  "name": "identity-issuer-sequence-rollback",
+  "expected_code": "identity/issuer-sequence-rollback",
+  "mutation_description": "Prior evaluated state has a greater sequence for the carried issuer kid."
+}

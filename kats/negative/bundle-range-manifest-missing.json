@@ -1,0 +1,5 @@
+{
+  "name": "bundle-range-manifest-missing",
+  "expected_code": "bundle/range-manifest-missing",
+  "mutation_description": "Make an otherwise valid range name an unknown manifest."
+}

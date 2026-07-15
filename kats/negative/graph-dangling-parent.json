@@ -1,0 +1,5 @@
+{
+  "name": "graph-dangling-parent",
+  "expected_code": "graph/dangling-parent",
+  "mutation_description": "Point a derived observation at a nonexistent parent."
+}

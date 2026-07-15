@@ -1,0 +1,6 @@
+{
+  "name": "provenance-proxy-captured-satisfied",
+  "boundary": "self_asserted_to_proxy_captured",
+  "expectation": "conformant",
+  "expected_class": "proxy_captured"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "manifest-index-duplicate",
+  "expected_code": "manifest/index-duplicate",
+  "mutation_description": "Repeat an epoch sequence in two index entries."
+}

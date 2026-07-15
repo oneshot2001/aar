@@ -1,0 +1,5 @@
+{
+  "name": "bundle-range-boundary",
+  "expected_code": "bundle/range-boundary",
+  "mutation_description": "Omit one matching objective entry from the claimed complete interval."
+}

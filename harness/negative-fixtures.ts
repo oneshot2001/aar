@@ -1,6 +1,7 @@
 import { CborScalar, CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
 import { deterministicId, domainHash, hash, id16, P256_HALF_ORDER, signDetached } from "./crypto";
 import { buildFixtures } from "./fixtures";
+import { promotedProofWithDomain, rfc6962Leaf } from "./merkle";
 import { TEST_KEYS, TestKeyName } from "./testkeys";
 
 type Obj = Record<string, CborValue>;
@@ -17,12 +18,28 @@ export interface NegativeFixture {
   descriptor: NegativeDescriptor;
 }
 
+export interface ClassBoundaryFixture {
+  filename: string;
+  bytes: Uint8Array;
+  descriptor: {
+    name: string;
+    boundary: string;
+    expectation: "reject" | "conformant";
+    expected_code?: string;
+    expected_class?: string;
+  };
+}
+
 function object(value: CborValue | undefined): value is Obj {
   return typeof value === "object" && value !== null && !Array.isArray(value) && !(value instanceof Uint8Array) && !(value instanceof Map);
 }
 
 function clone<T extends CborValue>(value: T): T {
   return decodeCbor(encodeCbor(value), { strict: true }) as T;
+}
+
+function same(left: CborValue | undefined, right: CborValue | undefined): boolean {
+  return left !== undefined && right !== undefined && equalBytes(encodeCbor(left), encodeCbor(right));
 }
 
 function baseBundle(): Obj {
@@ -203,6 +220,202 @@ function bigint32(value: bigint): Uint8Array {
   return out;
 }
 
+function clearJournal(bundle: Obj): void {
+  const value = artifacts(bundle);
+  value.epoch_events = [];
+  value.epoch_manifests = [];
+  value.anchors = [];
+  value.merkle_batches = [];
+  value.merkle_proofs = [];
+  bundle.ranges = [];
+}
+
+function receiptList(bundle: Obj): CborValue[] {
+  return artifacts(bundle).receipts as CborValue[];
+}
+
+function keepReceipts(bundle: Obj, predicate: (value: Obj) => boolean): void {
+  artifacts(bundle).receipts = receiptList(bundle).filter((entry) => predicate(payload(entry)));
+  sortArtifacts(bundle, "receipts");
+}
+
+function receiptBy(bundle: Obj, predicate: (value: Obj) => boolean): CborValue {
+  const entry = receiptList(bundle).find((candidate) => predicate(payload(candidate)));
+  if (entry === undefined) throw new Error("receipt target missing");
+  return entry;
+}
+
+function replaceReceipt(bundle: Obj, original: CborValue, next: Obj): CborValue {
+  const list = receiptList(bundle);
+  const index = list.indexOf(original);
+  if (index < 0) throw new Error("receipt replacement target missing");
+  const replacement = resign(original, next, true);
+  list[index] = replacement;
+  sortArtifacts(bundle, "receipts");
+  return replacement;
+}
+
+function updateAttemptFlow(bundle: Obj, mutation: (attempt: Obj, receipts: Obj[]) => void): void {
+  const attemptEnvelope = receiptBy(bundle, (value) => value.kind === "action_attempt" && (value.body as Obj).disposition === "eligible_for_dispatch");
+  const oldAttempt = payload(attemptEnvelope);
+  const nextAttempt = clone(oldAttempt);
+  mutation(nextAttempt, receiptList(bundle).map(payload));
+  (nextAttempt.freshness as Obj).intended_parents = (nextAttempt.parents as Obj[]).map((edge) => edge.parent_id!);
+  const newAttemptEnvelope = replaceReceipt(bundle, attemptEnvelope, nextAttempt);
+  const newAttempt = payload(newAttemptEnvelope);
+
+  const dispatchEnvelope = receiptBy(bundle, (value) => value.kind === "dispatch");
+  const nextDispatch = clone(payload(dispatchEnvelope));
+  const attemptedAs = (nextDispatch.parents as Obj[]).find((edge) => edge.edge_type === "attempted_as")!;
+  attemptedAs.parent_id = newAttempt.receipt_id!;
+  (nextDispatch.body as Obj).attempt_id = newAttempt.receipt_id!;
+  (nextDispatch.freshness as Obj).intended_parents = (nextDispatch.parents as Obj[]).map((edge) => edge.parent_id!);
+  replaceReceipt(bundle, dispatchEnvelope, nextDispatch);
+  keepReceipts(bundle, (value) => value.kind !== "outcome_observation");
+}
+
+function rebuildEventChain(bundle: Obj, manifest: Obj): void {
+  const events = (artifacts(bundle).epoch_events as CborValue[]).map((entry) => ({ envelope: entry, value: clone(payload(entry)) }))
+    .sort((a, b) => (a.value.event_seq as number) - (b.value.event_seq as number));
+  const rebuilt: CborValue[] = [];
+  let priorPayload: Uint8Array | undefined;
+  for (const event of events) {
+    if (event.value.event === "close") {
+      const body = event.value.body as Obj;
+      body.manifest_id = manifest.manifest_id!;
+      body.item_count = manifest.item_count!;
+      body.last_epoch_seq = (manifest.sequence_span as Obj).last!;
+      body.anchor_deadline = manifest.anchor_deadline!;
+    }
+    if (event.value.event === "anchor_submitted") (event.value.body as Obj).manifest_id = manifest.manifest_id!;
+    if (priorPayload === undefined) delete event.value.previous_event_digest;
+    else event.value.previous_event_digest = hash(priorPayload);
+    event.value.event_id = domainHash("AAR-EPOCH-EVENT-ID-v1", Object.fromEntries(Object.entries(event.value).filter(([key]) => key !== "event_id")));
+    const signed = resign(event.envelope, event.value);
+    rebuilt.push(signed);
+    priorPayload = signed[0] as Uint8Array;
+  }
+  artifacts(bundle).epoch_events = rebuilt;
+  sortArtifacts(bundle, "epoch_events");
+}
+
+function rfcRootFromProof(leaf: Uint8Array, leafIndex: number, treeSize: number, proof: readonly Uint8Array[]): Uint8Array {
+  let digest = leaf; let fn = leafIndex; let sn = treeSize - 1;
+  for (const sibling of proof) {
+    if ((fn & 1) === 1 || fn === sn) {
+      digest = hash(Uint8Array.of(1), sibling, digest);
+      while ((fn & 1) === 0 && fn !== 0) { fn >>= 1; sn >>= 1; }
+    } else digest = hash(Uint8Array.of(1), digest, sibling);
+    fn >>= 1; sn >>= 1;
+  }
+  return digest;
+}
+
+function rebuildAnchor(bundle: Obj, oldManifestId: Uint8Array, manifestEnvelopeValue: CborValue): void {
+  const anchors = artifacts(bundle).anchors as CborValue[];
+  if (anchors.length === 0) return;
+  const envelope = anchors.find((entry) => equalBytes(payload(entry).manifest_id as Uint8Array, oldManifestId));
+  if (envelope === undefined) throw new Error("anchor for rebuilt manifest missing");
+  if (!Array.isArray(manifestEnvelopeValue)) throw new Error("rebuilt manifest envelope malformed");
+  const manifestEnvelope = manifestEnvelopeValue;
+  const manifest = payload(manifestEnvelope);
+  const next = clone(payload(envelope));
+  next.manifest_id = manifest.manifest_id!;
+  next.manifest_digest = hash(manifestEnvelope[0] as Uint8Array);
+  delete next.consistency;
+  const leafObject: Obj = { tenant_id: next.tenant_id!, site_id: next.site_id!, epoch_id: next.epoch_id!, manifest_id: next.manifest_id!, manifest_digest: next.manifest_digest! };
+  const leaf = rfc6962Leaf(encodeCbor(["AAR-ANCHOR-LEAF-v1", leafObject]));
+  const inclusion = next.inclusion as Obj;
+  inclusion.leaf_digest = leaf;
+  const root = rfcRootFromProof(leaf, inclusion.leaf_index as number, inclusion.tree_size as number, inclusion.siblings as Uint8Array[]);
+  next.anchor_root = root;
+  (next.head as Obj).root = root;
+  next.anchor_id = domainHash("AAR-ANCHOR-ID-v1", Object.fromEntries(Object.entries(next).filter(([key]) => key !== "anchor_id")));
+  anchors[anchors.indexOf(envelope)] = resign(envelope, next);
+  sortArtifacts(bundle, "anchors");
+  const heads = ((bundle.trust_inputs as Obj).expected_anchor_heads as Obj[]);
+  const expected = heads.find((entry) => same(entry.target_id, (next.target as Obj).target_id));
+  if (expected !== undefined) expected.root = root;
+}
+
+function rebuildManifest(bundle: Obj, mutation: (manifest: Obj) => void, keepAnchor = false): void {
+  const list = artifacts(bundle).epoch_manifests as CborValue[];
+  const envelope = list[0]!;
+  const oldManifestId = payload(envelope).manifest_id as Uint8Array;
+  const next = clone(payload(envelope));
+  mutation(next);
+  next.manifest_id = domainHash("AAR-EPOCH-MANIFEST-ID-v1", Object.fromEntries(Object.entries(next).filter(([key]) => key !== "manifest_id")));
+  const replacement = resign(envelope, next);
+  list[0] = replacement;
+  sortArtifacts(bundle, "epoch_manifests");
+  rebuildEventChain(bundle, next);
+  if (keepAnchor) rebuildAnchor(bundle, oldManifestId, replacement);
+  else artifacts(bundle).anchors = [];
+}
+
+function indexProofs(manifest: Obj): Obj[] {
+  const index = manifest.receipt_index as Obj;
+  const entries = index.entries as Obj[];
+  const leaves = entries.map((entry) => domainHash("AAR-MANIFEST-INDEX-LEAF-v1", entry));
+  return entries.map((entry, leafIndex) => ({
+    entry: clone(entry),
+    inclusion: { tree_size: entries.length, leaf_index: leafIndex, siblings: promotedProofWithDomain(leaves, leafIndex, "AAR-MANIFEST-INDEX-NODE-v1") },
+  }));
+}
+
+function makeCompleteRange(bundle: Obj): void {
+  const manifest = payload((artifacts(bundle).epoch_manifests as CborValue[])[0]!);
+  const selector = bundle.selector as Obj;
+  const matches = (entry: Obj): boolean => {
+    if ((entry.committed_at as number) < (selector.committed_from as number) || (entry.committed_at as number) >= (selector.committed_until as number)) return false;
+    if (!(selector.receipt_kinds as CborValue[]).some((value) => same(value, entry.receipt_kind))) return false;
+    for (const [selectedField, entryField] of [["subject_ids", "subject_ids"], ["correlation_ids", "correlation_ids"], ["issuer_kids", "issuer_kid"]] as const) {
+      const selected = selector[selectedField]; if (!Array.isArray(selected)) continue;
+      const values = Array.isArray(entry[entryField]) ? entry[entryField] as CborValue[] : [entry[entryField]!];
+      if (!selected.some((wanted) => values.some((value) => same(wanted, value)))) return false;
+    }
+    return true;
+  };
+  const proofs = indexProofs(manifest).filter((wrapped) => matches(wrapped.entry as Obj));
+  bundle.coverage = "complete";
+  bundle.ranges = [{ manifest_id: manifest.manifest_id!, selector_commitment: bundle.selector_commitment!, tree_size: (manifest.receipt_index as Obj).leaf_count!, ...(proofs.length === 0 ? {} : { first_leaf_index: (proofs[0]!.entry as Obj).leaf_index! }), entries: proofs }];
+}
+
+function addSecondEpoch(bundle: Obj, epochId: number, predecessorDigest: Uint8Array): void {
+  const manifestEnvelope = (artifacts(bundle).epoch_manifests as CborValue[])[0]!;
+  const manifest = clone(payload(manifestEnvelope));
+  manifest.epoch_id = epochId;
+  manifest.predecessor_manifest_digest = predecessorDigest;
+  manifest.opened_at = (manifest.opened_at as number) + 100_000;
+  manifest.closed_at = (manifest.closed_at as number) + 100_000;
+  manifest.anchor_deadline = (manifest.closed_at as number) + 86_400;
+  manifest.manifest_id = domainHash("AAR-EPOCH-MANIFEST-ID-v1", Object.fromEntries(Object.entries(manifest).filter(([key]) => key !== "manifest_id")));
+  const signedManifest = resign(manifestEnvelope, manifest);
+  (artifacts(bundle).epoch_manifests as CborValue[]).push(signedManifest);
+  sortArtifacts(bundle, "epoch_manifests");
+
+  const baseEvents = (artifacts(bundle).epoch_events as CborValue[]).map((entry) => ({ envelope: entry, value: payload(entry) })).sort((a, b) => (a.value.event_seq as number) - (b.value.event_seq as number)).slice(0, 2);
+  let priorPayload: Uint8Array | undefined;
+  for (const base of baseEvents) {
+    const event = clone(base.value);
+    event.epoch_id = epochId;
+    event.occurred_at = (event.occurred_at as number) + 100_000;
+    if (event.event === "open") (event.body as Obj).predecessor_manifest_digest = predecessorDigest;
+    if (event.event === "close") {
+      (event.body as Obj).manifest_id = manifest.manifest_id!;
+      (event.body as Obj).anchor_deadline = manifest.anchor_deadline!;
+    }
+    if (priorPayload === undefined) delete event.previous_event_digest;
+    else event.previous_event_digest = hash(priorPayload);
+    event.event_id = domainHash("AAR-EPOCH-EVENT-ID-v1", Object.fromEntries(Object.entries(event).filter(([key]) => key !== "event_id")));
+    const signed = resign(base.envelope, event);
+    (artifacts(bundle).epoch_events as CborValue[]).push(signed);
+    priorPayload = signed[0] as Uint8Array;
+  }
+  sortArtifacts(bundle, "epoch_events");
+  artifacts(bundle).anchors = [];
+}
+
 export function buildNegativeFixtures(): NegativeFixture[] {
   const result: NegativeFixture[] = [];
   const add = (value: NegativeFixture): void => { result.push(value); };
@@ -366,6 +579,159 @@ export function buildNegativeFixtures(): NegativeFixture[] {
   add(bundleFixture("replay/parent-binding", "Replace intended_parents without changing parent edges.", (bundle) => mutateReceipt(bundle, "dispatch", (value) => { (value.freshness as Obj).intended_parents = []; })));
   add(bundleFixture("replay/invocation-mismatch", "Change one receipt invocation id inside a shared correlation flow.", (bundle) => mutateReceipt(bundle, "dispatch", (value) => { (value.freshness as Obj).invocation_id = id16("different-invocation"); })));
   add(bundleFixture("replay/one-time-reused", "Mark two different root receipts one-time under their shared replay coordinate.", (bundle) => { mutateReceiptWhere(bundle, (value) => value.kind === "observation" && object(value.root), (value) => { (value.freshness as Obj).use = "one_time"; }); mutateReceiptWhere(bundle, (value) => value.kind === "inference" && object(value.root), (value) => { (value.freshness as Obj).use = "one_time"; }); }));
+
+  add(bundleFixture("resource/dag-depth", "Build a valid 129-node derived_from chain.", (bundle) => {
+    clearJournal(bundle);
+    const rootEnvelope = receiptBy(bundle, (value) => value.kind === "observation" && object(value.root));
+    const root = payload(rootEnvelope);
+    const chain: CborValue[] = [];
+    let prior: Obj | undefined;
+    for (let index = 0; index < 129; index += 1) {
+      const next = clone(root);
+      const binding = next.binding as Obj; const emission = next.emission as Obj; const freshness = next.freshness as Obj;
+      binding.epoch_seq = index; emission.issuer_seq = index + 10_000; emission.committed_at = 7_636_452 + index; freshness.expires_at = 7_646_352; freshness.nonce = id16(`dag-depth:${index}`);
+      if (prior === undefined) { next.parents = []; freshness.intended_parents = []; }
+      else {
+        delete next.root;
+        next.parents = [{ edge_type: "derived_from", parent_id: prior.receipt_id!, parent_kind: "observation", parent_tenant_id: binding.tenant_id!, parent_site_id: binding.site_id!, parent_epoch_id: binding.epoch_id! }];
+        freshness.intended_parents = [prior.receipt_id!];
+      }
+      const signed = resign(rootEnvelope, next, true); chain.push(signed); prior = payload(signed);
+    }
+    artifacts(bundle).receipts = chain; sortArtifacts(bundle, "receipts");
+  }));
+  add(bundleFixture("resource/dag-width", "Build 4,097 valid root observations at rank zero.", (bundle) => {
+    clearJournal(bundle);
+    const rootEnvelope = receiptBy(bundle, (value) => value.kind === "observation" && object(value.root));
+    const root = payload(rootEnvelope); const roots: CborValue[] = [];
+    for (let index = 0; index < 4_097; index += 1) {
+      const next = clone(root); (next.binding as Obj).epoch_seq = index; (next.emission as Obj).issuer_seq = index + 20_000; (next.emission as Obj).committed_at = 7_636_452 + index;
+      (next.freshness as Obj).expires_at = 7_646_352; (next.freshness as Obj).nonce = id16(`dag-width:${index}`);
+      roots.push(resign(rootEnvelope, next, true));
+    }
+    artifacts(bundle).receipts = roots; sortArtifacts(bundle, "receipts");
+  }));
+
+  const graphFixture = (code: string, description: string, mutation: (bundle: Obj, child: Obj) => void): void => add(bundleFixture(code, description, (bundle) => {
+    clearJournal(bundle);
+    keepReceipts(bundle, (value) => value.kind === "observation" && (object(value.root) || (value.parents as CborValue[]).length > 0));
+    const childEnvelope = receiptBy(bundle, (value) => value.kind === "observation" && !object(value.root));
+    const child = clone(payload(childEnvelope)); mutation(bundle, child); replaceReceipt(bundle, childEnvelope, child);
+  }));
+  graphFixture("graph/dangling-parent", "Point a derived observation at a nonexistent parent.", (_bundle, child) => { ((child.parents as Obj[])[0]!).parent_id = deterministicId("dangling-parent"); (child.freshness as Obj).intended_parents = [((child.parents as Obj[])[0]!).parent_id!]; });
+  graphFixture("graph/parent-metadata-mismatch", "Change the carried parent kind metadata only.", (_bundle, child) => { ((child.parents as Obj[])[0]!).parent_kind = "inference"; });
+  graphFixture("graph/edge-illegal", "Use attempted_as between two observations.", (_bundle, child) => { ((child.parents as Obj[])[0]!).edge_type = "attempted_as"; });
+  add(bundleFixture("graph/root-missing", "Remove the descriptor from a parentless observation.", (bundle) => { clearJournal(bundle); keepReceipts(bundle, (value) => value.kind === "observation" && object(value.root)); mutateReceiptWhere(bundle, () => true, (value) => { delete value.root; }); }));
+  graphFixture("graph/root-forbidden", "Put a root descriptor on a non-root observation.", (_bundle, child) => { child.root = { kind: "human_request", request_id: id16("forbidden-root"), request_commitment: deterministicId("forbidden-root") }; });
+  graphFixture("graph/tenant-site-splice", "Move the child to another tenant while retaining its parent.", (_bundle, child) => { (child.binding as Obj).tenant_id = id16("tenant:splice"); });
+  graphFixture("graph/cross-epoch-forbidden", "Move the child to a later epoch without a cross_epoch declaration.", (_bundle, child) => { (child.binding as Obj).epoch_id = 43; });
+  graphFixture("graph/cross-epoch-unanchored", "Use an allowed historical edge naming nonexistent source manifest and anchor.", (_bundle, child) => { (child.binding as Obj).epoch_id = 43; ((child.parents as Obj[])[0]!).cross_epoch = { source_manifest_id: deterministicId("missing-source-manifest"), source_anchor_id: deterministicId("missing-source-anchor"), reason: "historical_evidence" }; });
+
+  add(bundleFixture("graph/dominator-missing", "Retain a trigger parent but remove the attempt's authorization edge.", (bundle) => {
+    clearJournal(bundle);
+    updateAttemptFlow(bundle, (attempt, receipts) => {
+      const trigger = receipts.find((value) => value.kind === "inference" && !object(value.root))!;
+      const binding = trigger.binding as Obj;
+      attempt.parents = [{ edge_type: "triggered_by", parent_id: trigger.receipt_id!, parent_kind: "inference", parent_tenant_id: binding.tenant_id!, parent_site_id: binding.site_id!, parent_epoch_id: binding.epoch_id! }];
+    });
+  }));
+  add(bundleFixture("graph/dominator-ambiguous", "Give the dispatched attempt two distinct authorization parents.", (bundle) => {
+    clearJournal(bundle);
+    updateAttemptFlow(bundle, (attempt, receipts) => {
+      const other = receipts.find((value) => value.kind === "authorization" && object(value.root))!; const binding = other.binding as Obj;
+      (attempt.parents as Obj[]).push({ edge_type: "authorized_by", parent_id: other.receipt_id!, parent_kind: "authorization", parent_tenant_id: binding.tenant_id!, parent_site_id: binding.site_id!, parent_epoch_id: binding.epoch_id! });
+    });
+  }));
+  const wrongAttemptAuthorization = bundleFixture("graph/dominator-missing", "Bind the attempt body to a different authorization than its sole authorized_by edge.", (bundle) => {
+    clearJournal(bundle);
+    updateAttemptFlow(bundle, (attempt, receipts) => { (attempt.body as Obj).authorization_id = receipts.find((value) => value.kind === "authorization" && object(value.root))!.receipt_id!; });
+  });
+  wrongAttemptAuthorization.filename = "graph-dominator-wrong-attempt-authorization";
+  wrongAttemptAuthorization.descriptor.name = wrongAttemptAuthorization.filename;
+  add(wrongAttemptAuthorization);
+
+  add(bundleFixture("epoch/event-chain", "Replace one previous_event_digest and re-sign the event.", (bundle) => mutateArtifact(bundle, "epoch_events", (value) => value.event_seq === 1, (value) => { value.previous_event_digest = deterministicId("broken-event-chain"); })));
+  add(bundleFixture("epoch/open-close", "Remove close and later events so the epoch has only its open.", (bundle) => { artifacts(bundle).epoch_events = (artifacts(bundle).epoch_events as CborValue[]).filter((entry) => payload(entry).event === "open"); artifacts(bundle).anchors = []; }));
+  add(bundleFixture("epoch/duration-exceeded", "Move close more than 86,400 seconds after open.", (bundle) => { artifacts(bundle).epoch_events = (artifacts(bundle).epoch_events as CborValue[]).filter((entry) => ["open", "close"].includes(payload(entry).event as string)); mutateArtifact(bundle, "epoch_events", (value) => value.event === "close", (value) => { value.occurred_at = 7_636_352 + 86_401; }); rebuildEventChain(bundle, payload((artifacts(bundle).epoch_manifests as CborValue[])[0]!)); artifacts(bundle).anchors = []; }));
+  add(bundleFixture("epoch/span-count-mismatch", "Change the close event item count without changing the signed manifest.", (bundle) => { artifacts(bundle).epoch_events = (artifacts(bundle).epoch_events as CborValue[]).filter((entry) => ["open", "close"].includes(payload(entry).event as string)); rebuildEventChain(bundle, payload((artifacts(bundle).epoch_manifests as CborValue[])[0]!)); const close = (artifacts(bundle).epoch_events as CborValue[]).find((entry) => payload(entry).event === "close")!; const next = clone(payload(close)); (next.body as Obj).item_count = 9; next.event_id = domainHash("AAR-EPOCH-EVENT-ID-v1", Object.fromEntries(Object.entries(next).filter(([key]) => key !== "event_id"))); (artifacts(bundle).epoch_events as CborValue[])[(artifacts(bundle).epoch_events as CborValue[]).indexOf(close)] = resign(close, next); sortArtifacts(bundle, "epoch_events"); artifacts(bundle).anchors = []; }));
+  add(bundleFixture("epoch/anchor-deadline", "Change the close event's declared anchor deadline.", (bundle) => { artifacts(bundle).epoch_events = (artifacts(bundle).epoch_events as CborValue[]).filter((entry) => ["open", "close"].includes(payload(entry).event as string)); const close = (artifacts(bundle).epoch_events as CborValue[]).find((entry) => payload(entry).event === "close")!; const next = clone(payload(close)); (next.body as Obj).anchor_deadline = ((next.body as Obj).anchor_deadline as number) + 1; next.event_id = domainHash("AAR-EPOCH-EVENT-ID-v1", Object.fromEntries(Object.entries(next).filter(([key]) => key !== "event_id"))); (artifacts(bundle).epoch_events as CborValue[])[(artifacts(bundle).epoch_events as CborValue[]).indexOf(close)] = resign(close, next); sortArtifacts(bundle, "epoch_events"); artifacts(bundle).anchors = []; }));
+  add(bundleFixture("epoch/late-insertion", "Close the manifest before carried receipt commits while preserving its declared deadline.", (bundle) => rebuildManifest(bundle, (manifest) => { manifest.closed_at = 7_636_400; manifest.anchor_deadline = 7_636_400 + 86_400; })));
+  add(bundleFixture("epoch/fork", "Carry two distinct manifests for the same owner and epoch.", (bundle) => { const envelope = (artifacts(bundle).epoch_manifests as CborValue[])[0]!; const next = clone(payload(envelope)); next.close_reason = "size"; next.manifest_id = domainHash("AAR-EPOCH-MANIFEST-ID-v1", Object.fromEntries(Object.entries(next).filter(([key]) => key !== "manifest_id"))); (artifacts(bundle).epoch_manifests as CborValue[]).push(resign(envelope, next)); sortArtifacts(bundle, "epoch_manifests"); artifacts(bundle).anchors = []; }));
+  add(bundleFixture("epoch/id-nonmonotonic", "Link a successor manifest whose epoch ID decreases.", (bundle) => { const first = (artifacts(bundle).epoch_manifests as CborValue[])[0]!; if (!Array.isArray(first)) throw new Error("manifest envelope malformed"); addSecondEpoch(bundle, 41, hash(first[0] as Uint8Array)); }));
+  add(bundleFixture("epoch/predecessor-mismatch", "Carry a later epoch naming an unknown predecessor manifest digest.", (bundle) => addSecondEpoch(bundle, 43, deterministicId("wrong-predecessor-manifest"))));
+
+  const indexFixture = (code: string, description: string, mutation: (manifest: Obj) => void): void => add(bundleFixture(code, description, (bundle) => rebuildManifest(bundle, mutation)));
+  indexFixture("manifest/index-order", "Swap two objective index entries without changing their leaf indices.", (manifest) => { const entries = ((manifest.receipt_index as Obj).entries as Obj[]); [entries[0], entries[1]] = [entries[1]!, entries[0]!]; });
+  indexFixture("manifest/index-gap", "Make one objective leaf index noncontiguous.", (manifest) => { (((manifest.receipt_index as Obj).entries as Obj[])[1]!).leaf_index = 2; });
+  indexFixture("manifest/index-duplicate", "Repeat an epoch sequence in two index entries.", (manifest) => { const entries = ((manifest.receipt_index as Obj).entries as Obj[]); entries[1]!.epoch_seq = entries[0]!.epoch_seq!; });
+  indexFixture("manifest/index-receipt-mismatch", "Change one index receipt kind away from its carried receipt.", (manifest) => { (((manifest.receipt_index as Obj).entries as Obj[])[0]!).receipt_kind = "dispatch"; });
+  indexFixture("manifest/index-root-mismatch", "Replace the signed objective index root.", (manifest) => { (manifest.receipt_index as Obj).root = deterministicId("wrong-index-root"); });
+
+  add(bundleFixture("merkle/batch-binding", "Change the proof leaf epoch away from its signed batch.", (bundle) => { ((((artifacts(bundle).merkle_proofs as Obj[])[0]!).leaf as Obj).epoch_id) = 43; }));
+  add(bundleFixture("merkle/path-length", "Remove required siblings from a nontrivial batch proof.", (bundle) => { ((artifacts(bundle).merkle_proofs as Obj[])[0]!).siblings = []; }));
+  add(bundleFixture("merkle/root-mismatch", "Flip a bit in a correctly sized Merkle sibling path.", (bundle) => { const proof = (artifacts(bundle).merkle_proofs as Obj[])[0]!; const siblings = proof.siblings as Uint8Array[]; const changed = new Uint8Array(siblings[0]!); changed[0] = changed[0]! ^ 1; siblings[0] = changed; }));
+
+  const mutateAnchor = (bundle: Obj, mutation: (anchor: Obj) => void): void => mutateArtifact(bundle, "anchors", () => true, mutation);
+  add(bundleFixture("anchor/target-unplanned", "Change the signed anchor target ID away from the manifest plan.", (bundle) => mutateAnchor(bundle, (anchor) => { (anchor.target as Obj).target_id = id16("anchor-target:unplanned"); })));
+  add(bundleFixture("anchor/manifest-binding", "Bind a valid recomputed anchor proof to the wrong epoch.", (bundle) => {
+    const anchors = artifacts(bundle).anchors as CborValue[]; const envelope = anchors[0]!; const next = clone(payload(envelope)); next.epoch_id = 43; delete next.consistency;
+    const leafObject: Obj = { tenant_id: next.tenant_id!, site_id: next.site_id!, epoch_id: next.epoch_id!, manifest_id: next.manifest_id!, manifest_digest: next.manifest_digest! };
+    const leaf = rfc6962Leaf(encodeCbor(["AAR-ANCHOR-LEAF-v1", leafObject])); const inclusion = next.inclusion as Obj; inclusion.leaf_digest = leaf;
+    const root = rfcRootFromProof(leaf, inclusion.leaf_index as number, inclusion.tree_size as number, inclusion.siblings as Uint8Array[]); next.anchor_root = root; (next.head as Obj).root = root;
+    next.anchor_id = domainHash("AAR-ANCHOR-ID-v1", Object.fromEntries(Object.entries(next).filter(([key]) => key !== "anchor_id"))); anchors[0] = resign(envelope, next);
+    (((bundle.trust_inputs as Obj).expected_anchor_heads as Obj[])[0]!).root = root; sortArtifacts(bundle, "anchors");
+  }));
+  add(bundleFixture("anchor/inclusion-invalid", "Replace the RFC 6962 leaf digest while preserving the signed root.", (bundle) => mutateAnchor(bundle, (anchor) => { (anchor.inclusion as Obj).leaf_digest = deterministicId("wrong-anchor-leaf"); })));
+  add(bundleFixture("anchor/consistency-invalid", "Replace the optional RFC 6962 consistency path.", (bundle) => mutateAnchor(bundle, (anchor) => { ((anchor.consistency as Obj).path as CborValue[])[0] = deterministicId("wrong-consistency-node"); })));
+  add(bundleFixture("anchor/submission-late", "Move anchor submission beyond the manifest's 86,400-second deadline.", (bundle) => mutateAnchor(bundle, (anchor) => { anchor.submitted_at = 7_636_472 + 86_401; })));
+  add(bundleFixture("anchor/head-missing", "Provide only an expected head for an unrelated anchor target.", (bundle) => { (((bundle.trust_inputs as Obj).expected_anchor_heads as Obj[])[0]!).target_id = id16("anchor-target:other"); }));
+  add(bundleFixture("anchor/head-mismatch", "Change the trusted expected root at the same tree size.", (bundle) => { (((bundle.trust_inputs as Obj).expected_anchor_heads as Obj[])[0]!).root = deterministicId("wrong-expected-head"); }));
+  add(bundleFixture("anchor/head-stale", "Age the trusted expected head beyond 86,400 seconds.", (bundle) => { const trust = bundle.trust_inputs as Obj; ((trust.expected_anchor_heads as Obj[])[0]!).observed_at = (trust.evaluation_time as number) - 86_401; }));
+  add(bundleFixture("anchor/independence-invalid", "Make the independence declaration's operator disagree with its planned target.", (bundle) => rebuildManifest(bundle, (manifest) => { (((manifest.anchor_plan as Obj).independence as Obj).groups as Obj[])[0]!.operator_id = id16("operator:mismatched"); }, true)));
+
+  add(bundleFixture("bundle/selector-interval", "Make the selector half-open interval empty.", (bundle) => { const selector = bundle.selector as Obj; selector.committed_until = selector.committed_from!; recalcSelector(bundle); }));
+  add(bundleFixture("bundle/range-manifest-missing", "Make an otherwise valid range name an unknown manifest.", (bundle) => { makeCompleteRange(bundle); ((bundle.ranges as Obj[])[0]!).manifest_id = deterministicId("missing-range-manifest"); }));
+  add(bundleFixture("bundle/range-selector-mismatch", "Change a range selector commitment away from the bundle commitment.", (bundle) => { makeCompleteRange(bundle); ((bundle.ranges as Obj[])[0]!).selector_commitment = deterministicId("wrong-range-selector"); }));
+  add(bundleFixture("bundle/range-noncontiguous", "Repeat a leaf index inside an otherwise valid range.", (bundle) => { makeCompleteRange(bundle); const entries = ((bundle.ranges as Obj[])[0]!.entries as Obj[]); (entries[1]!.entry as Obj).leaf_index = (entries[0]!.entry as Obj).leaf_index!; }));
+  add(bundleFixture("bundle/range-boundary", "Omit one matching objective entry from the claimed complete interval.", (bundle) => { makeCompleteRange(bundle); (((bundle.ranges as Obj[])[0]!.entries as Obj[])).pop(); }));
+  add(bundleFixture("bundle/range-proof-invalid", "Flip a sibling in one objective range inclusion proof.", (bundle) => { makeCompleteRange(bundle); const inclusion = ((((bundle.ranges as Obj[])[0]!.entries as Obj[])[0]!).inclusion as Obj); const siblings = inclusion.siblings as Uint8Array[]; const changed = new Uint8Array(siblings[0]!); changed[0] = changed[0]! ^ 1; siblings[0] = changed; }));
+  add(bundleFixture("bundle/selected-receipt-missing", "Remove a selected leaf receipt that is not a graph dependency.", (bundle) => { makeCompleteRange(bundle); keepReceipts(bundle, (value) => !(value.kind === "action_attempt" && (value.body as Obj).disposition === "not_dispatched")); }));
+  add(bundleFixture("bundle/coverage-overclaim", "Claim complete coverage without any signed manifest ranges.", (bundle) => { bundle.coverage = "complete"; bundle.ranges = []; }));
+  add(bundleFixture("bundle/artifact-out-of-scope", "Carry nondependency receipts outside a complete dispatch-only selector.", (bundle) => { const selector = bundle.selector as Obj; selector.receipt_kinds = ["dispatch"]; delete selector.subject_ids; delete selector.correlation_ids; recalcSelector(bundle); makeCompleteRange(bundle); }));
+
+  add(bundleFixture("evidence/time-class-unsatisfied", "Declare boot_bound time without a boot attestation ID.", (bundle) => { clearJournal(bundle); keepReceipts(bundle, (value) => value.kind === "inference" && object(value.root)); mutateReceiptWhere(bundle, () => true, (value) => { ((value.evidence as Obj).time as Obj).class = "boot_bound"; }); }));
+  add(bundleFixture("evidence/provenance-class-unsatisfied", "Declare proxy_captured provenance without a capture attestation ID.", (bundle) => { clearJournal(bundle); keepReceipts(bundle, (value) => value.kind === "inference" && object(value.root)); mutateReceiptWhere(bundle, () => true, (value) => { ((value.evidence as Obj).provenance as Obj).class = "proxy_captured"; }); }));
+  add(bundleFixture("evidence/outcome-class-unsatisfied", "Declare independently_sensed without a qualifying predicate.", (bundle) => { clearJournal(bundle); mutateReceiptWhere(bundle, (value) => value.kind === "outcome_observation", (value) => { ((value.evidence as Obj).outcome as Obj).level = "independently_sensed"; }); }));
+  add(bundleFixture("evidence/observer-not-independent", "Declare independently_sensed using the same failure domain as source observations.", (bundle) => { clearJournal(bundle); mutateReceiptWhere(bundle, (value) => value.kind === "outcome_observation", (value) => { const outcome = (value.evidence as Obj).outcome as Obj; outcome.level = "independently_sensed"; outcome.qualifying_predicate_id = deterministicId("qualification:independent"); }); }));
+
+  result.sort((a, b) => a.filename.localeCompare(b.filename));
+  return result;
+}
+
+export function buildClassBoundaryFixtures(): ClassBoundaryFixture[] {
+  const result: ClassBoundaryFixture[] = [];
+  const addBoundary = (filename: string, boundary: string, expectation: "reject" | "conformant", expected: string, mutation: (bundle: Obj) => void): void => {
+    const bundle = clone(baseBundle()); mutation(bundle);
+    result.push({
+      filename, bytes: encodeCbor(bundle),
+      descriptor: { name: filename, boundary, expectation, ...(expectation === "reject" ? { expected_code: expected } : { expected_class: expected }) },
+    });
+  };
+  const inferenceOnly = (bundle: Obj, mutation: (receipt: Obj) => void): void => {
+    clearJournal(bundle); keepReceipts(bundle, (value) => value.kind === "inference" && object(value.root)); mutateReceiptWhere(bundle, () => true, mutation);
+  };
+
+  addBoundary("time-asserted-declared-boot-bound", "asserted_to_boot_bound", "reject", "evidence/time-class-unsatisfied", (bundle) => inferenceOnly(bundle, (receipt) => { ((receipt.evidence as Obj).time as Obj).class = "boot_bound"; }));
+  addBoundary("time-boot-bound-satisfied", "asserted_to_boot_bound", "conformant", "boot_bound", (bundle) => inferenceOnly(bundle, (receipt) => { const time = (receipt.evidence as Obj).time as Obj; time.class = "boot_bound"; time.boot_attestation_id = deterministicId("attestation:boot"); }));
+  addBoundary("time-boot-bound-declared-externally-anchored", "boot_bound_to_externally_anchored", "reject", "evidence/time-class-unsatisfied", (bundle) => inferenceOnly(bundle, (receipt) => { const time = (receipt.evidence as Obj).time as Obj; time.class = "externally_anchored"; time.boot_attestation_id = deterministicId("attestation:boot"); }));
+
+  addBoundary("provenance-self-asserted-declared-proxy-captured", "self_asserted_to_proxy_captured", "reject", "evidence/provenance-class-unsatisfied", (bundle) => inferenceOnly(bundle, (receipt) => { ((receipt.evidence as Obj).provenance as Obj).class = "proxy_captured"; }));
+  addBoundary("provenance-proxy-captured-satisfied", "self_asserted_to_proxy_captured", "conformant", "proxy_captured", (bundle) => inferenceOnly(bundle, (receipt) => { const provenance = (receipt.evidence as Obj).provenance as Obj; provenance.class = "proxy_captured"; provenance.capture_attestation_id = deterministicId("attestation:capture"); }));
+  addBoundary("provenance-proxy-captured-declared-provider-attested", "proxy_captured_to_provider_attested", "reject", "evidence/provenance-class-unsatisfied", (bundle) => inferenceOnly(bundle, (receipt) => { const provenance = (receipt.evidence as Obj).provenance as Obj; provenance.class = "provider_attested"; provenance.capture_attestation_id = deterministicId("attestation:capture"); }));
+  addBoundary("provenance-provider-attested-satisfied", "proxy_captured_to_provider_attested", "conformant", "provider_attested", (bundle) => inferenceOnly(bundle, (receipt) => { const provenance = (receipt.evidence as Obj).provenance as Obj; provenance.class = "provider_attested"; provenance.capture_attestation_id = deterministicId("attestation:capture"); provenance.provider_attestation_id = deterministicId("attestation:provider"); }));
+
+  addBoundary("outcome-device-acknowledged-declared-independently-sensed", "device_acknowledged_to_independently_sensed", "reject", "evidence/outcome-class-unsatisfied", (bundle) => { clearJournal(bundle); mutateReceiptWhere(bundle, (value) => value.kind === "outcome_observation", (receipt) => { ((receipt.evidence as Obj).outcome as Obj).level = "independently_sensed"; }); });
+  addBoundary("outcome-independently-sensed-satisfied", "device_acknowledged_to_independently_sensed", "conformant", "independently_sensed", (bundle) => { clearJournal(bundle); mutateReceiptWhere(bundle, (value) => value.kind === "outcome_observation", (receipt) => { const outcome = (receipt.evidence as Obj).outcome as Obj; outcome.level = "independently_sensed"; outcome.qualifying_predicate_id = deterministicId("qualification:independent"); (((receipt.body as Obj).observer as Obj).failure_domain_id) = id16("failure-domain:independent-observer"); }); });
 
   result.sort((a, b) => a.filename.localeCompare(b.filename));
   return result;

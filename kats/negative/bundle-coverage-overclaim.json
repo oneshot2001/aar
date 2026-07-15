@@ -1,0 +1,5 @@
+{
+  "name": "bundle-coverage-overclaim",
+  "expected_code": "bundle/coverage-overclaim",
+  "mutation_description": "Claim complete coverage without any signed manifest ranges."
+}

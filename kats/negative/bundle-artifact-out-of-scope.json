@@ -1,0 +1,5 @@
+{
+  "name": "bundle-artifact-out-of-scope",
+  "expected_code": "bundle/artifact-out-of-scope",
+  "mutation_description": "Carry nondependency receipts outside a complete dispatch-only selector."
+}

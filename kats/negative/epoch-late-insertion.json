@@ -1,0 +1,5 @@
+{
+  "name": "epoch-late-insertion",
+  "expected_code": "epoch/late-insertion",
+  "mutation_description": "Close the manifest before carried receipt commits while preserving its declared deadline."
+}

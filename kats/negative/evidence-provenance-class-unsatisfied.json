@@ -1,0 +1,5 @@
+{
+  "name": "evidence-provenance-class-unsatisfied",
+  "expected_code": "evidence/provenance-class-unsatisfied",
+  "mutation_description": "Declare proxy_captured provenance without a capture attestation ID."
+}

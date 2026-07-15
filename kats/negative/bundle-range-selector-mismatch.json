@@ -1,0 +1,5 @@
+{
+  "name": "bundle-range-selector-mismatch",
+  "expected_code": "bundle/range-selector-mismatch",
+  "mutation_description": "Change a range selector commitment away from the bundle commitment."
+}

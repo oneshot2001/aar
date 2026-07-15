@@ -1,0 +1,5 @@
+{
+  "name": "manifest-index-receipt-mismatch",
+  "expected_code": "manifest/index-receipt-mismatch",
+  "mutation_description": "Change one index receipt kind away from its carried receipt."
+}

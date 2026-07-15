@@ -1,0 +1,5 @@
+{
+  "name": "epoch-span-count-mismatch",
+  "expected_code": "epoch/span-count-mismatch",
+  "mutation_description": "Change the close event item count without changing the signed manifest."
+}

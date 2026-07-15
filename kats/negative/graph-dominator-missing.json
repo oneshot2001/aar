@@ -1,0 +1,5 @@
+{
+  "name": "graph-dominator-missing",
+  "expected_code": "graph/dominator-missing",
+  "mutation_description": "Retain a trigger parent but remove the attempt's authorization edge."
+}

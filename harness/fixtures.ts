@@ -531,7 +531,7 @@ export function buildFixtures(): FixtureSet {
     observed_at: BASE_TIME + 4,
   }, undefined, [TARGET]);
 
-  const inferenceRequested = makeReceipt(state, "receipt-inference-requested", "inference", "agent_signing", "model_endpoint", "agent", 4, [parent(observationDerived, "requested_by")], {
+  const inferenceRequested = makeReceipt(state, "receipt-inference-requested", "inference", "agent_signing", "model_endpoint", "agent", 4, [parent(observationDerived, "requested_by"), parent(observationDerived, "derived_from")], {
     model: { provider: "Acme AI", model: "incident-detector", version: "2.1.0", endpoint_credential_id: credentials.get("agent_signing")!.id },
     consumption_manifest_id: consumptionDigest,
     prompt_manifest: { digest: promptDigest, media_type: "application/cbor", byte_length: canonicalPrompt.length },

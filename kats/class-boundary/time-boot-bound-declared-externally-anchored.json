@@ -1,0 +1,6 @@
+{
+  "name": "time-boot-bound-declared-externally-anchored",
+  "boundary": "boot_bound_to_externally_anchored",
+  "expectation": "reject",
+  "expected_code": "evidence/time-class-unsatisfied"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "resource-dag-depth",
+  "expected_code": "resource/dag-depth",
+  "mutation_description": "Build a valid 129-node derived_from chain."
+}

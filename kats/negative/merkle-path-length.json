@@ -1,0 +1,5 @@
+{
+  "name": "merkle-path-length",
+  "expected_code": "merkle/path-length",
+  "mutation_description": "Remove required siblings from a nontrivial batch proof."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "resource-dag-width",
+  "expected_code": "resource/dag-width",
+  "mutation_description": "Build 4,097 valid root observations at rank zero."
+}
