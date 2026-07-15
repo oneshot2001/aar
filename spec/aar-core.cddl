@@ -1,0 +1,1092 @@
+; Agent Action Receipts (AAR) core wire format -- gate-1 candidate v0.2
+; Normative RFC 8610 CDDL.  The prose comments in this file are normative.
+;
+; Encoding profile
+; ----------------
+; Every item is encoded using the RFC 8949 section 4.2.1 core deterministic
+; encoding requirements.  Definite lengths, shortest integer encodings, valid
+; UTF-8, unique map keys, and deterministic encoded-key ordering are required.
+; CBOR tags and floating-point values are forbidden everywhere in this format.
+; Every map is closed: a key not written in its production is invalid.
+;
+; All signed objects use an untagged, detached COSE_Sign1.  The protected bstr
+; and detached payload bstr used by a verifier are the received bytes, never a
+; re-encoding.  ES256 means ECDSA P-256/SHA-256, deterministic RFC 6979 signing,
+; a 64-byte P1363 r||s signature, nonzero r and s, and low-S normalization.
+
+aar-wire-object =
+    receipt-envelope
+  / delegation-envelope
+  / credential-envelope
+  / status-snapshot-envelope
+  / rotation-continuity-envelope
+  / epoch-event-envelope
+  / epoch-manifest-envelope
+  / anchor-record-envelope
+  / merkle-batch-envelope
+  / bundle
+
+; ---------------------------------------------------------------------------
+; Common scalar types and closed enumerations
+
+digest32 = bstr .size 32
+id16 = bstr .size 16
+kid = digest32                         ; SHA-256 of DER SubjectPublicKeyInfo
+unix-time = uint .le 9007199254740991  ; whole seconds since Unix epoch
+sequence = uint .le 9007199254740991
+anchor-tree-size = 1..4294967295
+batch-tree-size = 1..1048576
+bounded-text = tstr .size (1..128)
+short-text = tstr .size (1..64)
+uri-text = tstr .size (1..1024)
+
+profile = "AAR-1" / "AAR-2" / "AAR-2A" / "AAR-3"
+principal-type = "human" / "service" / "workload_instance" / "model_endpoint"
+principal-role =
+    "agent"
+  / "enforcement_point"
+  / "authority_source"
+  / "approver"
+  / "outcome_observer"
+  / "anchor_service"
+  / "verifier"
+
+node-kind =
+    "observation"
+  / "inference"
+  / "authorization"
+  / "action_attempt"
+  / "dispatch"
+  / "outcome_observation"
+
+edge-type =
+    "derived_from"
+  / "requested_by"
+  / "authorized_by"
+  / "triggered_by"
+  / "attempted_as"
+  / "observed_outcome"
+  / "supports"
+
+time-evidence-class = "asserted" / "boot_bound" / "externally_anchored"
+provenance-class = "self_asserted" / "proxy_captured" / "provider_attested"
+outcome-evidence-level =
+    "accepted"
+  / "dispatched"
+  / "device_acknowledged"
+  / "independently_sensed"
+  / "contradicted"
+  / "unknown"
+
+; ---------------------------------------------------------------------------
+; W-1 -- receipt envelope and COSE profile
+
+receipt-envelope = [
+  payload: bstr .cbor receipt,
+  signature: bstr .cbor receipt-cose-sign1,
+]
+
+receipt-cose-sign1 = [
+  protected: bstr .cbor receipt-protected,
+  unprotected: {},
+  payload: nil,
+  signature: bstr .size 64,
+]
+
+; Labels -70000 through -70006 are the provisional AAR protected-header
+; allocation.  They are integrity-protected coordinates, not trust grants.
+receipt-protected = {
+  1: -7,                                ; alg = ES256
+  3: "application/aar-receipt+cbor;v=0.2",
+  4: kid,
+  -70000: principal-type,
+  -70001: id16,                         ; tenant_id
+  -70002: id16,                         ; site_id
+  -70003: uint,                         ; epoch_id
+  -70004: sequence,                     ; epoch_seq
+  -70005: sequence,                     ; issuer_seq
+  -70006: principal-role,
+}
+
+; Sig_structure is deterministic-CBOR encoding of this array.  body_protected
+; is copied byte-for-byte from the COSE object, external_aad is the empty bstr,
+; and detached_payload is copied byte-for-byte from receipt-envelope[0].
+receipt-sig-structure = [
+  "Signature1",
+  body_protected: bstr,
+  external_aad: h'',
+  detached_payload: bstr,
+]
+
+; The six protected AAR coordinates MUST equal the corresponding values in the
+; receipt payload.  The kid MUST identify the key that verifies the signature.
+
+; ---------------------------------------------------------------------------
+; W-2, W-3, W-4, and W-9 -- receipt identity, node bodies, graph, replay
+
+receipt = {
+  receipt_id: digest32,
+  receipt-fields
+}
+
+receipt-id-input = { receipt-fields }
+
+receipt-fields = (
+  v: 2,
+  kind: node-kind,
+  issuer_principal_type: principal-type,
+  issuer_role: principal-role,
+  binding: receipt-binding,
+  emission: emission-coordinate,
+  freshness: freshness,
+  legal: legal-context,
+  evidence: evidence-labels,
+  parents: parent-edges,
+  ? root: root-descriptor,
+  ? correlation: correlation-binding,
+  body: node-body,
+)
+
+receipt-binding = {
+  tenant_id: id16,
+  site_id: id16,
+  epoch_owner_kid: kid,
+  epoch_id: uint,
+  epoch_seq: sequence,
+  ? late_for_epoch_id: uint,
+}
+
+emission-coordinate = {
+  issuer_seq: sequence,
+  committed_at: unix-time,
+}
+
+; receipt_id = SHA-256(deterministic-CBOR(receipt-id-preimage)).  The protected
+; bstr is COSE element[0] from decoding exact receipt-envelope[1] bytes.  This
+; excludes only receipt_id,
+; avoiding self-reference while binding identity to signer and coordinates.
+receipt-id-preimage = [
+  "AAR-RECEIPT-ID-v1",
+  protected: bstr .cbor receipt-protected,
+  content: receipt-id-input,
+]
+
+; Emission occurs when the exact envelope bytes are durably committed at
+; (kid, issuer_seq, epoch_owner_kid, epoch_id, epoch_seq) and released or made
+; retrievable.  A coordinate may identify one receipt_id only.  Re-observing the
+; same envelope is a duplicate; a different id at a used coordinate is
+; equivocation.  An id with different bytes is identity reuse.
+
+freshness = {
+  issued_at: unix-time,
+  expires_at: unix-time,
+  nonce: id16,
+  replay_domain: digest32,
+  invocation_id: id16,
+  use: "one_time" / "reusable",
+  intended_parents: receipt-ids,
+}
+
+receipt-ids = [ 0*64 digest32 ]
+
+legal-context = {
+  purpose_id: bounded-text,
+  jurisdiction_id: short-text,
+  data_classification_id: short-text,
+  retention_class_id: short-text,
+  legal_hold: bool,
+}
+
+evidence-labels = {
+  time: time-evidence,
+  ? provenance: provenance-evidence,
+  ? outcome: outcome-evidence,
+}
+
+time-evidence = {
+  class: time-evidence-class,
+  wall_time: unix-time,
+  monotonic_ns: uint .le 9007199254740991,
+  boot_id: id16,
+  ? boot_attestation_id: digest32,
+  ? anchor_id: digest32,
+}
+
+provenance-evidence = {
+  class: provenance-class,
+  ? capture_attestation_id: digest32,
+  ? provider_attestation_id: digest32,
+}
+
+outcome-evidence = {
+  level: outcome-evidence-level,
+  artifacts: digest-ids,
+  ? qualifying_predicate_id: digest32,
+}
+
+parent-edges = [ 0*64 parent-edge ]
+
+; Edges are incoming and mean parent -> this receipt.  parent_id values are an
+; ordered set: duplicate parent_id/edge_type pairs are forbidden and order is
+; preserved as evidence.  intended_parents MUST equal parent_id values in order.
+parent-edge = {
+  edge_type: edge-type,
+  parent_id: digest32,
+  parent_kind: node-kind,
+  parent_tenant_id: id16,
+  parent_site_id: id16,
+  parent_epoch_id: uint,
+  ? cross_epoch: cross-epoch-link,
+}
+
+cross-epoch-link = {
+  source_manifest_id: digest32,
+  source_anchor_id: digest32,
+  reason: "historical_evidence" / "long_running_action" / "late_outcome",
+}
+
+; root is present iff parents is empty.  No other root kind is accepted.
+root-descriptor = {
+  kind: "agent_request" / "human_request" / "standing_condition_trigger",
+  request_id: id16,
+  request_commitment: digest32,
+}
+
+; R-15 fields.  Reconciliation logic is deliberately outside v0.2; these fields
+; permit a later verifier to relate request, ingress acknowledgement, and account.
+correlation-binding = {
+  correlation_id: id16,
+  phase: "request" / "ingress_ack" / "accounted",
+  target_ep_kid: kid,
+  transport_id: bounded-text,
+  peer_binding_digest: digest32,
+}
+
+node-body =
+    observation-body
+  / inference-body
+  / authorization-body
+  / action-attempt-body
+  / dispatch-body
+  / outcome-observation-body
+
+; The receipt kind selects exactly one body production.  A body valid for a
+; different kind is invalid even if its map happens to decode.
+
+observation-body = {
+  source_device: device-identity,
+  consumption: consumption-manifest,
+  observed_at: unix-time,
+  ? native_attestations: native-attestations,
+}
+
+device-identity = {
+  device_id: id16,
+  manufacturer: bounded-text,
+  model: bounded-text,
+  firmware: bounded-text,
+  device_credential_id: digest32,
+  failure_domain_id: id16,
+}
+
+consumption-manifest = {
+  manifest_digest: digest32,
+  consumption-manifest-fields
+}
+
+consumption-manifest-id-input = { consumption-manifest-fields }
+consumption-manifest-fields = ( items: consumption-items, )
+
+; manifest_digest = SHA-256(deterministic-CBOR([
+;   "AAR-CONSUMPTION-MANIFEST-v1", consumption-manifest-id-input
+; ])).
+
+consumption-items = [ 1*4096 consumption-item ]
+
+consumption-item = {
+  ordinal: uint,
+  item_id: id16,
+  media_type: bounded-text,
+  content_commitment: digest32,
+  transformations: transformations,
+  disposition: "used" / "discarded",
+}
+
+transformations = [ 0*32 transformation ]
+
+transformation = {
+  ordinal: uint,
+  operation:
+      "decode" / "crop" / "embed" / "ocr" / "truncate"
+    / "retrieve" / "normalize" / "render" / "redact",
+  input_digest: digest32,
+  output_digest: digest32,
+  parameters_digest: digest32,
+  implementation_id: bounded-text,
+  implementation_version: bounded-text,
+}
+
+native-attestations = [ 1*16 native-attestation ]
+
+native-attestation = {
+  format: "axis_signed_video" / "c2pa" / "other",
+  assertion_digest: digest32,
+  pointer: uri-text,
+}
+
+inference-body = {
+  model: model-identity,
+  consumption_manifest_id: digest32,
+  prompt_manifest: canonical-manifest-ref,
+  retrieval_manifest: canonical-manifest-ref,
+  tool_transcript_manifest: canonical-manifest-ref,
+  conclusion: structured-claim,
+  uncertainty_bps: uint .le 10000,
+}
+
+model-identity = {
+  provider: bounded-text,
+  model: bounded-text,
+  version: bounded-text,
+  endpoint_credential_id: digest32,
+}
+
+canonical-manifest-ref = {
+  digest: digest32,
+  media_type: bounded-text,
+  byte_length: uint .le 16777216,
+}
+
+structured-claim = {
+  schema_id: bounded-text,
+  canonical_cbor: bstr .size (1..1048576),
+  digest: digest32,
+}
+
+; structured-claim.digest = SHA-256(structured-claim.canonical_cbor).
+
+authorization-body = {
+  delegation: delegation-envelope,
+  decision: decision-record,
+  ? presentation: signed-presentation-manifest,
+}
+
+decision-record = {
+  decision_commitment: digest32,
+  decision-record-fields
+}
+
+decision-record-id-input = { decision-record-fields }
+decision-record-fields = (
+  policy_set_root: digest32,
+  effective_policy_epoch: uint,
+  evaluated_inputs: evaluated-inputs,
+  decision: "permit" / "deny" / "permit_with_approval",
+  counter_state_digest: digest32,
+  status_snapshot_ids: digest-ids,
+  profile: profile,
+  delegation_id: digest32,
+  ? approver_credential_id: digest32,
+)
+
+; decision_commitment = SHA-256(deterministic-CBOR([
+;   "AAR-DECISION-RECORD-v1", decision-record-id-input
+; ])).
+
+evaluated-inputs = [ 1*256 evaluated-input ]
+evaluated-input = {
+  name: bounded-text,
+  value_digest: digest32,
+}
+
+signed-presentation-manifest = [
+  payload: bstr .cbor presentation-manifest,
+  signature: bstr .cbor artifact-cose-sign1,
+]
+
+presentation-manifest = {
+  presentation_id: digest32,
+  presentation-manifest-fields
+}
+
+presentation-manifest-id-input = { presentation-manifest-fields }
+presentation-manifest-fields = (
+  presenter_credential_id: digest32,
+  signer_mode: "approver_originated" / "ep_authenticated_session",
+  artifacts: presented-artifacts,
+  transforms: transformations,
+  ui_implementation: bounded-text,
+  ui_version: bounded-text,
+  delivered_at: unix-time,
+  session_id: id16,
+  approval_scope_digest: digest32,
+  state: "assembled" / "delivered" / "rendered" / "human_approved",
+)
+
+; presentation_id = SHA-256(deterministic-CBOR([
+;   "AAR-PRESENTATION-MANIFEST-v1", presentation-manifest-id-input
+; ])).
+
+presented-artifacts = [ 1*256 presented-artifact ]
+presented-artifact = {
+  ordinal: uint,
+  media_type: bounded-text,
+  content_digest: digest32,
+  byte_length: uint .le 16777216,
+}
+
+action-attempt-body = {
+  action: normalized-action,
+  command: command-manifest,
+  authorization_id: digest32,
+  decision_commitment: digest32,
+  disposition: "eligible_for_dispatch" / "not_dispatched",
+  ? refusal_reason: bounded-text,
+}
+
+normalized-action = {
+  action_name: "camera.stream.view" / "camera.ptz.preset",
+  target_id: id16,
+  parameters_cbor: bstr .size (1..65536),
+  parameters_digest: digest32,
+  informational_reversibility: "reversible" / "irreversible",
+  operational_reversibility: "reversible" / "lossy" / "irreversible",
+}
+
+; parameters_digest = SHA-256(parameters_cbor).
+
+command-manifest = {
+  command_id: digest32,
+  command-manifest-fields
+}
+
+command-manifest-id-input = { command-manifest-fields }
+command-manifest-fields = (
+  adapter_id: bounded-text,
+  adapter_version: bounded-text,
+  target_id: id16,
+  action_name: "camera.stream.view" / "camera.ptz.preset",
+  canonical_command: bstr .size (1..65536),
+  command_digest: digest32,
+  excluded_fields: excluded-command-fields,
+  idempotency_key: id16,
+)
+
+; command_digest = SHA-256(canonical_command).
+; command_id = SHA-256(deterministic-CBOR([
+;   "AAR-COMMAND-MANIFEST-v1", command-manifest-id-input
+; ])).
+
+excluded-command-fields = [ 0*32 excluded-command-field ]
+excluded-command-field = {
+  name: bounded-text,
+  reason: "secret" / "volatile_header" / "transport_generated",
+  value_commitment: digest32,
+}
+
+dispatch-body = {
+  attempt_id: digest32,
+  command_id: digest32,
+  dispatched_at: unix-time,
+  target_status: uint .le 65535,
+  ? target_response_body_digest: digest32,
+  adapter_invocation_id: id16,
+}
+
+outcome-observation-body = {
+  subject_id: digest32,                 ; dispatch id, or attempt id if no dispatch
+  observer: device-identity,
+  observed_at: unix-time,
+  state: "consistent" / "contradicted" / "unknown",
+  observation_commitment: digest32,
+}
+
+digest-ids = [ 1*64 digest32 ]
+optional-digest-ids = [ 0*64 digest32 ]
+
+; ---------------------------------------------------------------------------
+; W-5 -- credential profile, status, rotation, and raw COSE delegation
+
+artifact-cose-sign1 = [
+  protected: bstr .cbor artifact-protected,
+  unprotected: {},
+  payload: nil,
+  signature: bstr .size 64,
+]
+
+artifact-protected = {
+  1: -7,
+  3: artifact-content-type,
+  4: kid,
+}
+
+artifact-content-type =
+    "application/aar-delegation+cbor;v=0.2"
+  / "application/aar-credential+cbor;v=0.2"
+  / "application/aar-status+cbor;v=0.2"
+  / "application/aar-rotation+cbor;v=0.2"
+  / "application/aar-presentation+cbor;v=0.2"
+  / "application/aar-epoch-event+cbor;v=0.2"
+  / "application/aar-epoch-manifest+cbor;v=0.2"
+  / "application/aar-anchor-record+cbor;v=0.2"
+  / "application/aar-merkle-batch+cbor;v=0.2"
+
+delegation-envelope = [
+  claims: bstr .cbor delegation-claims,
+  token: bstr .cbor delegation-cose-sign1,
+]
+
+; A delegation token is raw detached COSE_Sign1; no Biscuit, UCAN, JWT, or
+; wrapper token grammar is permitted.  Its protected content type is delegation.
+delegation-cose-sign1 = artifact-cose-sign1
+
+delegation-claims = {
+  v: 2,
+  delegation_id: digest32,
+  issuer_credential_id: digest32,
+  subject_credential_id: digest32,
+  tenant_id: id16,
+  site_id: id16,
+  scope: delegation-scope,
+  not_before: unix-time,
+  not_after: unix-time,
+  use: "one_time" / "reusable",
+  replay_domain: digest32,
+  ? invocation_id: id16,
+  parent_delegations: optional-digest-ids,
+}
+
+delegation-scope = {
+  actions: action-names,
+  targets: ids16,
+  purpose_ids: bounded-texts,
+  allowed_profiles: profiles,
+}
+
+action-names = [ 1*16 ("camera.stream.view" / "camera.ptz.preset") ]
+ids16 = [ 1*256 id16 ]
+bounded-texts = [ 1*64 bounded-text ]
+profiles = [ 1*4 profile ]
+
+credential-envelope = [
+  payload: bstr .cbor credential-profile-object,
+  signature: bstr .cbor artifact-cose-sign1,
+]
+
+credential-profile-object = {
+  v: 2,
+  credential_id: digest32,
+  subject_kid: kid,
+  issuer_kid: kid,
+  principal_type: principal-type,
+  principal_role: principal-role,
+  tenant_id: id16,
+  site_id: id16,
+  valid_from: unix-time,
+  valid_until: unix-time,
+  cose_alg: -7,
+  curve: "P-256",
+  key_usage: key-usage,
+  trust_anchor_id: digest32,
+  path: credential-path,
+  profile_limits: profile-limits,
+}
+
+key-usage =
+    "agent_signing"
+  / "ep_signing"
+  / "authority_signing"
+  / "approver_signing"
+  / "outcome_signing"
+  / "anchor_signing"
+  / "verifier_signing"
+  / "credential_issuing"
+  / "status_signing"
+
+credential-path = [ 1*8 digest32 ]
+
+; Numeric maxima are wire constants, not policy placeholders.  A shorter value
+; may be issued, never a longer one.  Base-tier anchor cadence is at most 24 h.
+profile-limits = aar1-limits / aar2-limits / aar2a-limits / aar3-limits
+aar1-limits = {
+  profile: "AAR-1",
+  status_max_age_s: 86400,
+  lease_max_s: 86400,
+  anchor_max_cadence_s: 86400,
+}
+aar2-limits = {
+  profile: "AAR-2",
+  status_max_age_s: 86400,
+  lease_max_s: 86400,
+  anchor_max_cadence_s: 86400,
+}
+aar2a-limits = {
+  profile: "AAR-2A",
+  status_max_age_s: 300,
+  lease_max_s: 3600,
+  anchor_max_cadence_s: 86400,
+}
+aar3-limits = {
+  profile: "AAR-3",
+  status_max_age_s: 300,
+  lease_max_s: 3600,
+  anchor_max_cadence_s: 86400,
+}
+
+status-snapshot-envelope = [
+  payload: bstr .cbor status-snapshot,
+  signature: bstr .cbor artifact-cose-sign1,
+]
+
+status-snapshot = {
+  v: 2,
+  snapshot_id: digest32,
+  credential_id: digest32,
+  issuer_kid: kid,
+  produced_at: unix-time,
+  next_update: unix-time,
+  lease_not_before: unix-time,
+  lease_not_after: unix-time,
+  profile: profile,
+  status: "good" / "revoked" / "compromised" / "unknown",
+  ? compromise_at: unix-time,
+  sequence: sequence,
+  tenant_id: id16,
+  site_id: id16,
+}
+
+rotation-continuity-envelope = [
+  payload: bstr .cbor rotation-continuity,
+  signature: bstr .cbor artifact-cose-sign1,
+]
+
+rotation-continuity = {
+  v: 2,
+  rotation_id: digest32,
+  predecessor_credential_id: digest32,
+  successor_credential_id: digest32,
+  predecessor_kid: kid,
+  successor_kid: kid,
+  effective_at: unix-time,
+  tenant_id: id16,
+  site_id: id16,
+  continuity_sequence: sequence,
+}
+
+; ---------------------------------------------------------------------------
+; W-6 -- epoch state machine and objective manifest index
+
+epoch-event-envelope = [
+  payload: bstr .cbor epoch-event,
+  signature: bstr .cbor artifact-cose-sign1,
+]
+
+epoch-event = {
+  v: 2,
+  event_id: digest32,
+  tenant_id: id16,
+  site_id: id16,
+  epoch_owner_kid: kid,
+  epoch_id: uint,
+  event_seq: sequence,
+  ? previous_event_digest: digest32,
+  occurred_at: unix-time,
+  event: "open" / "close" / "anchor_submitted" / "fork_declared",
+  body: epoch-event-body,
+}
+
+epoch-event-body = epoch-open / epoch-close / epoch-anchor-submitted / epoch-fork
+
+epoch-open = {
+  state: "open",
+  ? predecessor_manifest_digest: digest32,
+  first_epoch_seq: sequence,
+  max_duration_s: 86400,
+  late_arrival_policy: "next_epoch_only",
+}
+
+epoch-close = {
+  state: "closed",
+  close_reason: "duration" / "size" / "administrative" / "padding",
+  last_epoch_seq: sequence,
+  item_count: uint .le 10000,
+  manifest_id: digest32,
+  anchor_deadline: unix-time,
+}
+
+epoch-anchor-submitted = {
+  state: "awaiting_anchor",
+  manifest_id: digest32,
+  target_ids: ids16,
+  submitted_at: unix-time,
+}
+
+epoch-fork = {
+  state: "forked",
+  conflicting_event_digests: [ 2*16 digest32 ],
+  handling: "reject_and_surface",
+}
+
+epoch-manifest-envelope = [
+  payload: bstr .cbor epoch-manifest,
+  signature: bstr .cbor artifact-cose-sign1,
+]
+
+epoch-manifest = {
+  manifest_id: digest32,
+  manifest-fields
+}
+
+epoch-manifest-id-input = { manifest-fields }
+
+manifest-fields = (
+  v: 2,
+  tenant_id: id16,
+  site_id: id16,
+  epoch_owner_kid: kid,
+  epoch_id: uint,
+  ? predecessor_manifest_digest: digest32,
+  opened_at: unix-time,
+  closed_at: unix-time,
+  sequence_span: sequence-span,
+  item_count: uint .le 10000,
+  close_reason: "duration" / "size" / "administrative" / "padding",
+  max_duration_s: 86400,
+  late_arrival_policy: "next_epoch_only",
+  anchor_deadline: unix-time,
+  fork_policy: "reject_and_surface",
+  receipt_index: manifest-index,
+  anchor_plan: anchor-plan,
+)
+
+sequence-span =
+    { first: sequence, last: sequence }
+  / { first: nil, last: nil }
+
+; manifest_id = SHA-256(deterministic-CBOR([
+;   "AAR-EPOCH-MANIFEST-ID-v1", epoch-manifest-id-input
+; ])).
+
+manifest-index = {
+  ordering: "committed_at_epoch_seq_receipt_id",
+  leaf_count: uint .le 10000,
+  root: digest32,
+  entries: manifest-index-entries,
+}
+
+manifest-index-entries = [ 0*10000 manifest-index-entry ]
+
+; Entries are strictly sorted by (committed_at, epoch_seq, receipt_id), with no
+; duplicate receipt_id or epoch_seq.  item_count, leaf_count, and array length
+; are equal.  The index is the objective basis for bundle selectors.
+manifest-index-entry = {
+  leaf_index: uint .le 9999,
+  receipt_id: digest32,
+  receipt_kind: node-kind,
+  issuer_kid: kid,
+  issuer_seq: sequence,
+  epoch_seq: sequence,
+  committed_at: unix-time,
+  subject_ids: subject-ids,
+  correlation_ids: correlation-ids,
+}
+
+; index_leaf = SHA-256(deterministic-CBOR([
+;   "AAR-MANIFEST-INDEX-LEAF-v1", manifest-index-entry
+; ])).
+; index_node = SHA-256(deterministic-CBOR([
+;   "AAR-MANIFEST-INDEX-NODE-v1", left_digest, right_digest
+; ])).  An odd unpaired node is promoted unchanged.
+
+subject-ids = [ 0*32 id16 ]
+correlation-ids = [ 0*32 id16 ]
+
+anchor-plan = {
+  max_submission_delay_s: 86400,
+  max_head_age_s: 86400,
+  targets: anchor-targets,
+  independence: independence-declaration,
+}
+
+anchor-targets = [ 1*8 anchor-target ]
+anchor-target = {
+  target_id: id16,
+  operator_id: id16,
+  endpoint: uri-text,
+  protocol: "rfc6962_v1",
+  anchor_kid: kid,
+  independence_group: id16,
+}
+
+independence-declaration = {
+  basis: "distinct_operator_and_failure_domain",
+  groups: [ 1*8 independence-group ],
+}
+independence-group = {
+  independence_group: id16,
+  operator_id: id16,
+  failure_domain_id: id16,
+}
+
+; ---------------------------------------------------------------------------
+; W-7 -- external anchor records and proofs
+
+anchor-record-envelope = [
+  payload: bstr .cbor anchor-record,
+  signature: bstr .cbor artifact-cose-sign1,
+]
+
+anchor-record = {
+  v: 2,
+  anchor_id: digest32,
+  target: anchor-target,
+  tenant_id: id16,
+  site_id: id16,
+  epoch_id: uint,
+  manifest_id: digest32,
+  manifest_digest: digest32,
+  submitted_at: unix-time,
+  accepted_at: unix-time,
+  anchor_tree_size: anchor-tree-size,
+  anchor_leaf_index: uint .le 4294967294,
+  anchor_root: digest32,
+  inclusion: inclusion-proof,
+  ? consistency: consistency-proof,
+  head: anchor-head,
+  claim: "existence_and_order_by_time_only",
+}
+
+anchor-leaf = {
+  tenant_id: id16,
+  site_id: id16,
+  epoch_id: uint,
+  manifest_id: digest32,
+  manifest_digest: digest32,
+}
+
+; The RFC 6962 leaf input is deterministic-CBOR([
+;   "AAR-ANCHOR-LEAF-v1", anchor-leaf
+; ]).  anchor_record.inclusion.leaf_digest is SHA-256(0x00 || leaf_input).
+; RFC 6962 v1 MerkleTreeHash (0x00 leaf, 0x01 internal) and its inclusion and
+; consistency algorithms are used exactly; leaf_index and tree_size determine
+; sibling orientation, so no direction flags appear on the wire.
+
+anchor-head = {
+  observed_at: unix-time,
+  tree_size: anchor-tree-size,
+  root: digest32,
+  max_age_s: 86400,
+}
+
+inclusion-proof = {
+  tree_size: anchor-tree-size,
+  leaf_index: uint .le 4294967294,
+  leaf_digest: digest32,
+  siblings: proof-path,
+}
+
+consistency-proof = {
+  old_tree_size: anchor-tree-size,
+  new_tree_size: anchor-tree-size,
+  old_root: digest32,
+  new_root: digest32,
+  path: proof-path,
+}
+
+proof-path = [ 0*64 digest32 ]
+
+; ---------------------------------------------------------------------------
+; W-8 -- domain-separated Merkle batching (membership only)
+
+merkle-batch-envelope = [
+  payload: bstr .cbor merkle-batch,
+  signature: bstr .cbor artifact-cose-sign1,
+]
+
+merkle-batch = {
+  v: 2,
+  batch_id: digest32,
+  tenant_id: id16,
+  site_id: id16,
+  epoch_owner_kid: kid,
+  epoch_id: uint,
+  signer_kid: kid,
+  tree_size: batch-tree-size,
+  root: digest32,
+  created_at: unix-time,
+  claim: "membership_only",
+}
+
+merkle-leaf = {
+  batch_id: digest32,
+  tree_size: batch-tree-size,
+  leaf_index: uint .le 1048575,
+  tenant_id: id16,
+  site_id: id16,
+  epoch_id: uint,
+  item_digest: digest32,
+}
+
+merkle-membership-proof = {
+  batch_id: digest32,
+  tree_size: batch-tree-size,
+  leaf_index: uint .le 1048575,
+  leaf: merkle-leaf,
+  siblings: [ 0*20 digest32 ],
+}
+
+; leaf_hash = SHA-256(deterministic-CBOR([
+;   "AAR-MERKLE-LEAF-v1", merkle-leaf
+; ])).
+; internal_hash = SHA-256(deterministic-CBOR([
+;   "AAR-MERKLE-NODE-v1", left_digest, right_digest
+; ])).
+; An odd unpaired node is promoted unchanged.  Empty trees are forbidden.
+; A proof establishes membership in exactly one signed batch and no census or
+; completeness property.
+
+; ---------------------------------------------------------------------------
+; W-10 -- bundles, objective selectors, range proofs, and trust inputs
+
+bundle = {
+  v: 2,
+  created_at: unix-time,
+  bundle_nonce: id16,
+  claimed_profile: profile,
+  selector: bundle-selector,
+  selector_commitment: digest32,
+  coverage: "valid_subset" / "complete",
+  trust_inputs: trust-policy-inputs,
+  ranges: manifest-range-proofs,
+  artifacts: bundle-artifacts,
+}
+
+; bundle_digest is intentionally external: SHA-256 of the exact deterministic
+; bundle bytes.  A signed verdict binds that digest without a bundle self-reference.
+; selector_commitment = SHA-256(deterministic-CBOR([
+;   "AAR-BUNDLE-SELECTOR-v1", bundle-selector
+; ])).
+
+bundle-selector = {
+  tenant_id: id16,
+  site_id: id16,
+  committed_from: unix-time,             ; inclusive
+  committed_until: unix-time,            ; exclusive
+  receipt_kinds: node-kinds,
+  ? subject_ids: selector-subject-ids,
+  ? correlation_ids: selector-correlation-ids,
+  ? issuer_kids: selector-kids,
+}
+
+node-kinds = [ 1*6 node-kind ]
+selector-subject-ids = [ 1*256 id16 ]
+selector-correlation-ids = [ 1*256 id16 ]
+selector-kids = [ 1*64 kid ]
+
+; Selector arrays are strictly sorted by encoded bytes and contain no duplicate.
+; An entry matches by tenant/site and half-open time interval, then by membership
+; in every selector array that is present.  receipt_kinds is always applied.
+
+manifest-range-proofs = [ 0*256 manifest-range-proof ]
+
+manifest-range-proof = {
+  manifest_id: digest32,
+  selector_commitment: digest32,
+  tree_size: uint .le 10000,
+  ? first_leaf_index: uint .le 9999,
+  entries: range-proof-entries,
+  ? left_boundary: boundary-proof,
+  ? right_boundary: boundary-proof,
+}
+
+range-proof-entries = [ 0*10000 range-proof-entry ]
+range-proof-entry = {
+  entry: manifest-index-entry,
+  inclusion: index-inclusion-proof,
+}
+
+boundary-proof = {
+  entry: manifest-index-entry,
+  inclusion: index-inclusion-proof,
+}
+
+index-inclusion-proof = {
+  tree_size: uint .le 10000,
+  leaf_index: uint .le 9999,
+  siblings: [ 0*14 digest32 ],
+}
+
+trust-policy-inputs = {
+  evaluation_time: unix-time,
+  trust_store: trust-store-snapshot,
+  expected_anchor_heads: expected-anchor-heads,
+  verifier_policy_digest: digest32,
+}
+
+trust-store-snapshot = {
+  digest: digest32,
+  trust-store-fields
+}
+
+trust-store-id-input = { trust-store-fields }
+
+trust-store-fields = (
+  snapshot_id: digest32,
+  created_at: unix-time,
+  roots: trust-roots,
+)
+
+; trust-store digest = SHA-256(deterministic-CBOR([
+;   "AAR-TRUST-STORE-v1", trust-store-id-input
+; ])).
+
+trust-roots = [ 1*64 trust-root ]
+trust-root = {
+  root_id: digest32,
+  root_kid: kid,
+  tenant_id: id16,
+  allowed_sites: ids16,
+  allowed_key_usages: key-usages,
+}
+key-usages = [ 1*8 key-usage ]
+
+expected-anchor-heads = [ 1*32 expected-anchor-head ]
+expected-anchor-head = {
+  target_id: id16,
+  observed_at: unix-time,
+  tree_size: anchor-tree-size,
+  root: digest32,
+}
+
+bundle-artifacts = {
+  receipts: [ 0*10000 receipt-envelope ],
+  delegations: [ 0*1000 delegation-envelope ],
+  credentials: [ 0*1000 credential-envelope ],
+  status_snapshots: [ 0*4000 status-snapshot-envelope ],
+  rotations: [ 0*1000 rotation-continuity-envelope ],
+  epoch_events: [ 0*2000 epoch-event-envelope ],
+  epoch_manifests: [ 0*256 epoch-manifest-envelope ],
+  anchors: [ 0*2048 anchor-record-envelope ],
+  merkle_batches: [ 0*1000 merkle-batch-envelope ],
+  merkle_proofs: [ 0*10000 merkle-membership-proof ],
+  manifest_payloads: [ 0*4096 canonical-manifest-payload ],
+}
+
+; Each artifact array is strictly sorted and unique by its declared primary ID:
+; receipt_id, delegation_id, credential_id, snapshot_id, rotation_id, event_id,
+; manifest_id, anchor_id, batch_id; Merkle proofs sort by
+; (batch_id, leaf_index), and manifest payloads by digest.
+
+canonical-manifest-payload = {
+  digest: digest32,
+  media_type: bounded-text,
+  canonical_bytes: bstr .size (1..1048576),
+}
+
+; coverage="complete" means complete relative to the selected, signed producer-
+; declared manifest indexes: ranges span the interval, every matching index entry
+; has its receipt and closed dependency graph, and anchor freshness succeeds.
+; It never means complete ingress.  A verdict MUST report ingress completeness as
+; not established unless an independent census or later R-15 reconciliation
+; artifact supports that distinct claim.  "valid_subset" makes no range-coverage
+; assertion beyond the validity of artifacts actually carried.
