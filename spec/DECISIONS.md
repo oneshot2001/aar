@@ -657,6 +657,69 @@ requested values.
 **Why.** Verdict producers now bind identical interoperable inputs identically,
 while early parse failures still yield complete, unambiguous signed verdicts.
 
+## D-52 — Status-snapshot content checks precede reference resolution
+
+**Decision.** Step 8 evaluates the content of EVERY carried status snapshot —
+referenced or not — before resolving any decision `status_snapshot_ids`
+reference. Content defects fire their specific codes (`lease-too-long`,
+`status-stale`, `revoked`, `compromised`, `status-unknown`, `not-yet-valid`,
+`lease-expired`, in that order); `credential/status-missing` fires only after
+all carried snapshots pass.
+
+**Why.** Adversarial masking: if reference resolution fired first, a producer
+could downgrade a `credential/compromised` verdict to the milder
+`status-missing` by also breaking the reference. Content-before-reference makes
+the worst carried evidence non-suppressible. (Gate-4 clean-room divergence,
+credential family — pyref's reference-first reading was textually defensible,
+which is exactly why this needed pinning.)
+
+## D-53 — The evaluated delegation is the embedded one, selected by no heuristic
+
+**Decision.** The delegation evaluated in step 13 is the `delegation-envelope`
+embedded in the authorization body. `decision.delegation_id` MUST equal the
+embedded delegation's `delegation_id`; a mismatch or unresolvable dominating
+path is `graph/dominator-missing`. The top-level `delegations` array exists to
+resolve `parent_delegations` chains. Selection by position, cardinality
+("the only one carried"), or subject is forbidden, and delegation evaluation
+is never skipped on a failed reference.
+
+**Why.** Gate-4 found the reference implementation selecting "the single
+carried delegation" as a fallback and silently skipping evaluation when that
+heuristic failed — a fail-open path and an interop divergence (the clean-room
+implementation evaluated the embedded copy and reached the opposite verdict on
+four fixtures). Two conformant verifiers MUST pick the same delegation by
+construction, not by luck.
+
+## D-54 — Intra-step check order is normative
+
+**Decision.** Within a validation step, checks evaluate in the order the
+CONFORMANCE section 2 prose lists them, and the first failing check supplies
+the reason code. Step 15 is explicitly ordered: entry-level index requirements
+(order, contiguity, uniqueness, entry-to-receipt equality, counts/spans) before
+root recomputation/comparison; `manifest/index-root-mismatch` fires last.
+
+**Why.** First-failure-wins is only deterministic across implementations if
+the intra-step order is pinned. Gate-4 surfaced five fixtures (manifest-index
+family, epoch/late-insertion) where two correct-by-their-own-reading
+implementations produced different codes on multi-defect inputs.
+
+## D-55 — Range slices carry nonmatching entries (D-19 reaffirmed against the reference implementation)
+
+**Decision.** A range's `entries` MUST carry every objective index entry in the
+half-open temporal slice, including entries whose kind, subject, or issuer do
+not match the selector. Selector predicates apply locally after slice
+completeness is established. A matching-only slice fails
+`bundle/range-boundary`. The reference implementation's step-18 check and its
+fixture generator (`makeCompleteRange`) violated D-19 by filtering to
+selector-matching entries; both are corrected, and the affected fixtures are
+regenerated.
+
+**Why.** D-19's rationale stands: membership proofs over only matching entries
+cannot prove a match was not omitted. This was the gate-4 flagship catch — the
+clean-room implementation enforced the locked decision and the reference
+implementation did not. The divergence (`bundle/artifact-out-of-scope`
+expected, `bundle/range-boundary` produced) was pyref being RIGHT.
+
 ## Gate-1 questions requiring an explicit disposition
 
 1. **Protected labels:** approve provisional `-70000..-70006`, switch to

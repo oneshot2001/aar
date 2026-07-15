@@ -9,6 +9,10 @@ from typing import Any
 class CBORError(ValueError):
     """Raised for CBOR outside the AAR deterministic encoding profile."""
 
+    def __init__(self, message: str, code: str = "cbor/malformed") -> None:
+        super().__init__(message)
+        self.code = code
+
 
 def _head(major: int, value: int) -> bytes:
     if value < 0:
@@ -57,11 +61,12 @@ def dumps(value: Any) -> bytes:
 class _Decoder:
     data: bytes
     offset: int = 0
+    max_depth: int = 32
 
     def _take(self, size: int) -> bytes:
         end = self.offset + size
         if end > len(self.data):
-            raise CBORError("truncated CBOR item")
+            raise CBORError("truncated CBOR item", "cbor/malformed")
         result = self.data[self.offset:end]
         self.offset = end
         return result
@@ -73,7 +78,9 @@ class _Decoder:
         size = sizes.get(additional)
         if size is None:
             if additional == 31:
-                raise CBORError("indefinite-length CBOR is forbidden")
+                raise CBORError(
+                    "indefinite-length CBOR is forbidden", "cbor/indefinite-length"
+                )
             raise CBORError("reserved CBOR additional information")
         value = int.from_bytes(self._take(size), "big")
         if (size == 1 and value < 24) or (
@@ -81,10 +88,10 @@ class _Decoder:
         ) or (size == 4 and value <= 0xFFFF) or (
             size == 8 and value <= 0xFFFFFFFF
         ):
-            raise CBORError("non-shortest CBOR argument")
+            raise CBORError("non-shortest CBOR argument", "cbor/non-canonical")
         return value
 
-    def item(self) -> Any:
+    def item(self, depth: int = 0) -> Any:
         initial = self._take(1)[0]
         major, additional = initial >> 5, initial & 0x1F
         if major == 0:
@@ -98,32 +105,38 @@ class _Decoder:
             try:
                 return raw.decode("utf-8")
             except UnicodeDecodeError as exc:
-                raise CBORError("invalid UTF-8 text string") from exc
+                raise CBORError("invalid UTF-8 text string", "cbor/invalid-utf8") from exc
         if major == 4:
-            return [self.item() for _ in range(self._argument(additional))]
+            if depth >= self.max_depth:
+                raise CBORError("CBOR nesting depth exceeds 32", "resource/cbor-depth")
+            return [self.item(depth + 1) for _ in range(self._argument(additional))]
         if major == 5:
+            if depth >= self.max_depth:
+                raise CBORError("CBOR nesting depth exceeds 32", "resource/cbor-depth")
             count = self._argument(additional)
             result: dict[Any, Any] = {}
             encoded_keys: set[bytes] = set()
             previous_order: tuple[int, bytes] | None = None
             for _ in range(count):
                 key_start = self.offset
-                key = self.item()
+                key = self.item(depth + 1)
                 key_bytes = self.data[key_start:self.offset]
                 if key_bytes in encoded_keys:
-                    raise CBORError("duplicate map key")
+                    raise CBORError("duplicate map key", "cbor/duplicate-key")
                 encoded_keys.add(key_bytes)
                 order = (len(key_bytes), key_bytes)
                 if previous_order is not None and order <= previous_order:
-                    raise CBORError("non-deterministic map-key ordering")
+                    raise CBORError(
+                        "non-deterministic map-key ordering", "cbor/non-canonical"
+                    )
                 previous_order = order
                 try:
-                    result[key] = self.item()
+                    result[key] = self.item(depth + 1)
                 except TypeError as exc:
                     raise CBORError("unhashable map key") from exc
             return result
         if major == 6:
-            raise CBORError("CBOR tags are forbidden")
+            raise CBORError("CBOR tags are forbidden", "cbor/tag-forbidden")
         if additional == 20:
             return False
         if additional == 21:
@@ -131,15 +144,14 @@ class _Decoder:
         if additional == 22:
             return None
         if additional in {25, 26, 27}:
-            raise CBORError("CBOR floating-point values are forbidden")
+            raise CBORError("CBOR floating-point values are forbidden", "cbor/float-forbidden")
         raise CBORError("unsupported CBOR simple value")
 
 
-def loads(data: bytes) -> Any:
+def loads(data: bytes, *, max_depth: int = 32) -> Any:
     """Decode exactly one deterministic AAR-profile CBOR item."""
-    decoder = _Decoder(data)
+    decoder = _Decoder(data, max_depth=max_depth)
     value = decoder.item()
     if decoder.offset != len(data):
-        raise CBORError("trailing bytes after CBOR item")
+        raise CBORError("trailing bytes after CBOR item", "cbor/trailing-bytes")
     return value
-

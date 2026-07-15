@@ -116,3 +116,55 @@ def sign_es256(private_scalar: int, message: bytes) -> bytes:
         return r.to_bytes(32, "big") + s.to_bytes(32, "big")
     raise RuntimeError("RFC 6979 failed to produce an ECDSA nonce")
 
+
+SPKI_P256_PREFIX = bytes.fromhex(
+    "3059301306072a8648ce3d020106082a8648ce3d03010703420004"
+)
+
+
+def parse_p256_spki(spki: bytes) -> tuple[int, int]:
+    """Parse the one DER SubjectPublicKeyInfo form admitted by the KAT profile."""
+    if len(spki) != 91 or not spki.startswith(SPKI_P256_PREFIX):
+        raise ValueError("not a DER P-256 SubjectPublicKeyInfo")
+    point = (int.from_bytes(spki[-64:-32], "big"), int.from_bytes(spki[-32:], "big"))
+    x, y = point
+    if not (0 <= x < P and 0 <= y < P) or (y * y - (x * x * x + A * x + B)) % P:
+        raise ValueError("P-256 point is not on the curve")
+    return point
+
+
+def verify_es256(spki: bytes, message: bytes, signature: bytes) -> bool:
+    """Verify a 64-byte P1363 ES256 signature against a carried P-256 SPKI."""
+    if len(signature) != 64:
+        return False
+    r = int.from_bytes(signature[:32], "big")
+    s = int.from_bytes(signature[32:], "big")
+    if not (1 <= r < N and 1 <= s < N):
+        return False
+    try:
+        public = parse_p256_spki(spki)
+    except ValueError:
+        return False
+    z = int.from_bytes(hashlib.sha256(message).digest(), "big")
+    w = _inverse(s, N)
+    point = _add(_multiply(z * w % N), _multiply(r * w % N, public))
+    return point is not None and point[0] % N == r
+
+
+def is_der_ecdsa_signature(value: bytes) -> bool:
+    """Recognize a strict short-form DER SEQUENCE(INTEGER r, INTEGER s)."""
+    if len(value) < 8 or value[0] != 0x30 or value[1] != len(value) - 2:
+        return False
+    offset = 2
+    for _ in range(2):
+        if offset + 2 > len(value) or value[offset] != 0x02:
+            return False
+        size = value[offset + 1]
+        offset += 2
+        if size == 0 or offset + size > len(value):
+            return False
+        integer = value[offset : offset + size]
+        if integer[0] & 0x80 or (size > 1 and integer[0] == 0 and not integer[1] & 0x80):
+            return False
+        offset += size
+    return offset == len(value)

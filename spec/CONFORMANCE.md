@@ -43,7 +43,9 @@ First failure wins. Within every artifact array, items are evaluated in encoded
 array order. Set-like arrays required by the CDDL comments to be sorted are checked
 for sort order and duplicates before their elements are semantically evaluated.
 No verifier may continue to a later step and substitute its reason for an earlier
-failure.
+failure. Within a step, checks evaluate in the order this section lists them,
+and the first failing check supplies the reason code — intra-step order is as
+normative as the step order itself (D-54).
 
 1. **Bundle byte limit.** Reject an input longer than the bundle byte limit before
    CBOR decoding.
@@ -96,8 +98,17 @@ failure.
    `request/commitment-mismatch`. `human_request` and
    `standing_condition_trigger` roots remain commitment-only.
 8. **Credential lifecycle.** Enforce role-key separation; path construction;
-   tenant-scoped roots; rotation predecessor/successor continuity and monotonic
-   sequence; status freshness; compromise/revocation time; and lease maxima. The
+   tenant-scoped roots; and rotation predecessor/successor continuity and monotonic
+   sequence. Then, for EVERY carried status snapshot — whether or not any decision
+   references it — evaluate its content in this order: lease maxima
+   (`credential/lease-too-long`), status freshness (`credential/status-stale`),
+   revocation (`credential/revoked`), compromise time (`credential/compromised`),
+   unknown status (`credential/status-unknown`), and the lease validity window
+   (`credential/not-yet-valid`, `credential/lease-expired`). Only after every
+   carried snapshot passes are decision `status_snapshot_ids` references resolved;
+   an unresolved reference is `credential/status-missing`. Content defects MUST
+   fire before reference-resolution failures so a producer cannot mask a revoked
+   or compromised stapled snapshot behind a dangling reference (D-52). The
    numeric maxima are: AAR-1/AAR-2 status age and lease 86,400 seconds; AAR-2A/
    AAR-3 status age 300 seconds and lease 3,600 seconds. All profiles use a maximum
    86,400-second anchor cadence.
@@ -135,6 +146,14 @@ failure.
     target, purpose, profile, invocation, tenant, and site. Removing that
     authorization node or its delegation MUST disconnect the dispatch from a
     permitted root. No second authorization or delegation may dominate it.
+    The delegation evaluated is the `delegation-envelope` embedded in the
+    authorization body — never a top-level artifact selected by position,
+    cardinality, or subject heuristics. `decision.delegation_id` MUST equal the
+    embedded delegation's `delegation_id`; a mismatch, or any dominating path
+    that fails to resolve, is `graph/dominator-missing`. The top-level
+    `delegations` array exists to resolve `parent_delegations` references. A
+    verifier MUST NOT skip delegation evaluation when a reference fails to
+    resolve (D-53).
 14. **Epoch state machine.** Validate owner/event chains, monotonic epoch IDs and
     event sequences, predecessor manifest digest, one open and one close, duration,
     sequence span/count, immutable close, late-arrival routing, anchor deadline,
@@ -143,9 +162,13 @@ failure.
     MUST equal SHA-256 of the exact preceding epoch-event payload bstr; a mismatch
     is `epoch/event-chain`. A predecessor manifest digest is absent only on the
     first epoch known for that owner; later epochs require it.
-15. **Manifest index.** Recompute entry leaves and root, then require sort order,
-    contiguous leaf indices, unique receipt IDs/epoch sequences, entry-to-receipt
-    equality, and equality of counts and sequence spans.
+15. **Manifest index.** Require, in this order: sort order
+    (`manifest/index-order`), contiguous leaf indices (`manifest/index-gap`),
+    unique receipt IDs/epoch sequences (`manifest/index-duplicate`),
+    entry-to-receipt equality (`manifest/index-receipt-mismatch`), and equality
+    of counts and sequence spans. Only after every entry-level requirement holds
+    are the entry leaves and root recomputed and compared to the carried root;
+    `manifest/index-root-mismatch` fires last (D-54).
 16. **Merkle batches.** Recompute domain-separated leaf/node hashes with
     `batch_id` excluded from the leaf preimage; enforce proof batch ID against the
     signed batch's recomputed ID and enforce index, size, signer,
@@ -164,7 +187,12 @@ failure.
 18. **Bundle ranges and coverage.** Verify each range against the signed manifest
     index root; require contiguous leaf indices and correct left/right temporal
     boundaries; evaluate the selector; require every selected entry and its closed
-    graph. `complete` is complete only relative to signed producer-declared
+    graph. Per D-19, a range's `entries` MUST carry every objective index entry in
+    the half-open temporal slice — including entries whose kind, subject, or
+    issuer do not match the selector. Selector predicates are applied locally by
+    the verifier only after slice completeness is established; a matching-only
+    slice fails `bundle/range-boundary` (D-55). `complete` is complete only
+    relative to signed producer-declared
     manifest indexes. Ingress completeness remains `not_established` without an
     independently committed census or future R-15 reconciliation result.
     `first_leaf_index` is present iff `entries` is nonempty; an empty temporal
