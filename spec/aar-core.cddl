@@ -1021,11 +1021,12 @@ merkle-membership-proof = {
 ;   "AAR-MERKLE-NODE-v1", left_digest, right_digest
 ; ])).
 ; An odd unpaired node is promoted unchanged.  Empty trees are forbidden.
-; batch_id is excluded from the leaf-hash preimage.  The proof batch_id must
-; equal the signed batch's recomputed batch_id, and all leaf context fields must
-; equal the batch.  Same-root, same-epoch proof portability between batches
-; signed by the same EP is accepted.  A proof establishes membership only and
-; no census or completeness property.
+; batch_id is excluded from the leaf-hash preimage.  A membership proof is bound
+; to exactly one batch: the proof batch_id MUST equal the signed batch's
+; recomputed batch_id, and all leaf context fields MUST equal the batch.  Two
+; batches that share a Merkle root but differ in any other claim have distinct
+; batch_ids, so a proof is not portable between them.  A proof establishes
+; membership only and no census or completeness property.
 
 ; ---------------------------------------------------------------------------
 ; W-10 -- bundles, objective selectors, range proofs, and trust inputs

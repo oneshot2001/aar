@@ -566,7 +566,12 @@ sentinel. A decoded valid requested value is likewise used even when a later ste
 fails.
 
 `reason` MUST be absent for `conformant` and MUST be exactly one section 3 code for
-`nonconformant` or `indeterminate`. `conformant` means only that the artifacts in
+`nonconformant` or `indeterminate`. A `conformant` verdict MUST carry a fully
+populated, non-sentinel `scope`, `trust_policy`, and `evaluated_profile`
+recomputed from the evaluated bundle; the all-zero early-failure sentinels of
+section 5 appear only with a `nonconformant` or `indeterminate` result. A
+verifier that cannot populate a real scope MUST NOT return `conformant`.
+`conformant` means only that the artifacts in
 the signed scope satisfy the stated profile and class limits under the exact bound
 build, configuration, trust policy, expected heads, evaluation time, replay state,
 and resource limits. Evidence class limits mean declared and structurally

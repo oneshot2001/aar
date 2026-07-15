@@ -62,9 +62,10 @@ the credential's own ID. Corrected rulings:
   order: leaves → root → `batch_id = H(["AAR-BATCH-ID-v1",
   claims-without-batch_id])`. The membership proof still carries `batch_id`;
   the verifier requires proof.batch_id == signed batch's computed batch_id
-  AND leaf context fields equal the batch's. Same-root/same-epoch proof
-  portability between two batches signed by the same EP is accepted —
-  claims are `membership_only`.
+  AND leaf context fields equal the batch's. A membership proof is bound to
+  exactly one `batch_id` — NOT portable between batches (corrected at gate 3,
+  finding F2: two batches sharing a root but differing in any other claim have
+  distinct batch_ids). Claims are `membership_only`.
 - **WQ-1b (credential):** `path` is the ordered ISSUER chain from immediate
   issuer to root, EXCLUDING the subject credential itself.
   `credential_id = H(["AAR-CREDENTIAL-ID-v1", claims-without-credential_id])`
