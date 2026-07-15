@@ -286,6 +286,48 @@ function updateAttemptFlow(bundle: Obj, mutation: (attempt: Obj, receipts: Obj[]
   keepReceipts(bundle, (value) => value.kind !== "outcome_observation");
 }
 
+function mutateEmbeddedDelegation(bundle: Obj, mutation: (value: Obj) => void): void {
+  const authorizationEnvelope = receiptBy(bundle, (value) => value.kind === "authorization" && ((value.body as Obj).decision as Obj).decision === "permit");
+  const oldAuthorization = payload(authorizationEnvelope);
+  const nextAuthorization = clone(oldAuthorization);
+  const body = nextAuthorization.body as Obj;
+  const delegationEnvelope = body.delegation!;
+  const delegation = clone(payload(delegationEnvelope));
+  mutation(delegation);
+  delegation.delegation_id = domainHash("AAR-DELEGATION-ID-v1", Object.fromEntries(Object.entries(delegation).filter(([key]) => key !== "delegation_id")));
+  body.delegation = resign(delegationEnvelope, delegation);
+  const decision = body.decision as Obj;
+  decision.delegation_id = delegation.delegation_id!;
+  decision.decision_commitment = domainHash("AAR-DECISION-RECORD-v1", Object.fromEntries(Object.entries(decision).filter(([key]) => key !== "decision_commitment")));
+  const replacement = replaceReceipt(bundle, authorizationEnvelope, nextAuthorization);
+
+  const replacements = new Map([[toHex(oldAuthorization.receipt_id as Uint8Array), payload(replacement).receipt_id as Uint8Array]]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const envelope of [...receiptList(bundle)]) {
+      const current = payload(envelope);
+      const next = clone(current);
+      let replace = false;
+      for (const edge of next.parents as Obj[]) {
+        const parentId = replacements.get(toHex(edge.parent_id as Uint8Array));
+        if (parentId !== undefined) { edge.parent_id = parentId; replace = true; }
+      }
+      const nextBody = next.body as Obj;
+      for (const field of ["authorization_id", "attempt_id", "subject_id"] as const) {
+        if (!(nextBody[field] instanceof Uint8Array)) continue;
+        const id = replacements.get(toHex(nextBody[field]));
+        if (id !== undefined) { nextBody[field] = id; replace = true; }
+      }
+      if (!replace) continue;
+      (next.freshness as Obj).intended_parents = (next.parents as Obj[]).map((edge) => edge.parent_id!);
+      const nextEnvelope = replaceReceipt(bundle, envelope, next);
+      replacements.set(toHex(current.receipt_id as Uint8Array), payload(nextEnvelope).receipt_id as Uint8Array);
+      changed = true;
+    }
+  }
+}
+
 function rebuildEventChain(bundle: Obj, manifest: Obj): void {
   const events = (artifacts(bundle).epoch_events as CborValue[]).map((entry) => ({ envelope: entry, value: clone(payload(entry)) }))
     .sort((a, b) => (a.value.event_seq as number) - (b.value.event_seq as number));
@@ -378,17 +420,10 @@ function indexProofs(manifest: Obj): Obj[] {
 function makeCompleteRange(bundle: Obj): void {
   const manifest = payload((artifacts(bundle).epoch_manifests as CborValue[])[0]!);
   const selector = bundle.selector as Obj;
-  const matches = (entry: Obj): boolean => {
-    if ((entry.committed_at as number) < (selector.committed_from as number) || (entry.committed_at as number) >= (selector.committed_until as number)) return false;
-    if (!(selector.receipt_kinds as CborValue[]).some((value) => same(value, entry.receipt_kind))) return false;
-    for (const [selectedField, entryField] of [["subject_ids", "subject_ids"], ["correlation_ids", "correlation_ids"], ["issuer_kids", "issuer_kid"]] as const) {
-      const selected = selector[selectedField]; if (!Array.isArray(selected)) continue;
-      const values = Array.isArray(entry[entryField]) ? entry[entryField] as CborValue[] : [entry[entryField]!];
-      if (!selected.some((wanted) => values.some((value) => same(wanted, value)))) return false;
-    }
-    return true;
-  };
-  const proofs = indexProofs(manifest).filter((wrapped) => matches(wrapped.entry as Obj));
+  const proofs = indexProofs(manifest).filter((wrapped) => {
+    const entry = wrapped.entry as Obj;
+    return (entry.committed_at as number) >= (selector.committed_from as number) && (entry.committed_at as number) < (selector.committed_until as number);
+  });
   bundle.coverage = "complete";
   bundle.ranges = [{ manifest_id: manifest.manifest_id!, selector_commitment: bundle.selector_commitment!, tree_size: (manifest.receipt_index as Obj).leaf_count!, ...(proofs.length === 0 ? {} : { first_leaf_index: (proofs[0]!.entry as Obj).leaf_index! }), entries: proofs }];
 }
@@ -580,11 +615,11 @@ export function buildNegativeFixtures(): NegativeFixture[] {
     sortArtifacts(bundle, "credentials");
   }));
 
-  const delegationFixture = (code: string, description: string, mutation: (value: Obj) => void): void => add(bundleFixture(code, description, (bundle) => mutateArtifact(bundle, "delegations", () => true, mutation)));
-  delegationFixture("delegation/not-yet-valid", "Move delegation not_before after carried attempts.", (value) => { value.not_before = (value.not_after as number) - 1; });
-  delegationFixture("delegation/expired", "Move delegation not_after before carried attempts.", (value) => { value.not_after = 1; });
-  delegationFixture("delegation/scope", "Restrict delegation actions to the other valid action.", (value) => { (value.scope as Obj).actions = ["camera.ptz.preset"]; });
-  delegationFixture("delegation/chain-invalid", "Name a missing parent delegation.", (value) => { value.parent_delegations = [deterministicId("missing-parent-delegation")]; });
+  const delegationFixture = (code: string, description: string, mutation: (value: Obj) => void): void => add(bundleFixture(code, description, (bundle) => mutateEmbeddedDelegation(bundle, mutation)));
+  delegationFixture("delegation/not-yet-valid", "Move the embedded delegation not_before after carried attempts and rederive the authorization flow.", (value) => { value.not_before = (value.not_after as number) - 1; });
+  delegationFixture("delegation/expired", "Move the embedded delegation not_after before carried attempts and rederive the authorization flow.", (value) => { value.not_after = 1; });
+  delegationFixture("delegation/scope", "Restrict the embedded delegation to the other valid action and rederive the authorization flow.", (value) => { (value.scope as Obj).actions = ["camera.ptz.preset"]; });
+  delegationFixture("delegation/chain-invalid", "Give the embedded delegation a missing parent and rederive the authorization flow.", (value) => { value.parent_delegations = [deterministicId("missing-parent-delegation")]; });
 
   add(bundleFixture("replay/not-yet-valid", "Move a root receipt issued_at after its committed_at.", (bundle) => mutateReceiptWhere(bundle, (value) => value.kind === "observation" && object(value.root), (value) => { (value.freshness as Obj).issued_at = ((value.emission as Obj).committed_at as number) + 1; })));
   add(bundleFixture("replay/expired", "Move a root receipt expires_at to its committed_at.", (bundle) => mutateReceiptWhere(bundle, (value) => value.kind === "observation" && object(value.root), (value) => { (value.freshness as Obj).expires_at = (value.emission as Obj).committed_at!; })));

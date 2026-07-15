@@ -1,5 +1,5 @@
 {
   "name": "delegation-not-yet-valid",
   "expected_code": "delegation/not-yet-valid",
-  "mutation_description": "Move delegation not_before after carried attempts."
+  "mutation_description": "Move the embedded delegation not_before after carried attempts and rederive the authorization flow."
 }

@@ -552,10 +552,12 @@ function isFailure(value: unknown): value is B1Failure {
   return object(value as CborValue) && (value as unknown as B1Failure).ok === false;
 }
 
-type Parsed = Record<ArtifactKind, ParsedEnvelope[]>;
+type Parsed = Record<ArtifactKind, ParsedEnvelope[]> & {
+  embeddedDelegations: { authorization: ParsedEnvelope; delegation: ParsedEnvelope }[];
+};
 
 function emptyParsed(): Parsed {
-  return { credential: [], rotation: [], status: [], request: [], delegation: [], epoch_event: [], epoch_manifest: [], anchor: [], merkle_batch: [], receipt: [], presentation: [] };
+  return { credential: [], rotation: [], status: [], request: [], delegation: [], epoch_event: [], epoch_manifest: [], anchor: [], merkle_batch: [], receipt: [], presentation: [], embeddedDelegations: [] };
 }
 
 function parseAll(bundle: Obj): Parsed | B1Failure {
@@ -582,6 +584,7 @@ function parseAll(bundle: Obj): Parsed | B1Failure {
         if (delegation !== undefined) {
           const nested = parseEnvelope(delegation, "delegation", `bundle.artifacts.${String(field)}[${index}].payload.body.delegation`);
           if (isFailure(nested)) return nested;
+          parsed.embeddedDelegations.push({ authorization: result, delegation: nested });
         }
       }
     }
@@ -594,11 +597,11 @@ function validateTrustInputs(bundle: Obj): B1Failure | undefined {
   const trust = bundle.trust_inputs as Obj;
   const store = trust.trust_store as Obj;
   if (!equalBytes(store.digest as Uint8Array, domainHash("AAR-TRUST-STORE-v1", without(store, "digest")))) return failure(5, "hash/mismatch", "bundle.trust_inputs.trust_store.digest");
-  if ((trust.evaluation_time as number) < (store.created_at as number)) return failure(5, "schema/out-of-range", "bundle.trust_inputs.evaluation_time");
   for (const rootValue of store.roots as CborValue[]) {
     if (!object(rootValue)) return failure(5, "schema/bad-type", "bundle.trust_inputs.trust_store.roots");
     if (!same(rootValue.tenant_id, selector.tenant_id) || !Array.isArray(rootValue.allowed_sites) || !(rootValue.allowed_sites as CborValue[]).some((site) => same(site, selector.site_id))) return failure(5, "credential/root-not-accepted", "bundle.trust_inputs.trust_store.roots");
   }
+  if ((trust.evaluation_time as number) < (store.created_at as number)) return failure(5, "schema/out-of-range", "bundle.trust_inputs.evaluation_time");
   return undefined;
 }
 
@@ -614,7 +617,7 @@ function validateMechanics(bundle: Obj, parsed: Parsed): B1Failure | undefined {
   const roots = ((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[];
   const evaluationTime = ((bundle.trust_inputs as Obj).evaluation_time as number);
   const order: ArtifactKind[] = ["credential", "rotation", "status", "request", "delegation", "epoch_event", "epoch_manifest", "anchor", "merkle_batch", "receipt", "presentation"];
-  for (const kind of order) for (const entry of parsed[kind]) {
+  for (const kind of order) for (const entry of kind === "delegation" ? [...parsed.delegation, ...parsed.embeddedDelegations.map((value) => value.delegation)] : parsed[kind]) {
     const credential = credentialsByKid.get(toHex(entry.kid));
     if (credential === undefined) return failure(6, "key/not-found", `${kind}.kid`, true);
     const publicKeyBytes = credential.payload.public_key;
@@ -671,6 +674,9 @@ function validateContent(bundle: Obj, parsed: Parsed): B1Failure | undefined {
       const [field, label] = domain;
       if (!equalBytes(entry.payload[field] as Uint8Array, domainHash(label, without(entry.payload, field)))) return failure(7, kind === "presentation" ? "hash/mismatch" : "identity/artifact-id-mismatch", `${kind}.${field}`);
     }
+  }
+  for (const { delegation } of parsed.embeddedDelegations) {
+    if (!equalBytes(delegation.payload.delegation_id as Uint8Array, domainHash("AAR-DELEGATION-ID-v1", without(delegation.payload, "delegation_id")))) return failure(7, "identity/artifact-id-mismatch", "authorization.body.delegation.delegation_id");
   }
   for (const entry of parsed.receipt) {
     const expected = domainHash("AAR-RECEIPT-ID-v1", entry.protectedBytes, without(entry.payload, "receipt_id"));
@@ -730,6 +736,15 @@ function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | u
   const credentials = new Map(parsed.credential.map((entry) => [toHex(entry.payload.credential_id as Uint8Array), entry]));
   const roots = ((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[];
   const evaluation = (bundle.trust_inputs as Obj).evaluation_time as number;
+  const roleKids = new Map<string, string>();
+  for (const entry of parsed.credential) {
+    const role = entry.payload.principal_role as string;
+    if (!["agent", "enforcement_point", "authority_source"].includes(role)) continue;
+    const kid = toHex(entry.payload.subject_kid as Uint8Array);
+    const prior = roleKids.get(kid);
+    if (prior !== undefined && prior !== role) return failure(8, "credential/role-key-reuse", "credentials");
+    roleKids.set(kid, role);
+  }
   for (const entry of parsed.credential) {
     const payload = entry.payload;
     const path = payload.path;
@@ -743,17 +758,21 @@ function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | u
       if (issuer === undefined || !equalBytes(issuer.payload.subject_kid as Uint8Array, expectedIssuer)) return failure(8, "credential/path-invalid", "credential.path");
       expectedIssuer = issuer.payload.issuer_kid as Uint8Array;
     }
+  }
+  for (const entry of parsed.credential) {
+    const payload = entry.payload;
+    const path = payload.path as CborValue[];
     const last = path.length === 0 ? payload : credentials.get(toHex(path[path.length - 1] as Uint8Array))?.payload;
     if (last === undefined || !roots.some((root) => same(root.root_kid, last.subject_kid) && same(root.tenant_id, payload.tenant_id) && Array.isArray(root.allowed_sites) && root.allowed_sites.some((site) => same(site, payload.site_id)))) return failure(8, "credential/root-not-accepted", "credential.path");
   }
-  const roleKids = new Map<string, string>();
-  for (const entry of parsed.credential) {
-    const role = entry.payload.principal_role as string;
-    if (!["agent", "enforcement_point", "authority_source"].includes(role)) continue;
-    const kid = toHex(entry.payload.subject_kid as Uint8Array);
-    const prior = roleKids.get(kid);
-    if (prior !== undefined && prior !== role) return failure(8, "credential/role-key-reuse", "credentials");
-    roleKids.set(kid, role);
+  const rotations = [...parsed.rotation].sort((a, b) => (a.payload.continuity_sequence as number) - (b.payload.continuity_sequence as number));
+  let previous: ParsedEnvelope | undefined;
+  for (const rotation of rotations) {
+    const predecessor = credentials.get(toHex(rotation.payload.predecessor_credential_id as Uint8Array));
+    const successor = credentials.get(toHex(rotation.payload.successor_credential_id as Uint8Array));
+    if (predecessor === undefined || successor === undefined || !same(predecessor.payload.subject_kid, rotation.payload.predecessor_kid) || !same(successor.payload.subject_kid, rotation.payload.successor_kid)) return failure(8, "credential/rotation-invalid", "rotation");
+    if (previous !== undefined && ((rotation.payload.continuity_sequence as number) <= (previous.payload.continuity_sequence as number) || (rotation.payload.effective_at as number) <= (previous.payload.effective_at as number))) return failure(8, "credential/rotation-rollback", "rotation");
+    previous = rotation;
   }
   for (const status of parsed.status) {
     const payload = status.payload;
@@ -772,15 +791,6 @@ function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | u
     const decision = (receipt.payload.body as Obj).decision;
     if (!object(decision) || !Array.isArray(decision.status_snapshot_ids)) continue;
     for (const id of decision.status_snapshot_ids) if (!parsed.status.some((status) => same(status.payload.snapshot_id, id))) return failure(8, "credential/status-missing", "receipt.body.decision.status_snapshot_ids");
-  }
-  const rotations = [...parsed.rotation].sort((a, b) => (a.payload.continuity_sequence as number) - (b.payload.continuity_sequence as number));
-  let previous: ParsedEnvelope | undefined;
-  for (const rotation of rotations) {
-    const predecessor = credentials.get(toHex(rotation.payload.predecessor_credential_id as Uint8Array));
-    const successor = credentials.get(toHex(rotation.payload.successor_credential_id as Uint8Array));
-    if (predecessor === undefined || successor === undefined || !same(predecessor.payload.subject_kid, rotation.payload.predecessor_kid) || !same(successor.payload.subject_kid, rotation.payload.successor_kid)) return failure(8, "credential/rotation-invalid", "rotation");
-    if (previous !== undefined && ((rotation.payload.continuity_sequence as number) <= (previous.payload.continuity_sequence as number) || (rotation.payload.effective_at as number) <= (previous.payload.effective_at as number))) return failure(8, "credential/rotation-rollback", "rotation");
-    previous = rotation;
   }
   return undefined;
 }
@@ -915,35 +925,6 @@ function validateReplay(parsed: Parsed, replayState: readonly ReplayUse[]): B1Fa
       uses.set(coordinate, digest);
     }
   }
-  return validateDelegations(parsed);
-}
-
-function validateDelegations(parsed: Parsed): B1Failure | undefined {
-  const delegations = new Map(parsed.delegation.map((entry) => [toHex(entry.payload.delegation_id as Uint8Array), entry]));
-  const receipts = new Map(parsed.receipt.map((entry) => [toHex(entry.payload.receipt_id as Uint8Array), entry]));
-  for (const attempt of parsed.receipt.filter((entry) => entry.payload.kind === "action_attempt")) {
-    const body = attempt.payload.body as Obj;
-    const authorization = bytes(body.authorization_id, 32) ? receipts.get(toHex(body.authorization_id)) : undefined;
-    const decision = authorization?.payload.kind === "authorization" ? ((authorization.payload.body as Obj).decision as Obj) : undefined;
-    const linked = decision && bytes(decision.delegation_id, 32) ? delegations.get(toHex(decision.delegation_id)) : undefined;
-    // B1 may evaluate a carried delegation's time/scope without proving graph
-    // dominance.  Full selection/uniqueness of the dominating grant is step 13.
-    const delegation = linked ?? (delegations.size === 1 ? [...delegations.values()][0] : undefined);
-    if (delegation === undefined) continue;
-    const committed = (attempt.payload.emission as Obj).committed_at as number;
-    if (committed < (delegation.payload.not_before as number)) return failure(11, "delegation/not-yet-valid", "delegation.not_before");
-    if (committed >= (delegation.payload.not_after as number)) return failure(11, "delegation/expired", "delegation.not_after");
-    const scope = delegation.payload.scope as Obj;
-    const action = body.action as Obj;
-    const legal = attempt.payload.legal as Obj;
-    const profile = decision!.profile;
-    if (!Array.isArray(scope.actions) || !scope.actions.some((value) => same(value, action.action_name)) || !Array.isArray(scope.targets) || !scope.targets.some((value) => same(value, action.target_id)) || !Array.isArray(scope.purpose_ids) || !scope.purpose_ids.some((value) => same(value, legal.purpose_id)) || !Array.isArray(scope.allowed_profiles) || !scope.allowed_profiles.some((value) => same(value, profile)) || !same(delegation.payload.tenant_id, (attempt.payload.binding as Obj).tenant_id) || !same(delegation.payload.site_id, (attempt.payload.binding as Obj).site_id) || (delegation.payload.use === "one_time" && !same(delegation.payload.invocation_id, (attempt.payload.freshness as Obj).invocation_id))) return failure(11, "delegation/scope", "delegation.scope");
-    const parents = delegation.payload.parent_delegations as CborValue[];
-    for (const parentId of parents) {
-      const parent = bytes(parentId, 32) ? delegations.get(toHex(parentId)) : undefined;
-      if (parent === undefined || (parent.payload.not_before as number) > (delegation.payload.not_before as number) || (parent.payload.not_after as number) < (delegation.payload.not_after as number)) return failure(11, "delegation/chain-invalid", "delegation.parent_delegations");
-    }
-  }
   return undefined;
 }
 
@@ -1054,7 +1035,8 @@ function validateGraph(parsed: Parsed): B1Failure | undefined {
 
 function validateDominance(parsed: Parsed): B1Failure | undefined {
   const byId = receiptsById(parsed);
-  const delegations = new Map(parsed.delegation.map((entry) => [toHex(entry.payload.delegation_id as Uint8Array), entry]));
+  const parentDelegations = new Map(parsed.delegation.map((entry) => [toHex(entry.payload.delegation_id as Uint8Array), entry]));
+  const embeddedDelegations = new Map(parsed.embeddedDelegations.map((entry) => [toHex(entry.authorization.payload.receipt_id as Uint8Array), entry.delegation]));
   for (const dispatch of parsed.receipt.filter((entry) => entry.payload.kind === "dispatch")) {
     const attemptEdges = (dispatch.payload.parents as Obj[]).filter((edge) => edge.edge_type === "attempted_as");
     const attempt = attemptEdges.length === 1 ? byId.get(toHex(attemptEdges[0]!.parent_id as Uint8Array)) : undefined;
@@ -1066,10 +1048,19 @@ function validateDominance(parsed: Parsed): B1Failure | undefined {
     const attemptBody = attempt.payload.body as Obj;
     if (authorization?.payload.kind !== "authorization" || !same(attemptBody.authorization_id, authorization.payload.receipt_id)) return failure(13, "graph/dominator-missing", "attempt.body.authorization_id");
     const decision = (authorization.payload.body as Obj).decision as Obj;
-    const delegation = bytes(decision.delegation_id, 32) ? delegations.get(toHex(decision.delegation_id)) : undefined;
-    if (delegation === undefined) return failure(13, "graph/dominator-missing", "authorization.body.decision.delegation_id");
-    const matching = parsed.delegation.filter((entry) => same(entry.payload.delegation_id, decision.delegation_id));
-    if (matching.length > 1) return failure(13, "graph/dominator-ambiguous", "authorization.body.decision.delegation_id");
+    const delegation = embeddedDelegations.get(toHex(authorization.payload.receipt_id as Uint8Array));
+    if (delegation === undefined || !same(decision.delegation_id, delegation.payload.delegation_id)) return failure(13, "graph/dominator-missing", "authorization.body.decision.delegation_id");
+    const committed = (attempt.payload.emission as Obj).committed_at as number;
+    if (committed < (delegation.payload.not_before as number)) return failure(13, "delegation/not-yet-valid", "authorization.body.delegation.not_before");
+    if (committed >= (delegation.payload.not_after as number)) return failure(13, "delegation/expired", "authorization.body.delegation.not_after");
+    const scope = delegation.payload.scope as Obj;
+    const action = attemptBody.action as Obj;
+    const legal = attempt.payload.legal as Obj;
+    if (!Array.isArray(scope.actions) || !scope.actions.some((value) => same(value, action.action_name)) || !Array.isArray(scope.targets) || !scope.targets.some((value) => same(value, action.target_id)) || !Array.isArray(scope.purpose_ids) || !scope.purpose_ids.some((value) => same(value, legal.purpose_id)) || !Array.isArray(scope.allowed_profiles) || !scope.allowed_profiles.some((value) => same(value, decision.profile)) || !same(delegation.payload.tenant_id, (attempt.payload.binding as Obj).tenant_id) || !same(delegation.payload.site_id, (attempt.payload.binding as Obj).site_id) || (delegation.payload.use === "one_time" && !same(delegation.payload.invocation_id, (attempt.payload.freshness as Obj).invocation_id))) return failure(13, "delegation/scope", "authorization.body.delegation.scope");
+    for (const parentId of delegation.payload.parent_delegations as CborValue[]) {
+      const parent = bytes(parentId, 32) ? parentDelegations.get(toHex(parentId)) : undefined;
+      if (parent === undefined || (parent.payload.not_before as number) > (delegation.payload.not_before as number) || (parent.payload.not_after as number) < (delegation.payload.not_after as number)) return failure(13, "delegation/chain-invalid", "authorization.body.delegation.parent_delegations");
+    }
   }
   return undefined;
 }
@@ -1079,19 +1070,22 @@ function validateEpochs(parsed: Parsed): B1Failure | undefined {
     const owner = toHex(a.payload.epoch_owner_kid as Uint8Array).localeCompare(toHex(b.payload.epoch_owner_kid as Uint8Array));
     return owner || (a.payload.epoch_id as number) - (b.payload.epoch_id as number);
   });
-  const seenEpoch = new Set<string>();
-  for (const manifest of manifests) {
-    const coordinate = `${toHex(manifest.payload.epoch_owner_kid as Uint8Array)}:${manifest.payload.epoch_id as number}`;
-    if (seenEpoch.has(coordinate)) return failure(14, "epoch/fork", "bundle.artifacts.epoch_manifests");
-    seenEpoch.add(coordinate);
-  }
   const eventGroups = new Map<string, ParsedEnvelope[]>();
   for (const event of parsed.epoch_event) {
     const key = `${toHex(event.payload.epoch_owner_kid as Uint8Array)}:${event.payload.epoch_id as number}`;
     eventGroups.set(key, [...(eventGroups.get(key) ?? []), event]);
   }
-  for (const [key, eventsValue] of eventGroups) {
+  const states = [...eventGroups].map(([key, eventsValue]) => {
     const events = [...eventsValue].sort((a, b) => (a.payload.event_seq as number) - (b.payload.event_seq as number));
+    const opens = events.filter((entry) => entry.payload.event === "open");
+    const closes = events.filter((entry) => entry.payload.event === "close");
+    const closeManifestId = object(closes[0]?.payload.body) ? closes[0]!.payload.body.manifest_id : undefined;
+    const matchingManifests = manifests.filter((entry) => `${toHex(entry.payload.epoch_owner_kid as Uint8Array)}:${entry.payload.epoch_id as number}` === key);
+    const manifest = matchingManifests.find((entry) => same(entry.payload.manifest_id, closeManifestId)) ?? matchingManifests[0];
+    return { key, events, opens, closes, manifest };
+  });
+
+  for (const { events } of states) {
     for (let index = 0; index < events.length; index += 1) {
       const current = events[index]!;
       if (current.payload.event_seq !== index) return failure(14, "epoch/event-chain", "epoch_event.event_seq");
@@ -1099,32 +1093,18 @@ function validateEpochs(parsed: Parsed): B1Failure | undefined {
         if (current.payload.previous_event_digest !== undefined) return failure(14, "epoch/event-chain", "epoch_event.previous_event_digest");
       } else if (!equalBytes(current.payload.previous_event_digest as Uint8Array, hash(events[index - 1]!.payloadBytes))) return failure(14, "epoch/event-chain", "epoch_event.previous_event_digest");
     }
-    if (events.some((entry) => entry.payload.event === "fork_declared")) return failure(14, "epoch/fork", "epoch_event.event");
-    const opens = events.filter((entry) => entry.payload.event === "open");
-    const closes = events.filter((entry) => entry.payload.event === "close");
-    if (opens.length !== 1 || closes.length !== 1 || (opens[0]!.payload.occurred_at as number) >= (closes[0]!.payload.occurred_at as number)) return failure(14, "epoch/open-close", "epoch_events");
-    if ((closes[0]!.payload.occurred_at as number) - (opens[0]!.payload.occurred_at as number) > 86_400) return failure(14, "epoch/duration-exceeded", "epoch_events");
-    const manifest = manifests.find((entry) => `${toHex(entry.payload.epoch_owner_kid as Uint8Array)}:${entry.payload.epoch_id as number}` === key);
-    if (manifest === undefined) return failure(14, "epoch/open-close", "epoch_manifest");
-    const closeBody = closes[0]!.payload.body as Obj;
-    const index = manifest.payload.receipt_index as Obj;
-    const span = manifest.payload.sequence_span as Obj;
-    if (!same(closeBody.manifest_id, manifest.payload.manifest_id) || closeBody.item_count !== manifest.payload.item_count || closeBody.last_epoch_seq !== span.last
-      || manifest.payload.item_count !== (index.entries as CborValue[]).length || index.leaf_count !== manifest.payload.item_count) return failure(14, "epoch/span-count-mismatch", "epoch_manifest");
-    if ((manifest.payload.closed_at as number) - (manifest.payload.opened_at as number) > 86_400) return failure(14, "epoch/duration-exceeded", "epoch_manifest");
-    if (manifest.payload.anchor_deadline !== (manifest.payload.closed_at as number) + 86_400 || closeBody.anchor_deadline !== manifest.payload.anchor_deadline) return failure(14, "epoch/anchor-deadline", "epoch_manifest.anchor_deadline");
-    for (const submitted of events.filter((entry) => entry.payload.event === "anchor_submitted")) if (((submitted.payload.body as Obj).submitted_at as number) > (manifest.payload.anchor_deadline as number)) return failure(14, "epoch/anchor-deadline", "epoch_event.body.submitted_at");
   }
-  for (const manifest of manifests) {
-    const key = `${toHex(manifest.payload.epoch_owner_kid as Uint8Array)}:${manifest.payload.epoch_id as number}`;
-    if (!eventGroups.has(key)) return failure(14, "epoch/open-close", "epoch_events");
-  }
+
   const byDigest = new Map(manifests.map((entry) => [toHex(hash(entry.payloadBytes)), entry]));
   for (const current of manifests) {
     if (current.payload.predecessor_manifest_digest === undefined) continue;
     const prior = byDigest.get(toHex(current.payload.predecessor_manifest_digest as Uint8Array));
+    if (prior !== undefined && same(prior.payload.epoch_owner_kid, current.payload.epoch_owner_kid) && (current.payload.epoch_id as number) <= (prior.payload.epoch_id as number)) return failure(14, "epoch/id-nonmonotonic", "epoch_manifest.epoch_id");
+  }
+  for (const current of manifests) {
+    if (current.payload.predecessor_manifest_digest === undefined) continue;
+    const prior = byDigest.get(toHex(current.payload.predecessor_manifest_digest as Uint8Array));
     if (prior === undefined || !same(prior.payload.epoch_owner_kid, current.payload.epoch_owner_kid)) return failure(14, "epoch/predecessor-mismatch", "epoch_manifest.predecessor_manifest_digest");
-    if ((current.payload.epoch_id as number) <= (prior.payload.epoch_id as number)) return failure(14, "epoch/id-nonmonotonic", "epoch_manifest.epoch_id");
   }
   const byOwner = new Map<string, ParsedEnvelope[]>();
   for (const manifest of manifests) {
@@ -1132,17 +1112,53 @@ function validateEpochs(parsed: Parsed): B1Failure | undefined {
     byOwner.set(owner, [...(byOwner.get(owner) ?? []), manifest]);
   }
   for (const ownerManifests of byOwner.values()) {
-    const first = ownerManifests.filter((entry) => entry.payload.predecessor_manifest_digest === undefined);
-    if (first.length !== 1) return failure(14, "epoch/predecessor-mismatch", "epoch_manifest.predecessor_manifest_digest");
-    if (ownerManifests.length > 1 && ownerManifests.some((entry) => entry !== first[0] && entry.payload.predecessor_manifest_digest === undefined)) return failure(14, "epoch/predecessor-mismatch", "epoch_manifest.predecessor_manifest_digest");
+    const firstEpochs = new Set(ownerManifests.filter((entry) => entry.payload.predecessor_manifest_digest === undefined).map((entry) => entry.payload.epoch_id as number));
+    if (firstEpochs.size !== 1) return failure(14, "epoch/predecessor-mismatch", "epoch_manifest.predecessor_manifest_digest");
   }
-  const manifestsByEpoch = new Map(manifests.map((entry) => [`${toHex(entry.payload.epoch_owner_kid as Uint8Array)}:${entry.payload.epoch_id as number}`, entry]));
+
+  for (const { opens, closes, manifest } of states) {
+    if (opens.length !== 1 || closes.length !== 1 || (opens[0]!.payload.occurred_at as number) >= (closes[0]!.payload.occurred_at as number)) return failure(14, "epoch/open-close", "epoch_events");
+    if (manifest === undefined) return failure(14, "epoch/open-close", "epoch_manifest");
+  }
+  for (const manifest of manifests) {
+    const key = `${toHex(manifest.payload.epoch_owner_kid as Uint8Array)}:${manifest.payload.epoch_id as number}`;
+    if (!eventGroups.has(key)) return failure(14, "epoch/open-close", "epoch_events");
+  }
+
+  for (const { opens, closes, manifest } of states) {
+    if ((closes[0]!.payload.occurred_at as number) - (opens[0]!.payload.occurred_at as number) > 86_400) return failure(14, "epoch/duration-exceeded", "epoch_events");
+    if ((manifest!.payload.closed_at as number) - (manifest!.payload.opened_at as number) > 86_400) return failure(14, "epoch/duration-exceeded", "epoch_manifest");
+  }
+
+  for (const { closes, manifest } of states) {
+    const closeBody = closes[0]!.payload.body as Obj;
+    const index = manifest!.payload.receipt_index as Obj;
+    const span = manifest!.payload.sequence_span as Obj;
+    if (!same(closeBody.manifest_id, manifest!.payload.manifest_id) || closeBody.item_count !== manifest!.payload.item_count || closeBody.last_epoch_seq !== span.last
+      || manifest!.payload.item_count !== (index.entries as CborValue[]).length || index.leaf_count !== manifest!.payload.item_count) return failure(14, "epoch/span-count-mismatch", "epoch_manifest");
+  }
+
+  const manifestsByEpoch = new Map(states.filter((state) => state.manifest !== undefined).map((state) => [state.key, state.manifest!]));
   for (const receipt of parsed.receipt) {
     const binding = receipt.payload.binding as Obj;
     const manifest = manifestsByEpoch.get(`${toHex(binding.epoch_owner_kid as Uint8Array)}:${binding.epoch_id as number}`);
     if (manifest !== undefined && (receipt.payload.emission as Obj).committed_at as number > (manifest.payload.closed_at as number)) return failure(14, "epoch/late-insertion", "receipt.emission.committed_at");
     if (binding.late_for_epoch_id !== undefined && (binding.late_for_epoch_id as number) >= (binding.epoch_id as number)) return failure(14, "epoch/late-insertion", "receipt.binding.late_for_epoch_id");
   }
+
+  for (const { events, closes, manifest } of states) {
+    const closeBody = closes[0]!.payload.body as Obj;
+    if (manifest!.payload.anchor_deadline !== (manifest!.payload.closed_at as number) + 86_400 || closeBody.anchor_deadline !== manifest!.payload.anchor_deadline) return failure(14, "epoch/anchor-deadline", "epoch_manifest.anchor_deadline");
+    for (const submitted of events.filter((entry) => entry.payload.event === "anchor_submitted")) if (((submitted.payload.body as Obj).submitted_at as number) > (manifest!.payload.anchor_deadline as number)) return failure(14, "epoch/anchor-deadline", "epoch_event.body.submitted_at");
+  }
+
+  const seenEpoch = new Set<string>();
+  for (const manifest of manifests) {
+    const coordinate = `${toHex(manifest.payload.epoch_owner_kid as Uint8Array)}:${manifest.payload.epoch_id as number}`;
+    if (seenEpoch.has(coordinate)) return failure(14, "epoch/fork", "bundle.artifacts.epoch_manifests");
+    seenEpoch.add(coordinate);
+  }
+  if (parsed.epoch_event.some((entry) => entry.payload.event === "fork_declared")) return failure(14, "epoch/fork", "epoch_event.event");
   return undefined;
 }
 
@@ -1164,11 +1180,17 @@ function validateManifestIndexes(parsed: Parsed): B1Failure | undefined {
       const id = toHex(entry.receipt_id as Uint8Array); const sequence = entry.epoch_seq as number;
       if (ids.has(id) || sequences.has(sequence)) return failure(15, "manifest/index-duplicate", "epoch_manifest.receipt_index.entries");
       ids.add(id); sequences.add(sequence);
+    }
+    for (const entry of entries) {
+      const id = toHex(entry.receipt_id as Uint8Array);
       const receipt = receipts.get(id);
       const binding = receipt?.payload.binding as Obj | undefined;
       const emission = receipt?.payload.emission as Obj | undefined;
       if (receipt !== undefined && (entry.receipt_kind !== receipt.payload.kind || !same(entry.issuer_kid, receipt.kid) || entry.issuer_seq !== emission!.issuer_seq || entry.epoch_seq !== binding!.epoch_seq || entry.committed_at !== emission!.committed_at)) return failure(15, "manifest/index-receipt-mismatch", "epoch_manifest.receipt_index.entries");
     }
+    const span = manifest.payload.sequence_span as Obj;
+    if (index.leaf_count !== entries.length || manifest.payload.item_count !== entries.length
+      || (entries.length > 0 && (span.first !== entries[0]!.epoch_seq || span.last !== entries[entries.length - 1]!.epoch_seq))) return failure(15, "epoch/span-count-mismatch", "epoch_manifest.receipt_index");
     const leaves = entries.map((entry) => domainHash("AAR-MANIFEST-INDEX-LEAF-v1", entry));
     if (leaves.length === 0 || !equalBytes(index.root as Uint8Array, promotedRoot(leaves, "AAR-MANIFEST-INDEX-NODE-v1"))) return failure(15, "manifest/index-root-mismatch", "epoch_manifest.receipt_index.root");
   }
@@ -1278,13 +1300,13 @@ function validateRanges(bundle: Obj, parsed: Parsed, observations: string[]): B1
       previousLastByManifest.set(manifestKey, previousLast);
     } else if (range.first_leaf_index !== undefined) return failure(18, "bundle/range-noncontiguous", "bundle.ranges.first_leaf_index");
     const indexEntries = ((manifest.payload.receipt_index as Obj).entries as Obj[]);
-    const matching = indexEntries.filter((entry) => entryMatchesSelector(entry, selector));
-    if (entries.length !== matching.length || entries.some((wrapped, index) => !same(wrapped.entry, matching[index]))) return failure(18, "bundle/range-boundary", "bundle.ranges");
+    const temporalSlice = indexEntries.filter((entry) => (entry.committed_at as number) >= (selector.committed_from as number) && (entry.committed_at as number) < (selector.committed_until as number));
+    if (entries.length !== temporalSlice.length || entries.some((wrapped, index) => !same(wrapped.entry, temporalSlice[index]))) return failure(18, "bundle/range-boundary", "bundle.ranges");
     for (const wrapped of entries) {
       const entry = wrapped.entry as Obj; const inclusion = wrapped.inclusion as Obj;
       if (inclusion.tree_size !== (manifest.payload.receipt_index as Obj).leaf_count || inclusion.leaf_index !== entry.leaf_index
         || !verifyPromotedProof(domainHash("AAR-MANIFEST-INDEX-LEAF-v1", entry), inclusion.leaf_index as number, inclusion.tree_size as number, inclusion.siblings as Uint8Array[], "AAR-MANIFEST-INDEX-NODE-v1", (manifest.payload.receipt_index as Obj).root as Uint8Array)) return failure(18, "bundle/range-proof-invalid", "bundle.ranges.entries.inclusion");
-      selectedIds.add(toHex(entry.receipt_id as Uint8Array));
+      if (entryMatchesSelector(entry, selector)) selectedIds.add(toHex(entry.receipt_id as Uint8Array));
     }
   }
   if (bundle.coverage === "complete") {

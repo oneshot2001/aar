@@ -1,5 +1,5 @@
 {
   "name": "delegation-expired",
   "expected_code": "delegation/expired",
-  "mutation_description": "Move delegation not_after before carried attempts."
+  "mutation_description": "Move the embedded delegation not_after before carried attempts and rederive the authorization flow."
 }

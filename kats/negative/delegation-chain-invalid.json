@@ -1,5 +1,5 @@
 {
   "name": "delegation-chain-invalid",
   "expected_code": "delegation/chain-invalid",
-  "mutation_description": "Name a missing parent delegation."
+  "mutation_description": "Give the embedded delegation a missing parent and rederive the authorization flow."
 }

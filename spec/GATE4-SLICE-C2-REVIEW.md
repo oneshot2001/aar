@@ -93,3 +93,21 @@ non-normative for production verifiers (which verify bundles).
 
 Residue #6 closes only after Run B gates clean. Then slice C3 (public CLI
 packaging) proceeds per the rubric.
+
+## Run A gate result (2026-07-15): ACCEPTED
+
+Codex implemented A1–A6. Gate verified independently: `bun test` 16/16
+(1,152 assertions), `bunx tsc -p harness/tsconfig.json --noEmit` clean, the
+cardinality-fallback/fail-open code is gone (D-53 selection now: embedded
+delegation per authorization, `decision.delegation_id` equality,
+`graph/dominator-missing` on mismatch; delegation lifecycle codes now fire
+from step 13, their natural home), step 18 checks the full half-open temporal
+slice with selector predicates applied locally (D-55), `makeCompleteRange`
+builds full-slice ranges, and the four delegation fixtures mutate the embedded
+delegation with full cascade. Changed fixture bytes are exactly the five
+expected (`bundle-artifact-out-of-scope` +4 KB from the full slice; the four
+delegation fixtures same-size). Run A also found and fixed three FURTHER
+intra-step order deviations under D-54 (step 5 root-records-before-time,
+step 14 monotonicity/late-insertion/deadline/fork order, step 15 uniqueness-
+before-equality) — evidence the D-54 pin was needed beyond the observed
+divergences. Corpus regenerated; positives byte-stable.

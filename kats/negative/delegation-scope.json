@@ -1,5 +1,5 @@
 {
   "name": "delegation-scope",
   "expected_code": "delegation/scope",
-  "mutation_description": "Restrict delegation actions to the other valid action."
+  "mutation_description": "Restrict the embedded delegation to the other valid action and rederive the authorization flow."
 }
