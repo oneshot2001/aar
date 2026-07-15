@@ -84,7 +84,11 @@ normative as the step order itself (D-54).
    9. reconstruct COSE `Sig_structure` from the received protected and payload
       bytes and verify ES256.
 
-7. **Content commitments and IDs.** Recompute every content-derived ID and every
+7. **Content commitments and IDs.** Note (GATE3 F3): artifact IDs bind
+   content, not signer — reference-by-ID resolves to the carried artifact,
+   whose signature is independently validated at use (the credential check
+   re-validates the token's signer for its role); revisit signer-in-preimage
+   only if a multi-signer delegation model appears. Recompute every content-derived ID and every
    declared digest whose bytes are present. Recompute `delegation_id`,
    `credential_id`, `snapshot_id`, `rotation_id`, `event_id`, `anchor_id`, and
    `batch_id` from their domain-separated deterministic-CBOR claims with their
@@ -446,7 +450,18 @@ first-failure reason:
 - `producer_declared_complete`: `complete` holds for selected signed indexes;
 - `ingress_completeness_not_established`: no independent census/reconciliation;
 - `membership_only`: a Merkle proof establishes no completeness;
-- `anchor_existence_order_only`: anchor establishes neither truth nor completeness.
+- `anchor_existence_order_only`: anchor establishes neither truth nor completeness;
+- `empty_scope` (GATE3 F4): the bundle verified `conformant` over zero receipts
+  matching the selector — the verdict asserts nothing about any receipt;
+- `stateful_not_evaluated` (GATE3 F6): no prior evaluated state was supplied, so
+  cross-evaluation sequence-rollback and one-time-reuse properties were NOT
+  evaluated — they did not "pass." The verdict's `replay_state_digest` binds
+  which state, if any, was used.
+
+In v0.2, `empty_scope` and `stateful_not_evaluated` are REPORT-LAYER
+observations: verifier tools MUST surface them in human/machine reports, but
+they do not enter the signed verdict bytes (the D-51 verdict preimages are
+frozen). Promoting them into the signed verdict is a wire-version decision.
 
 ## 5. W-12 signed machine-readable verdict
 
