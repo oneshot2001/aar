@@ -71,14 +71,19 @@ failure.
    6. decode the detached payload bytes under step 2's CBOR rules, then validate
       its selected closed schema;
    7. resolve a P-256 verification key through the accepted credential path,
-      enforce key usage, tenant/site scope, validity, status, and algorithm; a
-      request envelope requires `agent_signing` usage;
+      require `SHA-256(public_key) == subject_kid`, use that carried SPKI for
+      verification, and enforce key usage, tenant/site scope, validity, status,
+      and algorithm; a request envelope requires `agent_signing` usage;
    8. compare protected receipt coordinates to payload coordinates;
    9. reconstruct COSE `Sig_structure` from the received protected and payload
       bytes and verify ES256.
 
 7. **Content commitments and IDs.** Recompute every content-derived ID and every
-   declared digest whose bytes are present. For a referenced canonical manifest,
+   declared digest whose bytes are present. Recompute `delegation_id`,
+   `credential_id`, `snapshot_id`, `rotation_id`, `event_id`, `anchor_id`, and
+   `batch_id` from their domain-separated deterministic-CBOR claims with their
+   own ID field absent; a mismatch is `identity/artifact-id-mismatch`. For a
+   referenced canonical manifest,
    first require a payload with the declared digest and media type, then hash it.
    For every `agent_request` root, resolve exactly one request envelope by
    `request_id` and require the root's `request_commitment` to equal SHA-256 of
@@ -130,19 +135,24 @@ failure.
     event sequences, predecessor manifest digest, one open and one close, duration,
     sequence span/count, immutable close, late-arrival routing, anchor deadline,
     and fork rules. Two distinct manifests for one owner/epoch are a fork.
-    `previous_event_digest` is absent only on event sequence zero. A predecessor
-    manifest digest is absent only on the first epoch known for that owner; later
-    epochs require it.
+    `previous_event_digest` is absent only on event sequence zero and otherwise
+    MUST equal SHA-256 of the exact preceding epoch-event payload bstr; a mismatch
+    is `epoch/event-chain`. A predecessor manifest digest is absent only on the
+    first epoch known for that owner; later epochs require it.
 15. **Manifest index.** Recompute entry leaves and root, then require sort order,
     contiguous leaf indices, unique receipt IDs/epoch sequences, entry-to-receipt
     equality, and equality of counts and sequence spans.
-16. **Merkle batches.** Recompute domain-separated leaf/node hashes, enforce batch,
-    index, size, signer, tenant/site/epoch binding and path length, then compare the
-    root. A successful result is recorded only as membership.
+16. **Merkle batches.** Recompute domain-separated leaf/node hashes with
+    `batch_id` excluded from the leaf preimage; enforce proof batch ID against the
+    signed batch's recomputed ID and enforce index, size, signer,
+    tenant/site/epoch leaf context, and path length, then compare the root. A
+    successful result is recorded only as membership.
 17. **Anchors.** Verify target identity and plan membership, inclusion proof,
-    optional consistency proof, manifest/epoch binding, submission deadline,
-    expected-head match/freshness, and multi-target independence declaration. An
-    anchor proves existence/order by time only.
+    optional consistency proof, manifest/epoch binding, and recompute
+    `manifest_digest` as SHA-256 of the exact epoch-manifest payload bstr under
+    `anchor/manifest-binding`; then verify submission deadline, expected-head
+    match/freshness, and multi-target independence declaration. An anchor proves
+    existence/order by time only.
 18. **Bundle ranges and coverage.** Verify each range against the signed manifest
     index root; require contiguous leaf indices and correct left/right temporal
     boundaries; evaluate the selector; require every selected entry and its closed
@@ -196,7 +206,12 @@ presentation is signed with `approver_signing`; an EP authenticated-session
 presentation is signed with `ep_signing`. A request envelope is signed with
 `agent_signing`. Delegations use `authority_signing`;
 credentials/rotations use `credential_issuing`; status snapshots use
-`status_signing`; anchors and verdicts use their correspondingly named key usage.
+`status_signing`; epoch events, epoch manifests, and Merkle batches use
+`ep_signing`, and their signing kid MUST equal `epoch_owner_kid`. A Merkle batch's
+`signer_kid` MUST also equal `epoch_owner_kid` in v0.2; the separate field is a
+seam for a future delegated-journal profile. Violations use
+`credential/usage-mismatch`. Anchors and verdicts use their correspondingly named
+key usage.
 
 Evidence presence is closed by kind. Every receipt carries time evidence.
 Inference carries provenance evidence and other kinds omit it. Action attempt,
@@ -278,6 +293,7 @@ emit a code for a different trigger. Where one input has several defects, sectio
 | `manifest/payload-missing` | A referenced canonical manifest payload is absent from the bundle. |
 | `manifest/media-type-mismatch` | A manifest reference and supplied payload have different media types. |
 | `identity/receipt-id-mismatch` | Recomputed receipt ID differs from `receipt_id`. |
+| `identity/artifact-id-mismatch` | Recomputed delegation, credential, status, rotation, epoch-event, anchor, or Merkle-batch ID differs from its declared primary ID. |
 | `identity/reuse` | One receipt ID names nonidentical envelope bytes. |
 | `identity/coordinate-equivocation` | One issuer or epoch coordinate names different receipt IDs. |
 | `identity/issuer-sequence-rollback` | Issuer sequence decreases relative to a prior committed receipt in evaluated state. |
@@ -293,7 +309,8 @@ emit a code for a different trigger. Where one input has several defects, sectio
 | `receipt/outcome-subject-mismatch` | Outcome subject is not its `observed_outcome` dispatch/attempt parent. |
 | `credential/root-not-accepted` | Credential path ends at a root not accepted for the bound tenant/site. |
 | `credential/path-invalid` | Path within its schema length is not a contiguous issuer/subject chain or contains a loop. |
-| `credential/usage-mismatch` | Credential key usage does not authorize the signed object/role. |
+| `credential/kid-key-mismatch` | SHA-256 of the credential's carried DER SubjectPublicKeyInfo differs from `subject_kid`. |
+| `credential/usage-mismatch` | Credential key usage does not authorize the signed object/role, including an epoch event, epoch manifest, or Merkle batch not signed by its `epoch_owner_kid` with `ep_signing`, or a Merkle batch whose `signer_kid` differs from `epoch_owner_kid`. |
 | `credential/algorithm-mismatch` | Credential does not pin ES256 and P-256. |
 | `credential/not-yet-valid` | Evaluation or signing time precedes credential validity. |
 | `credential/expired` | Evaluation or signing time is after credential validity. |

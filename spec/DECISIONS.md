@@ -485,6 +485,75 @@ semantics that v0.2 does not define.
 attribution from the verifier's signature. The first pulls deferred custody
 lineage into this wire gate, and the second confuses evaluation with export.
 
+## D-37 — Signed artifact primary IDs are content-derived without self-reference
+
+**Decision.** Delegation, credential, status, rotation, epoch-event, anchor, and
+Merkle-batch IDs are SHA-256 of deterministic-CBOR domain arrays containing the
+artifact claims with that ID absent. Merkle leaves exclude `batch_id`; producers
+compute leaves, then the root, then `batch_id`. Credential paths contain the
+ordered issuer chain only, excluding the subject credential; self-signed roots
+use an empty path and are accepted only through the trust store.
+
+**Why.** Content-derived bundle sort keys make ID substitution detectable. The
+leaf and credential exclusions remove the two circular preimages in the initial
+WQ-1 ruling while preserving tenant/site/epoch binding.
+
+**Alternatives considered.** Opaque artifact IDs; zero-placeholder hashing;
+including `batch_id` in its own Merkle root; including the subject credential in
+its own path. The first permits substitution, the second invents a special
+encoding rule, and the latter two are circular.
+
+## D-38 — Epoch event links hash the exact preceding payload bstr
+
+**Decision.** `previous_event_digest` is SHA-256 of the exact preceding signed
+epoch-event payload bstr.
+
+**Why.** Linking signed bytes gives one unambiguous chain target without depending
+on envelope re-encoding or reducing the link to a content ID.
+
+**Alternatives considered.** Hash the complete envelope, a decoded/re-encoded
+event, or `event_id`. Each targets different bytes and would cause verifier
+divergence.
+
+## D-39 — Anchor manifest digests pin exact signed manifest payload bytes
+
+**Decision.** An anchor record's `manifest_digest` is SHA-256 of the exact
+epoch-manifest payload bstr. `manifest_id` remains the content-derived identifier.
+
+**Why.** The digest pins exact signed bytes while the ID pins manifest content;
+both bindings are useful and intentionally distinct.
+
+**Alternatives considered.** Make both fields equal; hash the complete signed
+envelope; omit the digest. These lose either exact-payload binding or the separate
+content identity.
+
+## D-40 — The EP signs journal artifacts in v0.2
+
+**Decision.** Epoch events, epoch manifests, and Merkle batches require
+`ep_signing`, and the signing kid equals `epoch_owner_kid`. A Merkle batch's
+`signer_kid` also equals `epoch_owner_kid`; the extra field remains a future
+delegated-journal seam.
+
+**Why.** Journal ownership and signing authority must be closed in the base
+profile rather than inferred by implementations.
+
+**Alternatives considered.** A separate journal signer now; allow any service
+credential; remove `signer_kid`. The first two introduce an unruled delegation
+model, while removal discards an intentional future-version seam.
+
+## D-41 — Credentials carry their verification SPKI
+
+**Decision.** Every credential carries DER SubjectPublicKeyInfo in `public_key`.
+Verifiers require `SHA-256(public_key) == subject_kid` and use that key for
+signature verification.
+
+**Why.** A carried credential must supply the public key for fully offline bundle
+verification; the kid-to-key self-check prevents substitution.
+
+**Alternatives considered.** Require an external key registry; carry raw SEC1
+points; carry JWK. The registry violates the offline premise, and alternate key
+encodings add unnecessary wire choices beside the already-defined SPKI kid.
+
 ## Gate-1 questions requiring an explicit disposition
 
 1. **Protected labels:** approve provisional `-70000..-70006`, switch to

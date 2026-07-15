@@ -198,15 +198,15 @@ const CREDENTIAL_SPECS: readonly [TestKeyName, string, string, CredentialFixture
 ];
 
 function buildCredentials(state: FixtureSet): Map<TestKeyName, CredentialFixture> {
-  const rootId = deterministicId("credential:credential_issuing");
   const result = new Map<TestKeyName, CredentialFixture>();
+  let rootId: Uint8Array | undefined;
   for (const [key, principalType, role, profile] of CREDENTIAL_SPECS) {
-    const id = deterministicId(`credential:${key}`);
     const isRoot = key === "credential_issuing";
-    const payload: Obj = {
+    if (!isRoot && rootId === undefined) throw new Error("credential root must be built first");
+    const fields: Obj = {
       v: 2,
-      credential_id: id,
       subject_kid: TEST_KEYS[key].kid,
+      public_key: TEST_KEYS[key].spki,
       issuer_kid: TEST_KEYS.credential_issuing.kid,
       principal_type: principalType,
       principal_role: role,
@@ -218,13 +218,20 @@ function buildCredentials(state: FixtureSet): Map<TestKeyName, CredentialFixture
       curve: "P-256",
       key_usage: key === "agent_signing_successor" ? "agent_signing" : key,
       trust_anchor_id: deterministicId("trust-anchor:credential-root"),
-      path: isRoot ? [rootId] : [id, rootId],
+      path: isRoot ? [] : [rootId!],
       profile_limits: profileLimits(profile),
     };
+    const id = domainHash("AAR-CREDENTIAL-ID-v1", fields);
+    if (isRoot) rootId = id;
+    const payload: Obj = { credential_id: id, ...fields };
     const envelope = signDetached(payload, CONTENT_TYPES.credential, "credential_issuing");
     const fixture = { id, key, profile, envelope };
     result.set(key, fixture);
     addSignedKat(state, `credential-${key.replaceAll("_", "-")}-${profile.toLowerCase()}`, "credential-envelope", envelope, { credential_id: id }, [key]);
+    state.derived.push(
+      { name: `credential-${key}:credential_id`, expected: id, recompute: () => domainHash("AAR-CREDENTIAL-ID-v1", fields) },
+      { name: `credential-${key}:subject_kid`, expected: TEST_KEYS[key].kid, recompute: () => hash(TEST_KEYS[key].spki) },
+    );
   }
   return result;
 }
@@ -332,10 +339,8 @@ export function buildFixtures(): FixtureSet {
   const state: FixtureSet = { kats: [], signatures: [], derived: [], proofs: [] };
   const credentials = buildCredentials(state);
 
-  const statusId = deterministicId("status:ep-good:1");
-  const statusPayload: Obj = {
+  const statusFields: Obj = {
     v: 2,
-    snapshot_id: statusId,
     credential_id: credentials.get("ep_signing")!.id,
     issuer_kid: TEST_KEYS.status_signing.kid,
     produced_at: BASE_TIME - 30,
@@ -348,13 +353,14 @@ export function buildFixtures(): FixtureSet {
     tenant_id: TENANT,
     site_id: SITE,
   };
+  const statusId = domainHash("AAR-STATUS-ID-v1", statusFields);
+  const statusPayload: Obj = { snapshot_id: statusId, ...statusFields };
   const status = signDetached(statusPayload, CONTENT_TYPES.status, "status_signing");
   addSignedKat(state, "status-snapshot-good", "status-snapshot-envelope", status, { snapshot_id: statusId });
+  state.derived.push({ name: "status:snapshot_id", expected: statusId, recompute: () => domainHash("AAR-STATUS-ID-v1", statusFields) });
 
-  const rotationId = deterministicId("rotation:agent:1");
-  const rotationPayload: Obj = {
+  const rotationFields: Obj = {
     v: 2,
-    rotation_id: rotationId,
     predecessor_credential_id: credentials.get("agent_signing")!.id,
     successor_credential_id: credentials.get("agent_signing_successor")!.id,
     predecessor_kid: TEST_KEYS.agent_signing.kid,
@@ -364,8 +370,11 @@ export function buildFixtures(): FixtureSet {
     site_id: SITE,
     continuity_sequence: 1,
   };
+  const rotationId = domainHash("AAR-ROTATION-ID-v1", rotationFields);
+  const rotationPayload: Obj = { rotation_id: rotationId, ...rotationFields };
   const rotation = signDetached(rotationPayload, CONTENT_TYPES.rotation, "credential_issuing");
   addSignedKat(state, "rotation-agent-successor", "rotation-continuity-envelope", rotation, { rotation_id: rotationId }, ["agent_signing", "agent_signing_successor"]);
+  state.derived.push({ name: "rotation:rotation_id", expected: rotationId, recompute: () => domainHash("AAR-ROTATION-ID-v1", rotationFields) });
 
   const requestId = id16("request:camera-17-view");
   const requestClaims: Obj = {
@@ -390,10 +399,8 @@ export function buildFixtures(): FixtureSet {
   addSignedKat(state, "request-envelope-agent", "request-envelope", request, { request_id: requestId, request_commitment: requestCommitment });
   state.derived.push({ name: "request:request_commitment", expected: requestCommitment, recompute: () => hash(request.payloadBytes) });
 
-  const delegationId = deterministicId("delegation:camera-17-view");
-  const delegationClaims: Obj = {
+  const delegationFields: Obj = {
     v: 2,
-    delegation_id: delegationId,
     issuer_credential_id: credentials.get("authority_signing")!.id,
     subject_credential_id: credentials.get("ep_signing")!.id,
     tenant_id: TENANT,
@@ -411,8 +418,11 @@ export function buildFixtures(): FixtureSet {
     invocation_id: INVOCATION,
     parent_delegations: [],
   };
+  const delegationId = domainHash("AAR-DELEGATION-ID-v1", delegationFields);
+  const delegationClaims: Obj = { delegation_id: delegationId, ...delegationFields };
   const delegation = signDetached(delegationClaims, CONTENT_TYPES.delegation, "authority_signing");
   addSignedKat(state, "delegation-camera-view", "delegation-envelope", delegation, { delegation_id: delegationId }, ["ep_signing"]);
+  state.derived.push({ name: "delegation:delegation_id", expected: delegationId, recompute: () => domainHash("AAR-DELEGATION-ID-v1", delegationFields) });
 
   const presentedArtifact: Obj = {
     ordinal: 0,
@@ -694,10 +704,9 @@ export function buildFixtures(): FixtureSet {
   let previousPayload: Uint8Array | undefined;
   for (let index = 0; index < eventBodies.length; index += 1) {
     const [event, body] = eventBodies[index]!;
-    const eventId = deterministicId(`epoch-event:${event}`);
-    const payload: Obj = {
+    const previousEventDigest = previousPayload === undefined ? undefined : hash(previousPayload);
+    const fields: Obj = {
       v: 2,
-      event_id: eventId,
       tenant_id: TENANT,
       site_id: SITE,
       epoch_owner_kid: TEST_KEYS.ep_signing.kid,
@@ -707,10 +716,13 @@ export function buildFixtures(): FixtureSet {
       event,
       body,
     };
-    if (previousPayload !== undefined) payload.previous_event_digest = hash(previousPayload);
+    if (previousEventDigest !== undefined) fields.previous_event_digest = previousEventDigest;
+    const eventId = domainHash("AAR-EPOCH-EVENT-ID-v1", fields);
+    const payload: Obj = { event_id: eventId, ...fields };
     const signed = signDetached(payload, CONTENT_TYPES.epochEvent, "ep_signing");
     epochEvents.push(signed);
-    addSignedKat(state, `epoch-event-${event.replaceAll("_", "-")}`, "epoch-event-envelope", signed, { event_id: eventId, ...(previousPayload === undefined ? {} : { previous_event_digest: hash(previousPayload) }) });
+    addSignedKat(state, `epoch-event-${event.replaceAll("_", "-")}`, "epoch-event-envelope", signed, { event_id: eventId, ...(previousEventDigest === undefined ? {} : { previous_event_digest: previousEventDigest }) });
+    state.derived.push({ name: `epoch-event-${event}:event_id`, expected: eventId, recompute: () => domainHash("AAR-EPOCH-EVENT-ID-v1", fields) });
     previousPayload = signed.payloadBytes;
   }
 
@@ -727,10 +739,8 @@ export function buildFixtures(): FixtureSet {
   const oldRoot = rfc6962RootFromDigests(rfcLeaves.slice(0, 2));
   const inclusionSiblings = rfc6962InclusionProof(rfcLeaves, 0);
   const consistencyPath = rfc6962PowerOfTwoConsistencyProof(rfcLeaves, 2);
-  const anchorId = deterministicId("anchor-record:manifest-42");
-  const anchorPayload: Obj = {
+  const anchorFields: Obj = {
     v: 2,
-    anchor_id: anchorId,
     target: anchorTarget,
     tenant_id: TENANT,
     site_id: SITE,
@@ -747,9 +757,12 @@ export function buildFixtures(): FixtureSet {
     head: { observed_at: BASE_TIME + 182, tree_size: 4, root: anchorRoot, max_age_s: 86400 },
     claim: "existence_and_order_by_time_only",
   };
+  const anchorId = domainHash("AAR-ANCHOR-ID-v1", anchorFields);
+  const anchorPayload: Obj = { anchor_id: anchorId, ...anchorFields };
   const anchor = signDetached(anchorPayload, CONTENT_TYPES.anchor, "anchor_signing");
   addSignedKat(state, "anchor-record-rfc6962", "anchor-record-envelope", anchor, { anchor_id: anchorId, manifest_id: manifestId, manifest_digest: manifestDigest, anchor_root: anchorRoot });
   state.derived.push(
+    { name: "anchor:anchor_id", expected: anchorId, recompute: () => domainHash("AAR-ANCHOR-ID-v1", anchorFields) },
     { name: "anchor:manifest_digest", expected: manifestDigest, recompute: () => hash(manifest.payloadBytes) },
     { name: "anchor:leaf_digest", expected: rfcLeaves[0]!, recompute: () => rfc6962Leaf(encodeCbor(["AAR-ANCHOR-LEAF-v1", anchorLeafObject])) },
     { name: "anchor:root", expected: anchorRoot, recompute: () => rfc6962RootFromDigests(rfcLeaves) },
@@ -759,9 +772,7 @@ export function buildFixtures(): FixtureSet {
     { name: "anchor:rfc6962-consistency", verify: () => verifyPowerOfTwoConsistency(oldRoot, anchorRoot, consistencyPath) },
   );
 
-  const batchId = deterministicId("merkle-batch:epoch-42:1");
   const merkleLeaves: Obj[] = receipts.slice(0, 3).map((receipt, leafIndex) => ({
-    batch_id: batchId,
     tree_size: 3,
     leaf_index: leafIndex,
     tenant_id: TENANT,
@@ -771,9 +782,8 @@ export function buildFixtures(): FixtureSet {
   }));
   const merkleLeafHashes = merkleLeaves.map((leaf) => domainHash("AAR-MERKLE-LEAF-v1", leaf));
   const batchRoot = promotedRoot(merkleLeafHashes, "AAR-MERKLE-NODE-v1");
-  const batchPayload: Obj = {
+  const batchFields: Obj = {
     v: 2,
-    batch_id: batchId,
     tenant_id: TENANT,
     site_id: SITE,
     epoch_owner_kid: TEST_KEYS.ep_signing.kid,
@@ -784,6 +794,8 @@ export function buildFixtures(): FixtureSet {
     created_at: BASE_TIME + 130,
     claim: "membership_only",
   };
+  const batchId = domainHash("AAR-BATCH-ID-v1", batchFields);
+  const batchPayload: Obj = { batch_id: batchId, ...batchFields };
   const batch = signDetached(batchPayload, CONTENT_TYPES.merkleBatch, "ep_signing");
   addSignedKat(state, "merkle-batch-membership-only", "merkle-batch-envelope", batch, { batch_id: batchId, root: batchRoot });
   const membershipProof: Obj = {
@@ -794,7 +806,10 @@ export function buildFixtures(): FixtureSet {
     siblings: promotedProofWithDomain(merkleLeafHashes, 1, "AAR-MERKLE-NODE-v1"),
   };
   state.kats.push(kat("merkle-membership-proof", "merkle-membership-proof", encodeCbor(membershipProof), null, [], { batch_id: batchId, leaf_hash: merkleLeafHashes[1]!, root: batchRoot }));
-  state.derived.push({ name: "merkle:batch_root", expected: batchRoot, recompute: () => promotedRoot(merkleLeaves.map((leaf) => domainHash("AAR-MERKLE-LEAF-v1", leaf)), "AAR-MERKLE-NODE-v1") });
+  state.derived.push(
+    { name: "merkle:batch_id", expected: batchId, recompute: () => domainHash("AAR-BATCH-ID-v1", batchFields) },
+    { name: "merkle:batch_root", expected: batchRoot, recompute: () => promotedRoot(merkleLeaves.map((leaf) => domainHash("AAR-MERKLE-LEAF-v1", leaf)), "AAR-MERKLE-NODE-v1") },
+  );
   state.proofs.push({
     name: "merkle:membership",
     verify: () => verifyPromotedProof(merkleLeafHashes[1]!, 1, 3, membershipProof.siblings as Uint8Array[], "AAR-MERKLE-NODE-v1", batchRoot),

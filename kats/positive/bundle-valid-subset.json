@@ -13,11 +13,11 @@
     "status_signing": "e3615fff37474c561c068d1f56f5ec3751cd7eb2ea7046c016a142c932865496"
   },
   "computed_ids": {
-    "bundle_digest": "e60ba50853cb79064204eb88f969c2ef0305ec03c37630d984d8e3433f599e68",
+    "bundle_digest": "bc7a935d591bc0c798528dd759331c31850adb9d7f50955275ecba8ac889d918",
     "selector_commitment": "7dd797d8e3ba67ced258e1ee2343d414b833426c0159df7b0b47d7b18d2f0a2f",
     "trust_store_digest": "7fe6b4bc2bc11ff2896bfea86186c6d0416b9f9a1244a71881fc5f1dce28dbcf",
-    "manifest_id": "b7d8f1ee144496c8384e41ec1e504d7144f8bf2f4841b0e9fd61e411abe34e2e",
-    "anchor_id": "3270146f86d9ca4e7d42e132549d570da5c9b7b08dafd7e7c8ff4f84f85c1d2c",
-    "batch_id": "c42d16ecb0dcf8ec7ada9b6be4dc787bb58542bac109f5358b9d6dd08a8a3bda"
+    "manifest_id": "c74687013680fc424b2844248edd56a1f84377d83e2de3d9eaddcf5b52e31eb0",
+    "anchor_id": "75544fbb0b85d616cef13f2d495c00c9f121558fe2044540cf56c389f54c71de",
+    "batch_id": "65ff7ee01887291f2bbcfbaa010bb9e0726f05b3be99b151c74cc208f8bde0c5"
   }
 }

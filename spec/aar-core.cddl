@@ -593,6 +593,10 @@ delegation-claims = {
   parent_delegations: optional-digest-ids,
 }
 
+; delegation_id = SHA-256(deterministic-CBOR([
+;   "AAR-DELEGATION-ID-v1", delegation-claims with delegation_id absent
+; ])).
+
 delegation-scope = {
   actions: action-names,
   targets: ids16,
@@ -614,6 +618,7 @@ credential-profile-object = {
   v: 2,
   credential_id: digest32,
   subject_kid: kid,
+  public_key: bstr .size (1..256),
   issuer_kid: kid,
   principal_type: principal-type,
   principal_role: principal-role,
@@ -629,6 +634,11 @@ credential-profile-object = {
   profile_limits: profile-limits,
 }
 
+; public_key is DER SubjectPublicKeyInfo and subject_kid = SHA-256(public_key).
+; credential_id = SHA-256(deterministic-CBOR([
+;   "AAR-CREDENTIAL-ID-v1", credential-profile-object with credential_id absent
+; ])).
+
 key-usage =
     "agent_signing"
   / "ep_signing"
@@ -640,7 +650,11 @@ key-usage =
   / "credential_issuing"
   / "status_signing"
 
-credential-path = [ 1*8 digest32 ]
+; The path is the ordered issuer chain from the immediate issuer to the root and
+; excludes the subject credential itself.  A credential issued directly by a
+; trust root has one entry.  A self-signed root has an empty path and is accepted
+; only through the trust store.
+credential-path = [ 0*8 digest32 ]
 
 ; Numeric maxima are wire constants, not policy placeholders.  A shorter value
 ; may be issued, never a longer one.  Base-tier anchor cadence is at most 24 h.
@@ -692,6 +706,10 @@ status-snapshot = {
   site_id: id16,
 }
 
+; snapshot_id = SHA-256(deterministic-CBOR([
+;   "AAR-STATUS-ID-v1", status-snapshot with snapshot_id absent
+; ])).
+
 rotation-continuity-envelope = [
   payload: bstr .cbor rotation-continuity,
   signature: bstr .cbor artifact-cose-sign1,
@@ -709,6 +727,10 @@ rotation-continuity = {
   site_id: id16,
   continuity_sequence: sequence,
 }
+
+; rotation_id = SHA-256(deterministic-CBOR([
+;   "AAR-ROTATION-ID-v1", rotation-continuity with rotation_id absent
+; ])).
 
 ; ---------------------------------------------------------------------------
 ; W-6 -- epoch state machine and objective manifest index
@@ -731,6 +753,11 @@ epoch-event = {
   event: "open" / "close" / "anchor_submitted" / "fork_declared",
   body: epoch-event-body,
 }
+
+; event_id = SHA-256(deterministic-CBOR([
+;   "AAR-EPOCH-EVENT-ID-v1", epoch-event with event_id absent
+; ])).  previous_event_digest is SHA-256 of the exact preceding epoch-event
+; payload bstr (the signed bytes).
 
 epoch-event-body = epoch-open / epoch-close / epoch-anchor-submitted / epoch-fork
 
@@ -893,6 +920,11 @@ anchor-record = {
   claim: "existence_and_order_by_time_only",
 }
 
+; anchor_id = SHA-256(deterministic-CBOR([
+;   "AAR-ANCHOR-ID-v1", anchor-record with anchor_id absent
+; ])).  manifest_digest is SHA-256 of the exact epoch-manifest payload bstr.
+; It pins the exact signed bytes, while manifest_id pins manifest content.
+
 anchor-leaf = {
   tenant_id: id16,
   site_id: id16,
@@ -954,8 +986,11 @@ merkle-batch = {
   claim: "membership_only",
 }
 
+; batch_id = SHA-256(deterministic-CBOR([
+;   "AAR-BATCH-ID-v1", merkle-batch with batch_id absent
+; ])).  Compute leaves first, then root, then batch_id.
+
 merkle-leaf = {
-  batch_id: digest32,
   tree_size: batch-tree-size,
   leaf_index: uint .le 1048575,
   tenant_id: id16,
@@ -979,8 +1014,11 @@ merkle-membership-proof = {
 ;   "AAR-MERKLE-NODE-v1", left_digest, right_digest
 ; ])).
 ; An odd unpaired node is promoted unchanged.  Empty trees are forbidden.
-; A proof establishes membership in exactly one signed batch and no census or
-; completeness property.
+; batch_id is excluded from the leaf-hash preimage.  The proof batch_id must
+; equal the signed batch's recomputed batch_id, and all leaf context fields must
+; equal the batch.  Same-root, same-epoch proof portability between batches
+; signed by the same EP is accepted.  A proof establishes membership only and
+; no census or completeness property.
 
 ; ---------------------------------------------------------------------------
 ; W-10 -- bundles, objective selectors, range proofs, and trust inputs
