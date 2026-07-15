@@ -1,7 +1,7 @@
 import { CborScalar, CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
 import { deterministicId, domainHash, hash, id16, P256_HALF_ORDER, signDetached } from "./crypto";
 import { buildFixtures } from "./fixtures";
-import { promotedProofWithDomain, rfc6962Leaf } from "./merkle";
+import { promotedProofWithDomain, promotedRoot, rfc6962Leaf } from "./merkle";
 import { TEST_KEYS, TestKeyName } from "./testkeys";
 
 type Obj = Record<string, CborValue>;
@@ -228,6 +228,18 @@ function clearJournal(bundle: Obj): void {
   value.merkle_batches = [];
   value.merkle_proofs = [];
   bundle.ranges = [];
+}
+
+function addOpaquePayload(bundle: Obj, label: string): Uint8Array {
+  const canonicalBytes = encodeCbor({ artifact: label, format_version: 1 });
+  const digest = hash(canonicalBytes);
+  (artifacts(bundle).manifest_payloads as Obj[]).push({
+    digest,
+    media_type: "application/aar-evidence-artifact+cbor",
+    canonical_bytes: canonicalBytes,
+  });
+  sortArtifacts(bundle, "manifest_payloads");
+  return digest;
 }
 
 function receiptList(bundle: Obj): CborValue[] {
@@ -516,7 +528,7 @@ export function buildNegativeFixtures(): NegativeFixture[] {
   add(bundleFixture("request/commitment-mismatch", "Replace an agent root request commitment and re-sign/re-identify the receipt.", (bundle) => mutateReceiptWhere(bundle, (value) => object(value.root) && value.root.kind === "agent_request", (value) => { (value.root as Obj).request_commitment = deterministicId("wrong-request-commitment"); })));
   add(bundleFixture("bundle/selector-commitment", "Replace the fixed-size selector commitment with a different digest.", (bundle) => { bundle.selector_commitment = deterministicId("wrong-selector-commitment"); }));
   add(bundleFixture("bundle/dependency-missing", "Remove the request envelope required by an agent_request root.", (bundle) => { artifacts(bundle).requests = []; }));
-  add(bundleFixture("manifest/payload-missing", "Remove the canonical payload matching one referenced manifest digest.", (bundle) => { const inference = (artifacts(bundle).receipts as CborValue[]).map(payload).find((value) => value.kind === "inference")!; const digest = ((inference.body as Obj).prompt_manifest as Obj).digest as Uint8Array; artifacts(bundle).manifest_payloads = (artifacts(bundle).manifest_payloads as Obj[]).filter((value) => !equalBytes(value.digest as Uint8Array, digest)); }));
+  add(bundleFixture("manifest/payload-missing", "Declare boot-bound time with a boot artifact ID whose canonical payload is absent.", (bundle) => { clearJournal(bundle); keepReceipts(bundle, (value) => value.kind === "inference" && object(value.root)); mutateReceiptWhere(bundle, () => true, (value) => { const time = (value.evidence as Obj).time as Obj; time.class = "boot_bound"; time.boot_attestation_id = deterministicId("missing-attestation:boot"); }); }));
   add(bundleFixture("manifest/media-type-mismatch", "Change a supplied canonical payload media type while preserving its digest.", (bundle) => { (artifacts(bundle).manifest_payloads as Obj[])[0]!.media_type = "application/octet-stream"; }));
 
   add(bundleFixture("identity/receipt-id-mismatch", "Replace a receipt_id and re-sign without recomputing it.", (bundle) => {
@@ -668,6 +680,22 @@ export function buildNegativeFixtures(): NegativeFixture[] {
   indexFixture("manifest/index-root-mismatch", "Replace the signed objective index root.", (manifest) => { (manifest.receipt_index as Obj).root = deterministicId("wrong-index-root"); });
 
   add(bundleFixture("merkle/batch-binding", "Change the proof leaf epoch away from its signed batch.", (bundle) => { ((((artifacts(bundle).merkle_proofs as Obj[])[0]!).leaf as Obj).epoch_id) = 43; }));
+  add(bundleFixture("merkle/duplicate-leaf", "Prove the same index-less content at two different indices in one signed batch.", (bundle) => {
+    const batchEnvelope = (artifacts(bundle).merkle_batches as CborValue[])[0]!;
+    const batch = clone(payload(batchEnvelope));
+    const originalLeaf = clone(((artifacts(bundle).merkle_proofs as Obj[])[0]!.leaf as Obj));
+    const leaves: Obj[] = [0, 1].map((leafIndex) => ({ ...originalLeaf, tree_size: 2, leaf_index: leafIndex }));
+    const leafHashes = leaves.map((leaf) => domainHash("AAR-MERKLE-LEAF-v1", leaf));
+    batch.tree_size = 2;
+    batch.root = promotedRoot(leafHashes, "AAR-MERKLE-NODE-v1");
+    batch.batch_id = domainHash("AAR-BATCH-ID-v1", Object.fromEntries(Object.entries(batch).filter(([key]) => key !== "batch_id")));
+    artifacts(bundle).merkle_batches = [resign(batchEnvelope, batch)];
+    artifacts(bundle).merkle_proofs = leaves.map((leaf, leafIndex) => ({
+      batch_id: batch.batch_id!, tree_size: 2, leaf_index: leafIndex, leaf,
+      siblings: promotedProofWithDomain(leafHashes, leafIndex, "AAR-MERKLE-NODE-v1"),
+    }));
+    sortArtifacts(bundle, "merkle_batches"); sortArtifacts(bundle, "merkle_proofs");
+  }));
   add(bundleFixture("merkle/path-length", "Remove required siblings from a nontrivial batch proof.", (bundle) => { ((artifacts(bundle).merkle_proofs as Obj[])[0]!).siblings = []; }));
   add(bundleFixture("merkle/root-mismatch", "Flip a bit in a correctly sized Merkle sibling path.", (bundle) => { const proof = (artifacts(bundle).merkle_proofs as Obj[])[0]!; const siblings = proof.siblings as Uint8Array[]; const changed = new Uint8Array(siblings[0]!); changed[0] = changed[0]! ^ 1; siblings[0] = changed; }));
 
@@ -702,7 +730,7 @@ export function buildNegativeFixtures(): NegativeFixture[] {
   add(bundleFixture("evidence/time-class-unsatisfied", "Declare boot_bound time without a boot attestation ID.", (bundle) => { clearJournal(bundle); keepReceipts(bundle, (value) => value.kind === "inference" && object(value.root)); mutateReceiptWhere(bundle, () => true, (value) => { ((value.evidence as Obj).time as Obj).class = "boot_bound"; }); }));
   add(bundleFixture("evidence/provenance-class-unsatisfied", "Declare proxy_captured provenance without a capture attestation ID.", (bundle) => { clearJournal(bundle); keepReceipts(bundle, (value) => value.kind === "inference" && object(value.root)); mutateReceiptWhere(bundle, () => true, (value) => { ((value.evidence as Obj).provenance as Obj).class = "proxy_captured"; }); }));
   add(bundleFixture("evidence/outcome-class-unsatisfied", "Declare independently_sensed without a qualifying predicate.", (bundle) => { clearJournal(bundle); mutateReceiptWhere(bundle, (value) => value.kind === "outcome_observation", (value) => { ((value.evidence as Obj).outcome as Obj).level = "independently_sensed"; }); }));
-  add(bundleFixture("evidence/observer-not-independent", "Declare independently_sensed using the same failure domain as source observations.", (bundle) => { clearJournal(bundle); mutateReceiptWhere(bundle, (value) => value.kind === "outcome_observation", (value) => { const outcome = (value.evidence as Obj).outcome as Obj; outcome.level = "independently_sensed"; outcome.qualifying_predicate_id = deterministicId("qualification:independent"); }); }));
+  add(bundleFixture("evidence/observer-not-independent", "Declare independently_sensed using the same failure domain as source observations.", (bundle) => { clearJournal(bundle); const predicateId = addOpaquePayload(bundle, "qualification:independent"); mutateReceiptWhere(bundle, (value) => value.kind === "outcome_observation", (value) => { const outcome = (value.evidence as Obj).outcome as Obj; outcome.level = "independently_sensed"; outcome.qualifying_predicate_id = predicateId; }); }));
 
   result.sort((a, b) => a.filename.localeCompare(b.filename));
   return result;
@@ -722,16 +750,27 @@ export function buildClassBoundaryFixtures(): ClassBoundaryFixture[] {
   };
 
   addBoundary("time-asserted-declared-boot-bound", "asserted_to_boot_bound", "reject", "evidence/time-class-unsatisfied", (bundle) => inferenceOnly(bundle, (receipt) => { ((receipt.evidence as Obj).time as Obj).class = "boot_bound"; }));
-  addBoundary("time-boot-bound-satisfied", "asserted_to_boot_bound", "conformant", "boot_bound", (bundle) => inferenceOnly(bundle, (receipt) => { const time = (receipt.evidence as Obj).time as Obj; time.class = "boot_bound"; time.boot_attestation_id = deterministicId("attestation:boot"); }));
-  addBoundary("time-boot-bound-declared-externally-anchored", "boot_bound_to_externally_anchored", "reject", "evidence/time-class-unsatisfied", (bundle) => inferenceOnly(bundle, (receipt) => { const time = (receipt.evidence as Obj).time as Obj; time.class = "externally_anchored"; time.boot_attestation_id = deterministicId("attestation:boot"); }));
+  addBoundary("time-boot-bound-satisfied", "asserted_to_boot_bound", "conformant", "boot_bound", (bundle) => { const bootId = addOpaquePayload(bundle, "attestation:boot"); inferenceOnly(bundle, (receipt) => { const time = (receipt.evidence as Obj).time as Obj; time.class = "boot_bound"; time.boot_attestation_id = bootId; }); });
+  addBoundary("time-boot-bound-declared-externally-anchored", "boot_bound_to_externally_anchored", "reject", "evidence/time-class-unsatisfied", (bundle) => { const bootId = addOpaquePayload(bundle, "attestation:boot"); inferenceOnly(bundle, (receipt) => { const time = (receipt.evidence as Obj).time as Obj; time.class = "externally_anchored"; time.boot_attestation_id = bootId; }); });
+  addBoundary("time-externally-anchored-satisfied", "boot_bound_to_externally_anchored", "conformant", "externally_anchored", (bundle) => {
+    const bootId = addOpaquePayload(bundle, "attestation:boot");
+    const priorAnchor = payload((artifacts(bundle).anchors as CborValue[])[0]!);
+    keepReceipts(bundle, (value) => value.kind === "inference" && object(value.root));
+    mutateReceiptWhere(bundle, () => true, (receipt) => {
+      const binding = receipt.binding as Obj; const emission = receipt.emission as Obj; const time = (receipt.evidence as Obj).time as Obj;
+      binding.epoch_id = (priorAnchor.epoch_id as number) + 1;
+      emission.committed_at = (priorAnchor.accepted_at as number) + 1;
+      time.class = "externally_anchored"; time.wall_time = emission.committed_at!; time.boot_attestation_id = bootId; time.anchor_id = priorAnchor.anchor_id!;
+    });
+  });
 
   addBoundary("provenance-self-asserted-declared-proxy-captured", "self_asserted_to_proxy_captured", "reject", "evidence/provenance-class-unsatisfied", (bundle) => inferenceOnly(bundle, (receipt) => { ((receipt.evidence as Obj).provenance as Obj).class = "proxy_captured"; }));
-  addBoundary("provenance-proxy-captured-satisfied", "self_asserted_to_proxy_captured", "conformant", "proxy_captured", (bundle) => inferenceOnly(bundle, (receipt) => { const provenance = (receipt.evidence as Obj).provenance as Obj; provenance.class = "proxy_captured"; provenance.capture_attestation_id = deterministicId("attestation:capture"); }));
-  addBoundary("provenance-proxy-captured-declared-provider-attested", "proxy_captured_to_provider_attested", "reject", "evidence/provenance-class-unsatisfied", (bundle) => inferenceOnly(bundle, (receipt) => { const provenance = (receipt.evidence as Obj).provenance as Obj; provenance.class = "provider_attested"; provenance.capture_attestation_id = deterministicId("attestation:capture"); }));
-  addBoundary("provenance-provider-attested-satisfied", "proxy_captured_to_provider_attested", "conformant", "provider_attested", (bundle) => inferenceOnly(bundle, (receipt) => { const provenance = (receipt.evidence as Obj).provenance as Obj; provenance.class = "provider_attested"; provenance.capture_attestation_id = deterministicId("attestation:capture"); provenance.provider_attestation_id = deterministicId("attestation:provider"); }));
+  addBoundary("provenance-proxy-captured-satisfied", "self_asserted_to_proxy_captured", "conformant", "proxy_captured", (bundle) => { const captureId = addOpaquePayload(bundle, "attestation:capture"); inferenceOnly(bundle, (receipt) => { const provenance = (receipt.evidence as Obj).provenance as Obj; provenance.class = "proxy_captured"; provenance.capture_attestation_id = captureId; }); });
+  addBoundary("provenance-proxy-captured-declared-provider-attested", "proxy_captured_to_provider_attested", "reject", "evidence/provenance-class-unsatisfied", (bundle) => { const captureId = addOpaquePayload(bundle, "attestation:capture"); inferenceOnly(bundle, (receipt) => { const provenance = (receipt.evidence as Obj).provenance as Obj; provenance.class = "provider_attested"; provenance.capture_attestation_id = captureId; }); });
+  addBoundary("provenance-provider-attested-satisfied", "proxy_captured_to_provider_attested", "conformant", "provider_attested", (bundle) => { const captureId = addOpaquePayload(bundle, "attestation:capture"); const providerId = addOpaquePayload(bundle, "attestation:provider"); inferenceOnly(bundle, (receipt) => { const provenance = (receipt.evidence as Obj).provenance as Obj; provenance.class = "provider_attested"; provenance.capture_attestation_id = captureId; provenance.provider_attestation_id = providerId; }); });
 
   addBoundary("outcome-device-acknowledged-declared-independently-sensed", "device_acknowledged_to_independently_sensed", "reject", "evidence/outcome-class-unsatisfied", (bundle) => { clearJournal(bundle); mutateReceiptWhere(bundle, (value) => value.kind === "outcome_observation", (receipt) => { ((receipt.evidence as Obj).outcome as Obj).level = "independently_sensed"; }); });
-  addBoundary("outcome-independently-sensed-satisfied", "device_acknowledged_to_independently_sensed", "conformant", "independently_sensed", (bundle) => { clearJournal(bundle); mutateReceiptWhere(bundle, (value) => value.kind === "outcome_observation", (receipt) => { const outcome = (receipt.evidence as Obj).outcome as Obj; outcome.level = "independently_sensed"; outcome.qualifying_predicate_id = deterministicId("qualification:independent"); (((receipt.body as Obj).observer as Obj).failure_domain_id) = id16("failure-domain:independent-observer"); }); });
+  addBoundary("outcome-independently-sensed-satisfied", "device_acknowledged_to_independently_sensed", "conformant", "independently_sensed", (bundle) => { clearJournal(bundle); const predicateId = addOpaquePayload(bundle, "qualification:independent"); mutateReceiptWhere(bundle, (value) => value.kind === "outcome_observation", (receipt) => { const outcome = (receipt.evidence as Obj).outcome as Obj; outcome.level = "independently_sensed"; outcome.qualifying_predicate_id = predicateId; (((receipt.body as Obj).observer as Obj).failure_domain_id) = id16("failure-domain:independent-observer"); }); });
 
   result.sort((a, b) => a.filename.localeCompare(b.filename));
   return result;

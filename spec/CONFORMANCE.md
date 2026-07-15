@@ -28,9 +28,13 @@ the verdict's `limits_digest`.
 | Credential path length | 8 credentials |
 
 The verifier MUST enforce limits while decoding where possible and MUST NOT first
-materialize an unbounded object. A graph cycle is always rejected; it is not
-truncated to meet a depth bound. “Width” is computed after acyclicity succeeds:
-roots have rank 0, and every other node has one plus the maximum rank of its
+materialize an unbounded object. Once step 7 validates content-derived receipt
+IDs, the receipt graph is acyclic by construction: every parent ID is committed
+inside the child receipt's ID preimage, so a cycle would require a SHA-256 fixed
+point. Implementations MAY defensively bound a graph traversal to one visit per
+receipt, but that bound is non-normative and exceeding it is an internal or
+cryptographic failure, not a v0.2 conformance rejection. “Width” is computed by
+assigning roots rank 0 and every other node one plus the maximum rank of its
 parents.
 
 ## 2. One normative validation order
@@ -123,7 +127,7 @@ failure.
     same one-time coordinate is rejected.
 12. **Referential closure and graph.** Resolve every parent, require parent metadata
     to equal the resolved parent, enforce the edge matrix and root rules below,
-    enforce cross-epoch rules, reject cycles, then enforce depth and width.
+    enforce cross-epoch rules, then enforce depth and width.
 13. **Authorization dominance.** For every dispatch, resolve its single
     `attempted_as` action attempt. The attempt MUST have exactly one
     `authorized_by` authorization ancestor, and that authorization MUST carry
@@ -145,8 +149,12 @@ failure.
 16. **Merkle batches.** Recompute domain-separated leaf/node hashes with
     `batch_id` excluded from the leaf preimage; enforce proof batch ID against the
     signed batch's recomputed ID and enforce index, size, signer,
-    tenant/site/epoch leaf context, and path length, then compare the root. A
-    successful result is recorded only as membership.
+    tenant/site/epoch leaf context, and path length, then compare the root. Among
+    successfully proven leaves carried in this bundle for one signed batch,
+    reject two leaves at different indices that share
+    `(tenant_id, site_id, epoch_id, item_digest)`. The verifier cannot make that
+    duplicate claim about unproven leaves. A successful result is recorded only
+    as membership.
 17. **Anchors.** Verify target identity and plan membership, inclusion proof,
     optional consistency proof, manifest/epoch binding, and recompute
     `manifest_digest` as SHA-256 of the exact epoch-manifest payload bstr under
@@ -161,13 +169,24 @@ failure.
     independently committed census or future R-15 reconciliation result.
     `first_leaf_index` is present iff `entries` is nonempty; an empty temporal
     slice requires valid neighboring boundaries (except at the index ends).
-19. **Evidence-class qualification.** Recompute the maximum class supported by
-    artifacts. `boot_bound` requires a boot attestation; `externally_anchored`
-    requires a fresh verified anchor; `proxy_captured` requires a capture
-    attestation; `provider_attested` requires a provider signature;
-    `independently_sensed` requires the named qualification predicate and a
-    distinct accepted observer failure domain. Contradicted and unknown remain
-    honest terminal labels, never successful independent sensing.
+19. **Evidence-class qualification.** Recompute the maximum class declared and
+    structurally supported by committed artifacts. Each
+    `boot_attestation_id`, `capture_attestation_id`,
+    `provider_attestation_id`, and `qualifying_predicate_id` required by the
+    declared class MUST resolve to a bundle `canonical-manifest-payload` whose
+    `digest` equals the ID; absence is `manifest/payload-missing`. `boot_bound`
+    requires the boot artifact. `externally_anchored` additionally requires that
+    `anchor_id` resolve to a verified anchor for an earlier epoch under the same
+    owner, tenant, and site, with `anchor.accepted_at <= receipt.committed_at`.
+    That prior anchor is the lower bound; a separately verified anchor for the
+    receipt's own epoch, when present, is the upper bound. `proxy_captured`
+    requires the capture artifact; `provider_attested` additionally requires the
+    provider artifact; `independently_sensed` requires the qualification artifact
+    and a distinct accepted observer failure domain. v0.2 carries these bytes
+    opaquely and does not cryptographically interpret TPM quotes, provider
+    signature formats, predicates, or other attestation content; deep validation
+    is a v0.3 or stronger-profile concern. Contradicted and unknown remain honest
+    terminal labels, never successful independent sensing.
 20. **Verdict.** Construct, deterministically encode, and sign exactly one verdict
     under section 5. The result is `conformant` only if every requested check
     succeeded. Missing external policy, key, expected head, or replay state yields
@@ -339,7 +358,6 @@ emit a code for a different trigger. Where one input has several defects, sectio
 | `graph/tenant-site-splice` | Parent and child have different tenant or site. |
 | `graph/cross-epoch-forbidden` | Cross-epoch edge type/reason is unlisted or an unequal epoch lacks `cross_epoch`. |
 | `graph/cross-epoch-unanchored` | Cross-epoch source is not earlier, closed, and bound to the named valid anchor/manifest. |
-| `graph/cycle` | Receipt graph contains a directed cycle, including a self-edge. |
 | `graph/dominator-missing` | Dispatch lacks its one exact dominating authorization/delegation path. |
 | `graph/dominator-ambiguous` | More than one authorization or delegation dominates a dispatch. |
 | `epoch/event-chain` | Event sequence or previous-event digest does not form one owner/epoch chain. |
@@ -357,7 +375,7 @@ emit a code for a different trigger. Where one input has several defects, sectio
 | `manifest/index-receipt-mismatch` | Index metadata differs from its receipt. |
 | `manifest/index-root-mismatch` | Recomputed objective index root differs from signed root. |
 | `merkle/batch-binding` | Proof batch/tree/index/tenant/site/epoch differs from leaf or signed batch. |
-| `merkle/duplicate-leaf` | One signed batch contains the same canonical leaf at multiple indices. |
+| `merkle/duplicate-leaf` | Two successful membership proofs carried in one bundle for one signed batch have different indices but the same `(tenant_id, site_id, epoch_id, item_digest)`. |
 | `merkle/path-length` | Sibling count is impossible for tree size or exceeds 20. |
 | `merkle/root-mismatch` | Domain-separated membership recomputation differs from signed batch root. |
 | `anchor/target-unplanned` | Anchor target is absent from the signed epoch anchor plan. |
@@ -380,9 +398,9 @@ emit a code for a different trigger. Where one input has several defects, sectio
 | `bundle/dependency-missing` | A selected receipt's required request/graph/credential/manifest dependency is absent. |
 | `bundle/coverage-overclaim` | `complete` is asserted without complete producer-declared index ranges and closure. |
 | `bundle/artifact-out-of-scope` | `complete` bundle carries a receipt outside its selector that is not reachable as a dependency of a selected receipt. |
-| `evidence/time-class-unsatisfied` | Declared time class lacks its required boot/anchor artifact. |
-| `evidence/provenance-class-unsatisfied` | Inference lacks provenance evidence, a different kind carries it, or the declared class lacks required capture/provider attestation. |
-| `evidence/outcome-class-unsatisfied` | Outcome evidence is absent/present on the wrong kind, its label is invalid for that kind, or it lacks required dispatch/ack/independent predicate artifacts. |
+| `evidence/time-class-unsatisfied` | Declared time class omits its required boot ID or fails the prior-epoch anchor relationship. |
+| `evidence/provenance-class-unsatisfied` | Inference lacks provenance evidence, a different kind carries it, or the declared class omits a required capture/provider attestation ID. |
+| `evidence/outcome-class-unsatisfied` | Outcome evidence is absent/present on the wrong kind, its label is invalid for that kind, or it omits required dispatch/ack/independent predicate fields. |
 | `evidence/observer-not-independent` | `independently_sensed` observer is not in a distinct accepted failure domain. |
 
 An unavailable external key, replay database, expected anchor head, or trust-policy
@@ -510,9 +528,49 @@ A v0.2 verifier MUST emit only `not_established` for `ingress_completeness`.
 R-15/census feature and MUST NOT be emitted by a verifier that does not implement
 that feature.
 
+The verdict digest preimages are frozen as follows:
+
+- `limits_digest = SHA-256(deterministic-CBOR(["AAR-VERDICT-LIMITS-v1",
+  limits-map]))`, where `limits-map` is the closed map containing the twelve
+  section 1 values under these keys:
+  `exact_encoded_bundle_bytes`, `cbor_container_nesting`, `receipt_nodes`,
+  `directed_graph_edges`, `parents_per_receipt`, `dag_depth`, `dag_width`,
+  `encoded_proof_bytes`, `aggregate_proof_bytes`, `epoch_manifest_entries`,
+  `merkle_batch_leaves`, and `credential_path_length`;
+- `anchor_heads_digest =
+  SHA-256(deterministic-CBOR(["AAR-VERDICT-HEADS-v1",
+  expected-anchor-heads]))`, using the exact decoded, already validated and
+  canonically ordered expected-head array;
+- when replay state is supplied, `replay_state_digest =
+  SHA-256(deterministic-CBOR(["AAR-VERDICT-REPLAY-v1", replay-state-map]))`.
+  `replay-state-map` is the closed map `{ entries: [...] }`; each entry is the
+  closed map `{ replay_domain, invocation_id, content_digest }`, and entries are
+  strictly sorted by deterministic CBOR of
+  `[replay_domain, invocation_id, content_digest]`. When no replay state was
+  supplied, `replay_state_digest` is 32 zero bytes rather than the digest of an
+  empty map.
+
+`build_digest` and `config_digest` have implementation-defined preimages. An
+implementation MUST keep each value stable for one released build or effective
+configuration and MUST document its selected preimage; these fields bind verifier
+identity and are not interoperability digests.
+
+If bundle decoding fails before scope or trust policy is known, the signed verdict
+uses the normative early-failure sentinel: every unknown ID, digest, and numeric
+scope/trust time is all-zero; `receipt_kinds=["observation"]`,
+`coverage="valid_subset"`, `ingress_completeness="not_established"`, and the
+requested profile defaults to `AAR-1`. The actual evaluation time remains in both
+`evaluated_at` and `trust_policy.evaluation_time`. A requested scope, profile, or
+trust value explicitly configured at the verifier replaces only its corresponding
+sentinel. A decoded valid requested value is likewise used even when a later step
+fails.
+
 `reason` MUST be absent for `conformant` and MUST be exactly one section 3 code for
 `nonconformant` or `indeterminate`. `conformant` means only that the artifacts in
 the signed scope satisfy the stated profile and class limits under the exact bound
 build, configuration, trust policy, expected heads, evaluation time, replay state,
-and resource limits. It is not a statement of sensor truth, inference correctness,
-lawfulness, complete discovery, custody, or admissibility.
+and resource limits. Evidence class limits mean declared and structurally
+supported, with required opaque bytes committed; they do not claim deep
+cryptographic validation of attestation content. A conformant verdict is not a
+statement of sensor truth, inference correctness, lawfulness, complete discovery,
+custody, or admissibility.

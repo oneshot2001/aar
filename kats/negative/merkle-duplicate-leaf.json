@@ -1,0 +1,5 @@
+{
+  "name": "merkle-duplicate-leaf",
+  "expected_code": "merkle/duplicate-leaf",
+  "mutation_description": "Prove the same index-less content at two different indices in one signed batch."
+}

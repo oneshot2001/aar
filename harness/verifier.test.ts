@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { decodeCbor, encodeCbor, equalBytes } from "./cbor";
+import { CborValue, decodeCbor, encodeCbor, equalBytes } from "./cbor";
 import { buildNegativeFixtures } from "./negative-fixtures";
 import { buildStatefulFixtures, parseStatefulPrior } from "./stateful-fixtures";
 import { domainHash, verifySigned } from "./crypto";
@@ -33,6 +33,56 @@ describe("B2 reference verifier", () => {
       expect(repeated.ok).toBe(true);
       if (repeated.ok) expect(equalBytes(repeated.verdictEnvelope, result.verdictEnvelope)).toBe(true);
     }
+  });
+
+  test("verdict configuration digests use the frozen domain-separated preimages", () => {
+    const input = readFileSync(join(root, "kats", "positive", "bundle-valid-subset.cbor"));
+    const bundle = decodeCbor(input, { strict: true }) as Record<string, CborValue>;
+    const trust = bundle.trust_inputs as Record<string, CborValue>;
+    const limitsMap = {
+      exact_encoded_bundle_bytes: 16_777_216, cbor_container_nesting: 32, receipt_nodes: 10_000,
+      directed_graph_edges: 50_000, parents_per_receipt: 64, dag_depth: 128, dag_width: 4_096,
+      encoded_proof_bytes: 65_536, aggregate_proof_bytes: 4_194_304, epoch_manifest_entries: 10_000,
+      merkle_batch_leaves: 1_048_576, credential_path_length: 8,
+    };
+    const result = verifyBundle(input);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const verifier = result.verdict.verifier as Record<string, CborValue>;
+      const policy = result.verdict.trust_policy as Record<string, CborValue>;
+      expect(equalBytes(verifier.limits_digest as Uint8Array, domainHash("AAR-VERDICT-LIMITS-v1", limitsMap))).toBe(true);
+      expect(equalBytes(policy.anchor_heads_digest as Uint8Array, domainHash("AAR-VERDICT-HEADS-v1", trust.expected_anchor_heads!))).toBe(true);
+      expect(equalBytes(policy.replay_state_digest as Uint8Array, new Uint8Array(32))).toBe(true);
+    }
+    const suppliedEmpty = verifyBundle(input, { replayState: [] });
+    expect(suppliedEmpty.ok).toBe(true);
+    if (suppliedEmpty.ok) {
+      const policy = suppliedEmpty.verdict.trust_policy as Record<string, CborValue>;
+      expect(equalBytes(policy.replay_state_digest as Uint8Array, domainHash("AAR-VERDICT-REPLAY-v1", { entries: [] }))).toBe(true);
+    }
+  });
+
+  test("pre-decode failure verdict uses the normative zero sentinel and real evaluation time", () => {
+    const evaluationTime = 1_735_700_000;
+    const result = verifyBundle(Uint8Array.of(0xf8, 0), { evaluationTime });
+    expect(result.ok).toBe(false);
+    if (result.ok || result.verdict === undefined) return;
+    const verdict = result.verdict;
+    const policy = verdict.trust_policy as Record<string, CborValue>;
+    const scope = verdict.scope as Record<string, CborValue>;
+    const limits = verdict.limits as Record<string, CborValue>;
+    const zero16 = new Uint8Array(16); const zero32 = new Uint8Array(32);
+    expect(verdict.evaluated_at).toBe(evaluationTime);
+    expect(policy.evaluation_time).toBe(evaluationTime);
+    for (const field of ["trust_store_snapshot_id", "trust_store_digest", "verifier_policy_digest", "anchor_heads_digest", "replay_state_digest"]) {
+      expect(equalBytes(policy[field] as Uint8Array, zero32), field).toBe(true);
+    }
+    expect(equalBytes(verdict.selector_commitment as Uint8Array, zero32)).toBe(true);
+    expect(equalBytes(scope.tenant_id as Uint8Array, zero16)).toBe(true);
+    expect(equalBytes(scope.site_id as Uint8Array, zero16)).toBe(true);
+    expect(scope.committed_from).toBe(0); expect(scope.committed_until).toBe(0);
+    expect(scope.receipt_kinds).toEqual(["observation"]); expect(scope.coverage).toBe("valid_subset");
+    expect(limits.requested_profile).toBe("AAR-1");
   });
 
   test("negative generation is byte-for-byte deterministic", () => {

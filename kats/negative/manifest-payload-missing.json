@@ -1,5 +1,5 @@
 {
   "name": "manifest-payload-missing",
   "expected_code": "manifest/payload-missing",
-  "mutation_description": "Remove the canonical payload matching one referenced manifest digest."
+  "mutation_description": "Declare boot-bound time with a boot artifact ID whose canonical payload is absent."
 }

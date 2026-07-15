@@ -601,6 +601,62 @@ observation consumption manifests through `derived_from` parents only.
 semantics on distinct edge types prevents a request edge from silently claiming
 provenance.
 
+## D-47 — Receipt graphs are acyclic by construction
+
+**Decision.** Delete `graph/cycle` as a conformance rejection. After receipt IDs
+are recomputed, every parent ID is inside the child ID preimage, so a directed
+cycle would require a SHA-256 fixed point. Implementations may retain a
+non-normative receipt-count traversal guard as a defensive internal bound.
+
+**Why.** The former code was unreachable after step 7 without a cryptographic
+break and therefore could not have a valid negative KAT under first-failure order.
+
+## D-48 — Duplicate Merkle leaves compare index-less proven content
+
+**Decision.** Keep `merkle/duplicate-leaf`. Within one signed batch it means two
+successful membership proofs carried in one bundle have different indices but
+the same `(tenant_id, site_id, epoch_id, item_digest)`. `leaf_index` remains in
+the actual leaf hash preimage, and unproven leaves are outside the claim.
+
+**Why.** This detects duplicated content while preserving positional binding and
+does not pretend that an offline verifier can inspect the rest of the batch.
+
+## D-49 — Evidence attestation bytes are opaque in v0.2
+
+**Decision.** Required boot, capture, provider, and qualification IDs resolve to
+hash-bound, media-typed `canonical-manifest-payload` bytes in the bundle; absence
+is `manifest/payload-missing`. v0.2 class limits mean declared and structurally
+supported. Deep cryptographic interpretation of TPM quotes, provider signatures,
+or predicate formats is deferred to v0.3 or a stronger profile.
+
+**Why.** The base wire can prove that the declared artifact bytes were committed
+without freezing every provider- or platform-specific verification protocol.
+
+## D-50 — External time anchoring uses a prior-epoch lower bound
+
+**Decision.** An `externally_anchored` receipt names a verified anchor from an
+earlier epoch under the same owner, tenant, and site, and that anchor has
+`accepted_at <= committed_at`. The prior anchor supplies the lower bound; a
+separately verified anchor for the receipt's own epoch, when present, supplies the
+upper bound.
+
+**Why.** A same-epoch `anchor_id` is self-referential because the receipt commits
+the ID of an anchor whose manifest commits the receipt.
+
+## D-51 — Verdict digest preimages and early-failure sentinels are frozen
+
+**Decision.** `limits_digest`, `anchor_heads_digest`, and supplied
+`replay_state_digest` use the domain strings `AAR-VERDICT-LIMITS-v1`,
+`AAR-VERDICT-HEADS-v1`, and `AAR-VERDICT-REPLAY-v1` over the closed preimages in
+CONFORMANCE section 5. No supplied replay state uses a zero digest. Build and
+configuration digests are implementation-defined but stable and documented.
+Before bundle scope/trust can be decoded, verdicts use the section 5 zero/default
+sentinel while retaining the real evaluation time and any explicitly configured
+requested values.
+
+**Why.** Verdict producers now bind identical interoperable inputs identically,
+while early parse failures still yield complete, unambiguous signed verdicts.
+
 ## Gate-1 questions requiring an explicit disposition
 
 1. **Protected labels:** approve provisional `-70000..-70006`, switch to

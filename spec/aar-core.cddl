@@ -167,6 +167,9 @@ emission-coordinate = {
 ; bstr is COSE element[0] from decoding exact receipt-envelope[1] bytes.  This
 ; excludes only receipt_id,
 ; avoiding self-reference while binding identity to signer and coordinates.
+; Once receipt IDs have been recomputed successfully, parent commitments make the
+; receipt graph acyclic by construction: a cycle would require a SHA-256 fixed
+; point rather than a separate wire-visible cycle rejection.
 receipt-id-preimage = [
   "AAR-RECEIPT-ID-v1",
   protected: bstr .cbor receipt-protected,
@@ -213,6 +216,10 @@ time-evidence = {
   ? boot_attestation_id: digest32,
   ? anchor_id: digest32,
 }
+
+; For class externally_anchored, anchor_id references a verified anchor for an
+; earlier epoch under the same owner/tenant/site, and that anchor's accepted_at
+; is <= this receipt's committed_at.  It never references the receipt's own epoch.
 
 provenance-evidence = {
   class: provenance-class,

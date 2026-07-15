@@ -7,7 +7,7 @@ outside the B1 fixture generator.
 - Referential closure and graph: `graph/dangling-parent`,
   `graph/parent-metadata-mismatch`, `graph/edge-illegal`, `graph/root-missing`,
   `graph/root-forbidden`, `graph/tenant-site-splice`,
-  `graph/cross-epoch-forbidden`, `graph/cross-epoch-unanchored`, `graph/cycle`,
+  `graph/cross-epoch-forbidden`, `graph/cross-epoch-unanchored`,
   `graph/dominator-missing`, `graph/dominator-ambiguous`.
 - Epoch state: `epoch/event-chain`, `epoch/id-nonmonotonic`,
   `epoch/predecessor-mismatch`, `epoch/open-close`, `epoch/duration-exceeded`,

@@ -1,0 +1,6 @@
+{
+  "name": "time-externally-anchored-satisfied",
+  "boundary": "boot_bound_to_externally_anchored",
+  "expectation": "conformant",
+  "expected_class": "externally_anchored"
+}
