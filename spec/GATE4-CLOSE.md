@@ -55,3 +55,20 @@ two-implementation bar met. Remaining before any ratified-conformance claim:
 slice C3 (public offline verifier CLI packaging, incl. the GATE3 F4
 `empty_scope` observation and F3/F6 rc-notes), then real adapter validation
 (two-adapter demo: VAPIX + one VMS).
+
+## Slice C3 gate result (2026-07-15): ACCEPTED — public verifier shipped
+
+`python -m pyref verify BUNDLE.cbor --at UNIX_SECONDS [--trust-policy]
+[--prior-state]` — offline, stdlib-only, wall-clock never read (`--at`
+required). Exit codes: 0 conformant / 1 nonconformant / 3 indeterminate /
+2 usage / 70 internal — gate-verified by direct runs. Human step report +
+signed W-12 verdict from the same code path as the KAT suite (no fork).
+Report-layer observations `empty_scope` and `stateful_not_evaluated` surface
+in reports and provably do not alter signed verdict bytes (all 188 C2 verdict
+hashes unchanged; results-c2.json byte-identical to the pre-C3 baseline).
+`pyref/README.md` documents the trust-policy/prior-state formats and, per the
+rubric, what a verdict does NOT prove (sensor truth, inference correctness,
+lawfulness, admissibility; producer-declared completeness; membership-only
+Merkle claims). Full suite re-verified at gate: 43/43 + 188/188, zero
+divergences, determinism 188/188. Clean-room held. Gate 4 is fully complete;
+next phase = two-adapter demo (VAPIX + one VMS), then model RFP language.

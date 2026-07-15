@@ -53,6 +53,29 @@ NODE_KINDS = (
     "dispatch",
     "outcome_observation",
 )
+
+STEP_NAMES = (
+    "Bundle byte limit",
+    "Bundle CBOR",
+    "Bundle schema",
+    "Static resource counts",
+    "Trust-policy input",
+    "Envelope mechanics",
+    "Content commitments and IDs",
+    "Credential lifecycle",
+    "Emission identity",
+    "Receipt schema semantics",
+    "Replay and freshness",
+    "Referential closure and graph",
+    "Authorization dominance",
+    "Epoch state machine",
+    "Manifest index",
+    "Merkle batches",
+    "Anchors",
+    "Bundle ranges and coverage",
+    "Evidence-class qualification",
+    "Verdict",
+)
 PRINCIPAL_TYPES = ("human", "service", "workload_instance", "model_endpoint")
 PRINCIPAL_ROLES = (
     "agent",
@@ -197,6 +220,7 @@ class State:
     evaluated_at: int
     prior_state: dict[str, Any] | None
     replay_state: dict[str, Any] | None
+    configured_trust_policy: dict[str, Any] | None = None
     bundle: dict[str, Any] | None = None
     envelopes: dict[str, list[Envelope]] = field(default_factory=lambda: defaultdict(list))
     credentials_by_kid: dict[bytes, Envelope] = field(default_factory=dict)
@@ -205,6 +229,7 @@ class State:
     embedded_delegations: dict[bytes, Envelope] = field(default_factory=dict)
     payloads_by_digest: dict[bytes, dict[str, Any]] = field(default_factory=dict)
     observations: list[str] = field(default_factory=list)
+    selector_matching_receipts: int | None = None
     classes: dict[str, str] = field(default_factory=lambda: {
         "time": "not_evaluated",
         "provenance": "not_evaluated",
@@ -1438,6 +1463,14 @@ def _bundle_ranges(state: State) -> None:
     if selector["committed_from"] >= selector["committed_until"]:
         _fail("bundle/selector-interval", 18)
     manifests = {env.payload["manifest_id"]: env.payload for env in state.envelopes["epoch_manifests"]}
+    state.selector_matching_receipts = len({
+        entry["receipt_id"]
+        for manifest in manifests.values()
+        if manifest["tenant_id"] == selector["tenant_id"]
+        and manifest["site_id"] == selector["site_id"]
+        for entry in manifest["receipt_index"]["entries"]
+        if entry["receipt_id"] in state.receipts_by_id and _selector_matches(selector, entry)
+    })
     selected_ids: set[bytes] = set()
     carried_indices: set[tuple[bytes, int]] = set()
     for range_proof in bundle["ranges"]:
@@ -1626,11 +1659,28 @@ def _verdict_fields(state: State, result: str, reason: str | None, step: int) ->
             "committed_until": 0, "receipt_kinds": ["observation"],
             "coverage": "valid_subset", "ingress_completeness": "not_established",
         }
-        trust_policy = {
-            "trust_store_snapshot_id": ZERO32, "trust_store_digest": ZERO32,
-            "verifier_policy_digest": ZERO32, "evaluation_time": state.evaluated_at,
-            "anchor_heads_digest": ZERO32, "replay_state_digest": ZERO32,
-        }
+        configured = state.configured_trust_policy
+        if configured is None:
+            trust_policy = {
+                "trust_store_snapshot_id": ZERO32, "trust_store_digest": ZERO32,
+                "verifier_policy_digest": ZERO32, "evaluation_time": state.evaluated_at,
+                "anchor_heads_digest": ZERO32, "replay_state_digest": ZERO32,
+            }
+        else:
+            store = configured["trust_store"]
+            replay = _normal_replay_state(state.replay_state)
+            trust_policy = {
+                "trust_store_snapshot_id": store["snapshot_id"],
+                "trust_store_digest": store["digest"],
+                "verifier_policy_digest": configured["verifier_policy_digest"],
+                "evaluation_time": state.evaluated_at,
+                "anchor_heads_digest": hashes.domain_hash(
+                    "AAR-VERDICT-HEADS-v1", configured["expected_anchor_heads"]
+                ),
+                "replay_state_digest": ZERO32 if replay is None else hashes.domain_hash(
+                    "AAR-VERDICT-REPLAY-v1", replay
+                ),
+            }
         selector_commitment = ZERO32
         requested_profile = "AAR-1"
 
@@ -1704,6 +1754,7 @@ def evaluate(
     prior_state: dict[str, Any] | None = None,
     replay_state: dict[str, Any] | None = None,
     context_bundle_raw: bytes | None = None,
+    configured_trust_policy: dict[str, Any] | None = None,
 ) -> Evaluation:
     """Evaluate exact input bytes and return one deterministic signed verdict.
 
@@ -1714,7 +1765,13 @@ def evaluate(
     """
     if not _uint(evaluated_at):
         raise ValueError("evaluated_at must be an explicit uint <= 2^53-1")
-    state = State(raw=raw, evaluated_at=evaluated_at, prior_state=prior_state, replay_state=replay_state)
+    state = State(
+        raw=raw,
+        evaluated_at=evaluated_at,
+        prior_state=prior_state,
+        replay_state=replay_state,
+        configured_trust_policy=configured_trust_policy,
+    )
     result = "conformant"
     reason: str | None = None
     step = 20
@@ -1756,8 +1813,31 @@ def evaluate(
         step = exc.step
     fields = _verdict_fields(state, result, reason, step)
     verdict, verdict_bytes = _sign_verdict(fields)
+    report_observations = list(verdict["observations"])
+    if result == "conformant" and state.selector_matching_receipts == 0:
+        report_observations.append("empty_scope")
+    if prior_state is None:
+        report_observations.append("stateful_not_evaluated")
+
+    steps = []
+    for number, name in enumerate(STEP_NAMES, 1):
+        if result == "conformant" or number < step or number == 20:
+            status = "pass"
+        elif number == step:
+            status = "fail"
+        else:
+            status = "not_evaluated"
+        steps.append({"step": number, "name": name, "status": status})
     report = {
         "first_failure_step": None if result == "conformant" else step,
+        "first_failure_reason": reason,
+        "steps": steps,
+        "observations": list(dict.fromkeys(report_observations)),
+        "report_layer_observations": [
+            observation for observation in report_observations
+            if observation in {"empty_scope", "stateful_not_evaluated"}
+        ],
+        "selector_matching_receipts": state.selector_matching_receipts,
         "stateful_properties": state.stateful_checks,
         "replay_state": "not_evaluated" if replay_state is None else "evaluated",
     }
