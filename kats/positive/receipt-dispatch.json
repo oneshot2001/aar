@@ -1,0 +1,11 @@
+{
+  "name": "receipt-dispatch",
+  "object_type": "receipt-envelope",
+  "content_type": "application/aar-receipt+cbor;v=0.2",
+  "key_ids_used": {
+    "ep_signing": "dc0ce633dbcc913dafafa4b89ac44d8ce683fdfc3f60c8bdf21213b9f2b534ba"
+  },
+  "computed_ids": {
+    "receipt_id": "f4ec660da75c698dbbf3d904da83ee281e9de2f97ebcfefb53e5c3a6dd2f1d52"
+  }
+}

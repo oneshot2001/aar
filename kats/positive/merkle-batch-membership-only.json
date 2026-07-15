@@ -1,0 +1,12 @@
+{
+  "name": "merkle-batch-membership-only",
+  "object_type": "merkle-batch-envelope",
+  "content_type": "application/aar-merkle-batch+cbor;v=0.2",
+  "key_ids_used": {
+    "ep_signing": "dc0ce633dbcc913dafafa4b89ac44d8ce683fdfc3f60c8bdf21213b9f2b534ba"
+  },
+  "computed_ids": {
+    "batch_id": "c42d16ecb0dcf8ec7ada9b6be4dc787bb58542bac109f5358b9d6dd08a8a3bda",
+    "root": "26578c9fc24d3c5a33327cbd8abba20f97feb4f0bd4f0e582762bd5c8139416a"
+  }
+}

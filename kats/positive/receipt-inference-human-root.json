@@ -1,0 +1,11 @@
+{
+  "name": "receipt-inference-human-root",
+  "object_type": "receipt-envelope",
+  "content_type": "application/aar-receipt+cbor;v=0.2",
+  "key_ids_used": {
+    "agent_signing": "5cd252fb0ce8932436faf8ccd1040981b89ee4ad6b9fe9e2a2b7e71aacb27cd3"
+  },
+  "computed_ids": {
+    "receipt_id": "2a92f5a743b060b86e35811293bcbe3ff3e8fb6eb62e40e335e1ac573e157e33"
+  }
+}

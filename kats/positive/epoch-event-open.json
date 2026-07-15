@@ -1,0 +1,11 @@
+{
+  "name": "epoch-event-open",
+  "object_type": "epoch-event-envelope",
+  "content_type": "application/aar-epoch-event+cbor;v=0.2",
+  "key_ids_used": {
+    "ep_signing": "dc0ce633dbcc913dafafa4b89ac44d8ce683fdfc3f60c8bdf21213b9f2b534ba"
+  },
+  "computed_ids": {
+    "event_id": "733e627b316fa91c29a7f36a8bb79daf5504a8b91a200887a880f17afd0f532c"
+  }
+}

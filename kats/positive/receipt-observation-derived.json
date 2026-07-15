@@ -1,0 +1,11 @@
+{
+  "name": "receipt-observation-derived",
+  "object_type": "receipt-envelope",
+  "content_type": "application/aar-receipt+cbor;v=0.2",
+  "key_ids_used": {
+    "agent_signing": "5cd252fb0ce8932436faf8ccd1040981b89ee4ad6b9fe9e2a2b7e71aacb27cd3"
+  },
+  "computed_ids": {
+    "receipt_id": "5def3cc65d3e67fc48211b05cf922b799b4d5e86d2ab717830861972279652b9"
+  }
+}

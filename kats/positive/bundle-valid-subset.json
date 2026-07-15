@@ -1,0 +1,23 @@
+{
+  "name": "bundle-valid-subset",
+  "object_type": "bundle",
+  "content_type": null,
+  "key_ids_used": {
+    "agent_signing": "5cd252fb0ce8932436faf8ccd1040981b89ee4ad6b9fe9e2a2b7e71aacb27cd3",
+    "ep_signing": "dc0ce633dbcc913dafafa4b89ac44d8ce683fdfc3f60c8bdf21213b9f2b534ba",
+    "authority_signing": "2b985badf1bac8293f6b92e8c0acc1139bc5a5ecbbf97a6271dcf0d4f6c68af6",
+    "approver_signing": "3eab3fba5026b61d007cbf411b90f3c88ff89cf0a8088cbbfc3eaaca867dd663",
+    "outcome_signing": "dafc418eb082e83c76a48f0c526fe45e9ca4d4ecfa82366de3fccd37099fca01",
+    "anchor_signing": "e26630d1233ed92d8ac231a4bf230fddb2d924d6eace7489946e1e82e9523a70",
+    "credential_issuing": "8449111985c4e015d12e2c0b4847278c9d9e5f84a383fd4056a6d89bab795c5d",
+    "status_signing": "e3615fff37474c561c068d1f56f5ec3751cd7eb2ea7046c016a142c932865496"
+  },
+  "computed_ids": {
+    "bundle_digest": "e60ba50853cb79064204eb88f969c2ef0305ec03c37630d984d8e3433f599e68",
+    "selector_commitment": "7dd797d8e3ba67ced258e1ee2343d414b833426c0159df7b0b47d7b18d2f0a2f",
+    "trust_store_digest": "7fe6b4bc2bc11ff2896bfea86186c6d0416b9f9a1244a71881fc5f1dce28dbcf",
+    "manifest_id": "b7d8f1ee144496c8384e41ec1e504d7144f8bf2f4841b0e9fd61e411abe34e2e",
+    "anchor_id": "3270146f86d9ca4e7d42e132549d570da5c9b7b08dafd7e7c8ff4f84f85c1d2c",
+    "batch_id": "c42d16ecb0dcf8ec7ada9b6be4dc787bb58542bac109f5358b9d6dd08a8a3bda"
+  }
+}

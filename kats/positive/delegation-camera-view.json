@@ -1,0 +1,12 @@
+{
+  "name": "delegation-camera-view",
+  "object_type": "delegation-envelope",
+  "content_type": "application/aar-delegation+cbor;v=0.2",
+  "key_ids_used": {
+    "authority_signing": "2b985badf1bac8293f6b92e8c0acc1139bc5a5ecbbf97a6271dcf0d4f6c68af6",
+    "ep_signing": "dc0ce633dbcc913dafafa4b89ac44d8ce683fdfc3f60c8bdf21213b9f2b534ba"
+  },
+  "computed_ids": {
+    "delegation_id": "35bb96ebd2421f9db4523afa0c0fa0a257a467a9db03b3bc412cb4c335de519a"
+  }
+}

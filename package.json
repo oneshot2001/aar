@@ -1,0 +1,13 @@
+{
+  "name": "aar-kat-harness",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "bun run harness/generate.ts",
+    "test": "bun test harness"
+  },
+  "dependencies": {
+    "@noble/curves": "2.2.0",
+    "@noble/hashes": "2.2.0"
+  }
+}
