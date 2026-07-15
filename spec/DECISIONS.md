@@ -104,10 +104,14 @@ permit endpoint drift, or recreate ID self-reference.
 
 **Decision.** A parentless observation, inference, or authorization carries a
 closed `root` descriptor for agent request, human request, or standing-condition
-trigger. The root descriptor is part of that receipt's signed identity.
+trigger. The root descriptor is part of that receipt's signed identity. An
+`agent_request` descriptor resolves to the Agent's raw detached signed request
+artifact, and its `request_commitment` is SHA-256 of the exact request claims
+bytes. Human-request and standing-condition roots remain commitment-only.
 
 **Why.** W-3 explicitly freezes six node types while W-4 requires a root allowlist.
-This represents the allowed external origin without silently creating node seven.
+This represents the allowed external origin without silently creating node seven,
+while preserving the Agent-signed half of later R-15 cross-stream reconciliation.
 
 **Alternatives considered.** Add request/condition node kinds; treat every
 observation as an implicit root. The first violates the stated six-object freeze;
@@ -468,6 +472,19 @@ claims and explicitly says countersignatures are preserved.
 presentation alone; create presentation as a seventh DAG node. The first collapses
 claimants, while the second violates the six-node freeze.
 
+## D-36 — Unsigned bundles defer export attribution to R-35
+
+**Decision.** The v0.2 bundle is unsigned. A signed verdict binds the exact bundle
+bytes by digest, but neither attributes the export act nor identifies an exporter.
+Export and custody lineage remain an accepted deferral to R-35.
+
+**Why.** The frozen bundle proves the evaluated byte set without claiming custody
+semantics that v0.2 does not define.
+
+**Alternatives considered.** Add a bundle-exporter signature now; infer export
+attribution from the verifier's signature. The first pulls deferred custody
+lineage into this wire gate, and the second confuses evaluation with export.
+
 ## Gate-1 questions requiring an explicit disposition
 
 1. **Protected labels:** approve provisional `-70000..-70006`, switch to
@@ -489,3 +506,16 @@ claimants, while the second violates the six-node freeze.
    define a second published-checkpoint profile before the freeze?
 8. **Resource ceilings:** approve the D-30 constants as the interoperable floor,
    especially the 16 MiB bundle and 10,000-node limits?
+
+## Gate-1 dispositions — LOCKED
+
+| Q | Locked disposition |
+|---|---|
+| 1 · Protected labels | Approve provisional `-70000..-70006` (COSE private-use range, < −65536). Registration is a launch-time task, not a freeze blocker. |
+| 2 · Outcome count | Six labels stand. The rubric's “5 outcome” was a rubric typo — the spec's §5.2 vocabulary (6, with contradicted/unknown as unordered terminal states) governs. Gate-2 class-boundary KATs cover the 4-step ordered ladder; contradicted/unknown get dedicated terminal-state KATs, not boundary KATs. Rubric erratum noted here; no rubric edit needed. |
+| 3 · AAR-1/2 status age | Approve 86,400 seconds (= lease). Consistent and conservative. |
+| 4 · Epoch max duration | Approve 86,400 seconds matching base anchor cadence for v0.2. |
+| 5 · Root representation | Approve root descriptors — as modified by G1-1 (`agent_request` roots bind to the new signed request artifact). No seventh node kind. |
+| 6 · `complete` terminology | Approve producer-declared semantics with the mandatory `ingress_completeness_not_established` observation — this is exactly the narrowed G3. |
+| 7 · Anchor floor | Approve RFC 6962 v1 as the sole base-tier proof protocol. A published-checkpoint second profile is post-v0.2 if ever. |
+| 8 · Resource ceilings | Approve D-30 constants including 16 MiB / 10,000 nodes; committed in verdict config, revisable at a future wire version with data. |

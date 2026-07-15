@@ -57,9 +57,9 @@ failure.
 5. **Trust-policy input.** Validate the trust-store snapshot digest, root records,
    tenant/site scopes, evaluation time, expected anchor heads, and policy digest.
 6. **Envelope mechanics.** For each signed object, in this artifact order —
-   credentials, rotation records, status snapshots, delegations, epoch events,
-   epoch manifests, anchor records, Merkle batches, then receipts (including any
-   nested signed presentation manifest) — perform:
+   credentials, rotation records, status snapshots, request envelopes,
+   delegations, epoch events, epoch manifests, anchor records, Merkle batches,
+   then receipts (including any nested signed presentation manifest) — perform:
 
    1. decode the untagged four-element COSE array and require deterministic CBOR;
    2. require protected to be a bstr containing a closed deterministic map;
@@ -71,7 +71,8 @@ failure.
    6. decode the detached payload bytes under step 2's CBOR rules, then validate
       its selected closed schema;
    7. resolve a P-256 verification key through the accepted credential path,
-      enforce key usage, tenant/site scope, validity, status, and algorithm;
+      enforce key usage, tenant/site scope, validity, status, and algorithm; a
+      request envelope requires `agent_signing` usage;
    8. compare protected receipt coordinates to payload coordinates;
    9. reconstruct COSE `Sig_structure` from the received protected and payload
       bytes and verify ES256.
@@ -79,6 +80,12 @@ failure.
 7. **Content commitments and IDs.** Recompute every content-derived ID and every
    declared digest whose bytes are present. For a referenced canonical manifest,
    first require a payload with the declared digest and media type, then hash it.
+   For every `agent_request` root, resolve exactly one request envelope by
+   `request_id` and require the root's `request_commitment` to equal SHA-256 of
+   the exact request claims bstr. A missing request envelope is
+   `bundle/dependency-missing`; a different digest is
+   `request/commitment-mismatch`. `human_request` and
+   `standing_condition_trigger` roots remain commitment-only.
 8. **Credential lifecycle.** Enforce role-key separation; path construction;
    tenant-scoped roots; rotation predecessor/successor continuity and monotonic
    sequence; status freshness; compromise/revocation time; and lease maxima. The
@@ -96,6 +103,11 @@ failure.
    in a `valid_subset` bundle.
 10. **Receipt schema semantics.** Require `kind`/body and kind/signer-role
     agreement; required evidence label presence; manifest field commitments;
+    resolve every inference `consumption_manifest_id` to either the
+    `manifest_digest` of a consumption manifest carried by a `derived_from`
+    parent observation or the `digest` of a bundle
+    `canonical-manifest-payload`, rejecting an unresolved reference with
+    `receipt/consumption-ref-unresolved`;
     decision/presentation conditional fields and presentation signer mode;
     action-attempt/refusal conditional fields; normalized action/command
     agreement; and dispatch/outcome subject agreement.
@@ -167,6 +179,10 @@ is closed; every unlisted pair is `graph/edge-illegal`.
 | `observed_outcome` | action_attempt, dispatch | outcome_observation |
 | `supports` | observation, inference, outcome_observation | inference, authorization, outcome_observation |
 
+The `requested_by` edge claims exactly that the child was created in response to
+the parent's content; the originating external request is carried by the root
+descriptor and request artifact, never by this edge.
+
 Only observation, inference, and authorization receipts may be roots. A root MUST
 carry exactly one root descriptor. `agent_request` may root observation or
 inference; `human_request` may root observation, inference, or authorization; and
@@ -177,7 +193,8 @@ Receipt signer roles are also closed: observation permits Agent, EP, or Outcome
 Observer; inference permits Agent; authorization, action_attempt, and dispatch
 permit EP; outcome_observation permits Outcome Observer. An approver-originated
 presentation is signed with `approver_signing`; an EP authenticated-session
-presentation is signed with `ep_signing`. Delegations use `authority_signing`;
+presentation is signed with `ep_signing`. A request envelope is signed with
+`agent_signing`. Delegations use `authority_signing`;
 credentials/rotations use `credential_issuing`; status snapshots use
 `status_signing`; anchors and verdicts use their correspondingly named key usage.
 
@@ -257,6 +274,7 @@ emit a code for a different trigger. Where one input has several defects, sectio
 | `key/not-found` | No credential supplies the protected kid and no accepted external key is configured. |
 | `key/not-p256` | The selected public key is not an EC P-256 key. |
 | `hash/mismatch` | A consumption, decision, presentation, command, structured-claim, normalized-parameter, canonical-manifest-payload, or ID-less trust-store preimage does not hash to its adjacent declared digest/ID. |
+| `request/commitment-mismatch` | An `agent_request` root's commitment is not SHA-256 of the exact claims bstr in the request envelope resolved by its request ID. |
 | `manifest/payload-missing` | A referenced canonical manifest payload is absent from the bundle. |
 | `manifest/media-type-mismatch` | A manifest reference and supplied payload have different media types. |
 | `identity/receipt-id-mismatch` | Recomputed receipt ID differs from `receipt_id`. |
@@ -267,6 +285,7 @@ emit a code for a different trigger. Where one input has several defects, sectio
 | `receipt/kind-body-mismatch` | Receipt `kind` does not select the supplied body production. |
 | `receipt/signer-role-mismatch` | Receipt kind, protected/payload role, or required credential key usage violates the closed signer matrix. |
 | `receipt/manifest-inconsistent` | Consumption, presentation, decision, or command manifest ordinals, counts, or cross-references disagree after direct byte/digest checks. |
+| `receipt/consumption-ref-unresolved` | An inference `consumption_manifest_id` resolves to neither a `derived_from` parent observation's consumption-manifest digest nor a carried canonical-manifest-payload digest. |
 | `receipt/decision-presentation` | Presentation presence or approver fields disagree with the decision enum. |
 | `receipt/attempt-disposition` | `not_dispatched` lacks `refusal_reason`, or `eligible_for_dispatch` carries one. |
 | `receipt/action-command-mismatch` | Normalized action and command action/target/parameter commitment disagree. |
@@ -343,7 +362,7 @@ emit a code for a different trigger. Where one input has several defects, sectio
 | `bundle/range-boundary` | Left/right boundary does not prove the full half-open time interval. |
 | `bundle/range-proof-invalid` | An entry or boundary inclusion proof fails against the manifest index root. |
 | `bundle/selected-receipt-missing` | A matching objective index entry has no carried receipt under `complete`. |
-| `bundle/dependency-missing` | A selected receipt's required graph/credential/manifest dependency is absent. |
+| `bundle/dependency-missing` | A selected receipt's required request/graph/credential/manifest dependency is absent. |
 | `bundle/coverage-overclaim` | `complete` is asserted without complete producer-declared index ranges and closure. |
 | `bundle/artifact-out-of-scope` | `complete` bundle carries a receipt outside its selector that is not reachable as a dependency of a selected receipt. |
 | `evidence/time-class-unsatisfied` | Declared time class lacks its required boot/anchor artifact. |
@@ -470,6 +489,11 @@ verdict-limits = {
   legal_admissibility: "not_established",
 }
 ```
+
+A v0.2 verifier MUST emit only `not_established` for `ingress_completeness`.
+`census_supported` and `reconciliation_supported` are reserved for the later
+R-15/census feature and MUST NOT be emitted by a verifier that does not implement
+that feature.
 
 `reason` MUST be absent for `conformant` and MUST be exactly one section 3 code for
 `nonconformant` or `indeterminate`. `conformant` means only that the artifacts in

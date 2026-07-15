@@ -16,6 +16,7 @@
 
 aar-wire-object =
     receipt-envelope
+  / request-envelope
   / delegation-envelope
   / credential-envelope
   / status-snapshot-envelope
@@ -34,6 +35,7 @@ id16 = bstr .size 16
 kid = digest32                         ; SHA-256 of DER SubjectPublicKeyInfo
 unix-time = uint .le 9007199254740991  ; whole seconds since Unix epoch
 sequence = uint .le 9007199254740991
+epoch-id = uint .le 9007199254740991
 anchor-tree-size = 1..4294967295
 batch-tree-size = 1..1048576
 bounded-text = tstr .size (1..128)
@@ -102,7 +104,7 @@ receipt-protected = {
   -70000: principal-type,
   -70001: id16,                         ; tenant_id
   -70002: id16,                         ; site_id
-  -70003: uint,                         ; epoch_id
+  -70003: epoch-id,                     ; epoch_id
   -70004: sequence,                     ; epoch_seq
   -70005: sequence,                     ; issuer_seq
   -70006: principal-role,
@@ -151,9 +153,9 @@ receipt-binding = {
   tenant_id: id16,
   site_id: id16,
   epoch_owner_kid: kid,
-  epoch_id: uint,
+  epoch_id: epoch-id,
   epoch_seq: sequence,
-  ? late_for_epoch_id: uint,
+  ? late_for_epoch_id: epoch-id,
 }
 
 emission-coordinate = {
@@ -235,7 +237,7 @@ parent-edge = {
   parent_kind: node-kind,
   parent_tenant_id: id16,
   parent_site_id: id16,
-  parent_epoch_id: uint,
+  parent_epoch_id: epoch-id,
   ? cross_epoch: cross-epoch-link,
 }
 
@@ -246,6 +248,9 @@ cross-epoch-link = {
 }
 
 ; root is present iff parents is empty.  No other root kind is accepted.
+; An agent_request root resolves request_id to one request-envelope and its
+; request_commitment is SHA-256 of the exact request-envelope claims bstr.
+; Human-request and standing-condition roots remain commitment-only.
 root-descriptor = {
   kind: "agent_request" / "human_request" / "standing_condition_trigger",
   request_id: id16,
@@ -521,7 +526,8 @@ artifact-protected = {
 }
 
 artifact-content-type =
-    "application/aar-delegation+cbor;v=0.2"
+    "application/aar-request+cbor;v=0.2"
+  / "application/aar-delegation+cbor;v=0.2"
   / "application/aar-credential+cbor;v=0.2"
   / "application/aar-status+cbor;v=0.2"
   / "application/aar-rotation+cbor;v=0.2"
@@ -530,6 +536,37 @@ artifact-content-type =
   / "application/aar-epoch-manifest+cbor;v=0.2"
   / "application/aar-anchor-record+cbor;v=0.2"
   / "application/aar-merkle-batch+cbor;v=0.2"
+
+request-envelope = [
+  claims: bstr .cbor request-claims,
+  signature: bstr .cbor request-cose-sign1,
+]
+
+; This is the Agent's raw detached COSE_Sign1 request artifact.  The protected
+; bstr and claims bstr are copied byte-for-byte into the artifact Sig_structure;
+; the protected content type is application/aar-request+cbor;v=0.2 and the kid
+; MUST resolve to an agent_signing credential.
+request-cose-sign1 = artifact-cose-sign1
+
+request-claims = {
+  v: 2,
+  request_id: id16,
+  action_intent_digest: digest32,
+  target_ep_kid: kid,
+  tenant_id: id16,
+  site_id: id16,
+  correlation: request-correlation-binding,
+  freshness: freshness,
+  legal: legal-context,
+}
+
+request-correlation-binding = {
+  correlation_id: id16,
+  phase: "request",
+  target_ep_kid: kid,
+  transport_id: bounded-text,
+  peer_binding_digest: digest32,
+}
 
 delegation-envelope = [
   claims: bstr .cbor delegation-claims,
@@ -687,7 +724,7 @@ epoch-event = {
   tenant_id: id16,
   site_id: id16,
   epoch_owner_kid: kid,
-  epoch_id: uint,
+  epoch_id: epoch-id,
   event_seq: sequence,
   ? previous_event_digest: digest32,
   occurred_at: unix-time,
@@ -744,7 +781,7 @@ manifest-fields = (
   tenant_id: id16,
   site_id: id16,
   epoch_owner_kid: kid,
-  epoch_id: uint,
+  epoch_id: epoch-id,
   ? predecessor_manifest_digest: digest32,
   opened_at: unix-time,
   closed_at: unix-time,
@@ -842,7 +879,7 @@ anchor-record = {
   target: anchor-target,
   tenant_id: id16,
   site_id: id16,
-  epoch_id: uint,
+  epoch_id: epoch-id,
   manifest_id: digest32,
   manifest_digest: digest32,
   submitted_at: unix-time,
@@ -859,7 +896,7 @@ anchor-record = {
 anchor-leaf = {
   tenant_id: id16,
   site_id: id16,
-  epoch_id: uint,
+  epoch_id: epoch-id,
   manifest_id: digest32,
   manifest_digest: digest32,
 }
@@ -909,7 +946,7 @@ merkle-batch = {
   tenant_id: id16,
   site_id: id16,
   epoch_owner_kid: kid,
-  epoch_id: uint,
+  epoch_id: epoch-id,
   signer_kid: kid,
   tree_size: batch-tree-size,
   root: digest32,
@@ -923,7 +960,7 @@ merkle-leaf = {
   leaf_index: uint .le 1048575,
   tenant_id: id16,
   site_id: id16,
-  epoch_id: uint,
+  epoch_id: epoch-id,
   item_digest: digest32,
 }
 
@@ -1060,6 +1097,7 @@ expected-anchor-head = {
 
 bundle-artifacts = {
   receipts: [ 0*10000 receipt-envelope ],
+  requests: [ 0*10000 request-envelope ],
   delegations: [ 0*1000 delegation-envelope ],
   credentials: [ 0*1000 credential-envelope ],
   status_snapshots: [ 0*4000 status-snapshot-envelope ],
@@ -1073,8 +1111,8 @@ bundle-artifacts = {
 }
 
 ; Each artifact array is strictly sorted and unique by its declared primary ID:
-; receipt_id, delegation_id, credential_id, snapshot_id, rotation_id, event_id,
-; manifest_id, anchor_id, batch_id; Merkle proofs sort by
+; receipt_id, request_id, delegation_id, credential_id, snapshot_id, rotation_id,
+; event_id, manifest_id, anchor_id, batch_id; Merkle proofs sort by
 ; (batch_id, leaf_index), and manifest payloads by digest.
 
 canonical-manifest-payload = {
