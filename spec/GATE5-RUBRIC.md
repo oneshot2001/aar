@@ -1,9 +1,9 @@
-# Gate 5 — two-adapter demonstration (VAPIX + one VMS)
+# Gate 5 — two-adapter demonstration (VAPIX + one VMS) — v1.1
 
 2026-07-15, from `v0.2-rc2` (`19fa57b`). The last residue named at every gate
 close: "real adapter validation." Claude authored this rubric and gates every
-slice; Codex builds (systems lane). This rubric goes through a Codex challenge
-pass before any build starts.
+slice. v1.1 folds the Codex challenge pass (22 findings, all sustained —
+rulings in `spec/GATE5-CHALLENGE.md`).
 
 ## Why this phase exists
 
@@ -16,128 +16,155 @@ author can run: an agent acts on a camera, receipts come out, the free public
 verifier says `conformant` — or provably refuses.
 
 What this phase does NOT do: extend the ontology, touch verdict bytes, add
-wire fields, or claim adapter *effect* equivalence across backends (R-12:
-shared abstract commands, adapter-specific effects, no false parity).
+wire fields, claim adapter *effect* equivalence across backends (R-12), or
+claim R-31 crash-protocol conformance (deferred at the wire freeze).
 
-## Scope
+## Topology (frozen — F10)
 
-Two adapters, each an **enforcement point (EP)** producing v0.2 bundles for
-the two v0 actions (`camera.stream.view`, `camera.ptz.preset`):
+ONE shared **EP/producer** (`demo/ep/`) owns authorization evaluation,
+journaling, signing, and recovery. TWO backend-specific **adapters** own only
+translation + dispatch + effect observation:
 
 1. **`adapters/vapix/`** — direct-to-camera over VAPIX HTTP (digest auth).
-   Live-lab mandatory: runs against Matthew's personally-owned cameras only
-   (AXIS Q6358-LE for PTZ; P3285-LVE for fixed stream-view). No AV customer
+   Live-lab mandatory: Matthew's personally-owned cameras only (AXIS
+   Q6358-LE for PTZ; P3285-LVE for fixed stream-view). No AV customer
    systems, no AV data — ever.
-2. **`adapters/vms/`** — VMS-mediated. **Proposed: Vigil** (independent-IP
-   native-Mac VMS; its `IntentInvocationRecord` seam is already flagged as
-   the AAR-3 EP prototype). Alternative if Vigil's control path isn't
-   drivable headless within a day's spike: a generic ONVIF adapter against
-   the same cameras (different protocol + command model = still a genuinely
-   second backend). **Open question Q5-1 for the challenge pass.**
+2. **`adapters/vms/`** — VMS-mediated. **Q5-1 ruling:** 1-day time-boxed
+   Vigil spike first — Vigil has no `IntentInvocationRecord` in code today,
+   so the spike must first prove a headless control seam is reachable. If
+   the spike fails: ONVIF fallback is pre-authorized BUT the phase result is
+   renamed "two-protocol / same-vendor demo," the VMS + cross-vendor claim
+   is explicitly deferred, and GATE5-CLOSE says so. No silent substitution.
 
-Both adapters consume the same **abstract command fixtures**
-(`adapters/shared/commands.json`) per R-12, and translate to
-backend-specific command manifests.
+The **agent is scripted** (Q5-3): fixed intent, but it issues a FRESH signed
+request per run carrying gate-supplied invocation/correlation values. It may
+not call fixture builders or replay canned requests.
+
+Both adapters consume the same abstract commands, defined in a versioned
+non-wire **`adapters/shared/DEMO-CONTRACT.md`** (F12): logical target names,
+preset mapping, what "stream view succeeded" means per backend, PTZ position
+tolerance + settling deadline, and each adapter's effect oracle. No claim of
+semantic effect equivalence (R-12).
 
 ## Build-on rule (NOT clean-room)
 
-Adapters are producers, not implementations-under-test. They MUST build on
-`harness/` (deterministic CBOR encoder, COSE, Merkle, fixture builders) —
-re-implementing the encoder would add a third implementation to maintain
-with zero evidentiary value. Verification always goes through the *other*
-stack: `python -m pyref verify` (public CLI). TS produces, Python verifies —
-a standing cross-implementation check on every demo run.
+The EP/adapters are producers, not implementations-under-test. They MUST
+build on `harness/` (deterministic CBOR encoder, COSE, Merkle). Verification
+always goes through the *other* stack: `python -m pyref verify`. TS produces,
+Python verifies — a standing cross-implementation check on every run.
 
-## Demo scenarios (the exit bar is these five, both adapters)
+## Online oracle (F6 — the demo-layer truth check)
 
-| # | Scenario | Expected verdict |
+The frozen verifier proves wire conformance only; a producer could self-sign
+fiction and still verify. The demo therefore includes an **online oracle**,
+entirely outside `pyref/`: for each scenario it binds (a) the gate-supplied
+request, (b) backend traffic observed by an **independent transport witness**
+(logging proxy on the command path), (c) the command manifest in the
+receipts, (d) the dispatch receipt, (e) the observed effect per the
+DEMO-CONTRACT oracle. This is the R-13 offline/online split made concrete.
+pyref remains the only wire authority.
+
+## Demo scenarios
+
+| # | Scenario | Expected result |
 |---|---|---|
-| S1 | Authorized `camera.ptz.preset` — valid delegation, dispatch, outcome observation at an honestly-declared evidence level | `conformant` (exit 0) |
-| S2 | Authorized `camera.stream.view` — read-only path, resource side effects noted | `conformant` (exit 0) |
-| S3 | **Expired delegation** → refusal receipted as `action_attempt` + `not_dispatched`; the instrumented dispatch log proves **zero backend traffic** (R-1: tested against the adapter's dispatch instrumentation, not final device state) | `conformant` bundle (a receipted refusal is conformant behavior) + dispatch-log assertion |
-| S4 | Tamper: flip one byte in any S1 artifact post-emission | `nonconformant` (exit 1) with the correct reason code |
-| S5 | **Crash / outcome-unknown**: kill the adapter between dispatch and outcome observation; recovery emits reconciliation with `outcome_unknown` — certainty is never manufactured | `conformant` (exit 0); verdict report shows the declared outcome level |
+| S1 | Authorized `camera.ptz.preset` — valid delegation, dispatch, outcome at the **pinned** evidence level (device position readback; `verified` barred — same-device, not independent) | `conformant` + content assertions + online oracle PASS |
+| S2 | Authorized `camera.stream.view` — read-only, resource side effects noted, stream success per DEMO-CONTRACT | `conformant` + content assertions + oracle PASS |
+| S3 | **Expired delegation** → refusal receipted as `action_attempt` + `not_dispatched`. Gate supplies an UNLABELLED expired token and a neighboring valid token (F9); assertion = zero **invocation-attributable** command dispatch, proven by EP instrumentation AND the transport witness (F16 — ambient VMS keepalives excluded) | `conformant` bundle + independent token-time/refusal/zero-dispatch assertions |
+| S4 | **One shared tamper case** (F21): pinned byte in a pinned S1 artifact, expected first-failure reason code pinned in the scenario spec | `nonconformant` (exit 1), exact code |
+| S5 | **Fault test, externally observed** (F7 recast): deterministic cut point between dispatch and outcome observation, kill the EP, durable pre-kill evidence on disk, restart resumes the SAME invocation, zero redispatch (transport-witnessed), emits honest `outcome_unknown`. Runs ONCE, through EP+VAPIX (Q5-2). Both adapters must separately demonstrate they can encode `outcome_unknown`. Explicitly NOT R-31 conformance. | `conformant`; report shows declared outcome level |
+| S6 | **Backend fault under valid delegation** (F14): gate-controlled rejection and after-send timeout, one per transport. Digest-auth convention per F15: challenge traffic ≠ dispatch, every action-bearing attempt recorded, consequential auto-retries disabled, VAPIX application errors inside HTTP 2xx parsed | honest `dispatched`/`outcome_unknown` or contradicted result — never manufactured success |
 
-Every scenario's bundle is verified by `python -m pyref verify` with
-`--at` pinned (never wall-clock) and a demo trust-policy file. S1–S3 run
-LIVE on the lab cameras for the VAPIX leg; the VMS leg may drive its
-backend headless. S4–S5 may replay captured S1 traffic.
+Every verification run supplies `--at` (pinned, never wall-clock), the demo
+trust policy, AND `--prior-state`, advanced across runs; a verdict carrying
+`stateful_not_evaluated` fails the gate (F8).
 
-## Honesty constraints (carried from spec §5 — these are the demo's point)
+## Honesty constraints (carried from spec §5)
 
-- **Outcome evidence level:** PTZ position readback comes from the *same
-  device* that executed the command — it is NOT an independent observer.
-  The receipt MUST declare the honest level; `verified` is barred. The demo
-  README states this plainly rather than hiding it.
-- **Provenance strength:** the demo agent's inference receipts are
-  `self-asserted` (no proxy, no provider attestation in the demo) and say so.
-- **Completeness:** bundles carry producer-declared `complete` with the
-  mandatory `ingress_completeness_not_established` observation (Q6 ruling).
-- **Command manifest hygiene (finding 17):** secrets and volatile headers
-  excluded. Gate audit: grep the entire receipt corpus + repo for the lab
-  credential material → zero hits. Camera credentials come from the local
-  `cred` store at runtime; they never appear in the repo, fixtures, config
-  committed to git, or any receipt.
+- **Outcome evidence levels pinned per action/backend** (F11) in
+  DEMO-CONTRACT.md, with normative downgrade conditions (timeout, rejection,
+  VMS queue-acceptance vs device readback). PTZ readback is same-device:
+  `verified` is barred and the README says so plainly.
+- **Provenance strength:** demo agent inferences are `self-asserted` and say so.
+- **Completeness:** producer-declared `complete` with the mandatory
+  `ingress_completeness_not_established` observation (Q6 ruling).
+- **Anchoring:** minimal local RFC 6962 v1 log, same code path as harness,
+  demo keys distinct from KAT keys (public keys only in repo). Labeled
+  **"same-operator demo anchoring"** (F22) — RFP text must not imply
+  independent timestamping or withholding-resistance.
 
-## Anchoring
+## Secret hygiene v2 (F13)
 
-A minimal local anchor log (RFC 6962 v1, same code path as the harness) is
-sufficient — the demo proves the wire against real actions, not anchor-
-service operations. The anchor's keys are demo keys, distinct from the KAT
-test keys, generated at demo setup and committed only as public keys.
+- Command manifests are built from a **secret-free logical request BEFORE
+  auth injection**; the auth layer is applied only at transport.
+- Credential-derived commitments prohibited (no HA1, no `Authorization`
+  header material, hashed or otherwise, anywhere in a receipt — the
+  excluded-field commitment must never cover low-entropy credentials).
+- Gate audit uses a **canary credential**: plant it, run everything, then
+  sweep repo + receipts + argv/env captures + logs + temp files + any
+  pcap/HAR for the canary AND transformed variants (HA1, base64,
+  percent-encoded). Zero hits.
+- Real camera creds come from the local `cred` store at runtime; lab config,
+  raw traces, and private keys stay OUTSIDE the repo (Q5-4). The demo
+  produces a sanitized, publishable artifact corpus from inception.
 
 ## Slices
 
-- **D1 — shared demo kit:** abstract command fixtures, demo trust policy,
-  demo key generation, local anchor log, scenario runner skeleton
-  (`adapters/shared/`), instrumented-dispatch logging contract.
+- **D1 — shared demo kit:** DEMO-CONTRACT.md, EP/producer skeleton, demo
+  trust policy + key generation, local anchor log, transport witness,
+  scenario runner, read-only **preflight** (F18: device identity,
+  model/firmware, preset existence, stream profile, credential access,
+  backend mapping — S1 refuses to run without a green preflight).
 - **D2 — VAPIX adapter:** live-lab against Q6358-LE (.33) / P3285-LVE (.19),
-  digest auth via `cred get`, all five scenarios green.
-- **D3 — VMS adapter:** per Q5-1 ruling; all five scenarios green against
-  the second backend from the SAME abstract commands.
-- **D4 — demo packaging:** `demo/README.md` — one-command scenario run per
-  adapter, what each verdict proves and (verbatim from pyref README) what it
-  does NOT prove; this is the artifact the RFP-language phase quotes.
+  digest auth via `cred get`, S1–S6 green. **PTZ safety protocol** (F19):
+  designated safe preset, baseline capture before + restore/verify after
+  every run, exclusive-control window (no guard tours/autotracking during
+  runs), poll-to-tolerance with hard deadline, no redispatch during
+  reconciliation.
+- **D3 — VMS leg:** per Q5-1 ruling (Vigil spike → build, or renamed ONVIF
+  fallback); S1–S4 + S6 + `outcome_unknown` encoding green from the SAME
+  abstract commands.
+- **D4 — demo packaging:** `demo/README.md` (one-command scenario run per
+  adapter; what a verdict proves and — verbatim from pyref README — what it
+  does NOT prove) PLUS a sanitized machine-readable **run manifest +
+  evidence index** (F20): adapter commit, device/VMS firmware, gate-supplied
+  inputs, command/effect mapping, transport observations, outcome downgrade
+  rationale, known residuals (incl. self-asserted adapter identity).
 
 ## Exit bar (gate re-runs everything)
 
-1. 5/5 scenarios × 2 adapters, verdicts as specified, via the public CLI.
-2. R-1 dispatch-log assertion holds (S3: zero backend traffic on refusal).
-3. Secret-hygiene grep clean over repo + all emitted receipts.
-4. No changes under `spec/` wire text, `harness/` verdict logic, or
+1. All scenarios green on both legs (S5 crash-cut once via EP+VAPIX), via
+   the public CLI, **with content assertions** (F5): no `empty_scope`,
+   correct evaluated profile (AAR-3 for S1), expected receipt kinds /
+   action / target / adapter identity / outcome level present, scope
+   `complete`, gate-supplied fresh invocation IDs found in the bundle.
+2. Online oracle PASS per scenario per adapter (F6).
+3. R-1 assertion holds (S3): zero invocation-attributable dispatch, by
+   instrumentation + transport witness, on gate-supplied unlabelled tokens.
+4. Canary-credential sweep clean, incl. transformed variants (F13).
+5. No changes under `spec/` wire text, `harness/` verdict logic, or
    `pyref/` — if the demo *needs* a wire change, that is a FINDING that
-   stops the phase and goes to adjudication (rc3 territory, not a patch).
-5. Full existing suites still green: harness 16/16, pyref 43/43 + 188/188.
-6. Live-lab evidence: the gate independently re-runs at least S1+S3 on the
-   VAPIX leg against the real camera.
-
-## Open questions for the challenge pass
-
-- **Q5-1:** VMS leg = Vigil vs generic ONVIF (see Scope §2). Recommend:
-  1-day Vigil spike first; ONVIF fallback pre-authorized.
-- **Q5-2:** Should S5 (crash/reconciliation) be required on BOTH adapters or
-  VAPIX-only for v0.2 demo? Recommend both — R-16/finding 16 is
-  load-bearing for the market claim.
-- **Q5-3:** Does the demo agent need a real LLM in the loop, or is a
-  scripted "agent" (fixed intent → action request) sufficient? Recommend
-  scripted — the spec governs the boundary, not the model; a live model
-  adds nondeterminism with zero wire coverage.
-- **Q5-4:** Where does the demo live — this repo (`adapters/`, `demo/`) or
-  a separate repo? Recommend this repo, private, until RFP phase decides
-  what goes public.
+   stops the phase (rc3 territory, not a patch).
+6. Full existing suites still green: harness 16/16, pyref 43/43 + 188/188.
+7. Prior-state discipline: no `stateful_not_evaluated` in any gated verdict.
+8. Live re-runs by the gate: S1 + S3 on the VAPIX leg against the real
+   camera, AND authorized-PTZ + stream-view + refusal on the actual VMS
+   backend (F17 — a stub or replay server cannot satisfy the gate).
 
 ## Divergence / finding protocol
 
 Same as gate 4: any point where the spec text under-determines what a real
 producer must do is a FINDING recorded in `adapters/FINDINGS.md` with the
 spec sentence relied on. Claude adjudicates: spec erratum, demo bug, or
-documentation gap. Wire-affecting rulings stop the phase (exit bar #4).
+documentation gap. Wire-affecting rulings stop the phase (exit bar #5).
 
 ## Gate roles
 
-- Builder: Codex (systems lane; live-lab runs on the local LAN are in
-  scope for `codex exec`). Content-filter fallback per gate-3/4 precedent:
-  Claude builds under the same rules.
-- Gate: Claude — re-runs scenarios (incl. live S1+S3), audits secret
-  hygiene, audits FINDINGS.md, checks exit bar #4 diff-clean, writes
-  `spec/GATE5-CLOSE.md`.
+- Builder: Codex (systems lane; live-lab runs on the local LAN are in scope
+  for `codex exec`). Content-filter fallback per gate-3/4 precedent: Claude
+  builds under the same rules.
+- Gate: Claude — re-runs per exit bar #8, audits the canary sweep, audits
+  FINDINGS.md, checks exit bar #5 diff-clean, writes `spec/GATE5-CLOSE.md`.
+- Matthew: rules on the Q5-1 rename wording if the Vigil spike fails
+  (external-claim language), and physically owns the lab (preset choice,
+  exclusive-control windows).
