@@ -1,1 +1,10 @@
 node_modules/
+
+# Gate 5 demo private/runtime material. Real defaults live outside the repo at
+# ~/.aar-demo; these entries also defend against an accidental in-repo override.
+.aar-demo/
+demo/private/
+demo/artifacts/
+demo/**/*.private.json
+demo/**/*.journal.jsonl
+demo/**/*.witness.jsonl
