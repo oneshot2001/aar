@@ -620,7 +620,7 @@ def run_c1() -> dict[str, Any]:
     return output
 
 
-KAT_EVALUATION_TIME = 7_636_552
+KAT_EVALUATION_TIME = 1_735_689_800
 EMPTY_REPLAY_STATE: dict[str, Any] = {"entries": []}
 
 OBJECT_ARTIFACT_CATEGORY = {

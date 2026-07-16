@@ -2,12 +2,12 @@
   "prior_emissions": [
     {
       "issuer_kid": "fc6c247cd3e6019301650141e5b1285e9779fd096a4f58ef6715ec090d22f9d5",
-      "issuer_seq": 106,
+      "issuer_seq": 101,
       "epoch_owner_kid": "dc0ce633dbcc913dafafa4b89ac44d8ce683fdfc3f60c8bdf21213b9f2b534ba",
       "epoch_id": 42,
       "epoch_seq": 9999999,
       "receipt_id": "ecf6b609e4a70f69bb2746528cf124858b251fef3e62b2d2fb77c1b4f2d8c90d",
-      "envelope_digest": "4a4b5cca2d99429e9cd835f3385563e50436d9848bcf61b5e8c2fd31f75e483d"
+      "envelope_digest": "329a6edefad11a9605e20a92170bea76f9ffb5259b8146ae18b8de086257cc9a"
     }
   ]
 }

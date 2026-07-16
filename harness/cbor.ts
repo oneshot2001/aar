@@ -31,7 +31,7 @@ function head(major: number, value: number): Uint8Array {
   if (value <= 0xffff_ffff) {
     return Uint8Array.of(
       (major << 5) | 26,
-      value / 0x1_00_00_00_00,
+      value >>> 24,
       value >>> 16,
       value >>> 8,
       value,

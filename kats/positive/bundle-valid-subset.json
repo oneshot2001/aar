@@ -13,11 +13,11 @@
     "status_signing": "e3615fff37474c561c068d1f56f5ec3751cd7eb2ea7046c016a142c932865496"
   },
   "computed_ids": {
-    "bundle_digest": "21ff2f0fff43cd64e9d7a57ec53de75b73ea203bd688a56f0478abb0b11ac12d",
-    "selector_commitment": "7dd797d8e3ba67ced258e1ee2343d414b833426c0159df7b0b47d7b18d2f0a2f",
-    "trust_store_digest": "7fe6b4bc2bc11ff2896bfea86186c6d0416b9f9a1244a71881fc5f1dce28dbcf",
-    "manifest_id": "f2a746a5f39d0a2646b2dc00fe6514c080b74875f39ea0543e65c97070b0ff8a",
-    "anchor_id": "207f74276244d3c886fe907cad5e27ab6933267a1aa094a80f821661d1a95e0f",
-    "batch_id": "65ff7ee01887291f2bbcfbaa010bb9e0726f05b3be99b151c74cc208f8bde0c5"
+    "bundle_digest": "a126151af8f09ba46a48562cfc1f25f1ded2f7076b0ab94ac2d11d540a7fb3ac",
+    "selector_commitment": "0fa608e6d92510a04fcd0fd13c057cec59c2ed850b6086857faac5a5564ca970",
+    "trust_store_digest": "d14f2bc6b289d8b2bfb462f2fe71cb0dd1ab527889ca6b4777c1006249fdb7b5",
+    "manifest_id": "a0228cce5173738f9c74df5f56af72a4df27cfecaef4ae47167f0f1ae8d52d59",
+    "anchor_id": "e5b5dcbfe35a5edc406d8fa9cc13885a3de64cff72df6b67b718e20b57a79cfa",
+    "batch_id": "c975fc081a7b1a3faed6fb2400719d47bd126416f82e9530fd3d99245278cf3e"
   }
 }

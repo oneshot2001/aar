@@ -754,3 +754,36 @@ expected, `bundle/range-boundary` produced) was pyref being RIGHT.
 | 6 · `complete` terminology | Approve producer-declared semantics with the mandatory `ingress_completeness_not_established` observation — this is exactly the narrowed G3. |
 | 7 · Anchor floor | Approve RFC 6962 v1 as the sole base-tier proof protocol. A published-checkpoint second profile is post-v0.2 if ever. |
 | 8 · Resource ceilings | Approve D-30 constants including 16 MiB / 10,000 nodes; committed in verdict config, revisable at a future wire version with data. |
+
+## D-56 — Reference encoder four-byte uint defect; corpus regenerated with lab-era times
+
+**Decision.** `harness/cbor.ts` wrote the first payload byte of a four-byte
+unsigned integer as `value / 2^32` (which truncates to zero) instead of
+`value >>> 24`, silently zeroing the high byte of every unsigned integer in
+`[2^24, 2^32)` — the range containing every realistic Unix timestamp. The
+encoder is corrected; a boundary KAT test (`harness/cbor-boundary.test.ts`)
+pins RFC 8949 core-deterministic bytes for all width transitions, each value
+cross-checked against the pyref encoder. The corpus is regenerated: fixture
+builders always intended lab-era times (`BASE_TIME = 1_735_689_600`), so
+217 fixture files change bytes. Five corruption-era constants that had been
+hardcoded from the *encoded* (corrupted) values are restored to their
+intended values (`anchor/submission-late` mutation, `epoch/late-insertion`,
+DAG depth/width `committed_at`/`expires_at`, and pyref's
+`KAT_EVALUATION_TIME` `7_636_552` → `1_735_689_800`).
+
+**Why.** Found in gate 5 slice D1 (G5-D1-004): the demo EP, building on the
+harness encoder with a current Unix timestamp, produced bundles whose carried
+`evaluation_time` disagreed with `--at` under pyref. Gates 1–4 could not
+catch this: the corpus was *generated* by the defective encoder, so its bytes
+were internally consistent (valid CBOR of the wrong small integers), pyref
+matched the bytes clean-room, and byte-identity held. Two-implementation
+agreement proves spec unambiguity over the corpus's value coverage — not
+beyond it. The wire text is unchanged and needs no erratum: RFC 8949
+deterministic encoding is unambiguous; this is an implementation and
+fixture-value defect only.
+
+**Verification.** After correction: harness 30/30 (1,180 assertions incl.
+14 boundary KATs), pyref C1 43/43 round-trip/ID/signature byte-identity,
+pyref C2 188/188 verdict + reason agreement, determinism 188/188, zero
+divergences — the two-implementation bar re-met on the corrected corpus.
+Tagged `v0.2-rc3`.

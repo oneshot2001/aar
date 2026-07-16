@@ -6,7 +6,7 @@
     "ep_signing": "dc0ce633dbcc913dafafa4b89ac44d8ce683fdfc3f60c8bdf21213b9f2b534ba"
   },
   "computed_ids": {
-    "event_id": "edf10e1a6c5546e48800a22dc4caeeb1ca8f7871c75784f3d84a16030e89f52f",
-    "previous_event_digest": "49ee0ad7fffb2bbb885e4f8ec8924cd77a5a091c41de21189446756c7fa5be56"
+    "event_id": "66583a27c4283d284fd7f81ca45ee7b38172f5b8c03033c2e26cff9d628df6bb",
+    "previous_event_digest": "98a969eece28d7306e2cd8c17863c11b129080f359d57087d4464dde79738cb6"
   }
 }

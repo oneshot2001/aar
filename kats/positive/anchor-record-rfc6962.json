@@ -6,9 +6,9 @@
     "anchor_signing": "e26630d1233ed92d8ac231a4bf230fddb2d924d6eace7489946e1e82e9523a70"
   },
   "computed_ids": {
-    "anchor_id": "207f74276244d3c886fe907cad5e27ab6933267a1aa094a80f821661d1a95e0f",
-    "manifest_id": "f2a746a5f39d0a2646b2dc00fe6514c080b74875f39ea0543e65c97070b0ff8a",
-    "manifest_digest": "76576e20257d6b6cf810f9c761cf80cf95f122441eedda38e145721b51294926",
-    "anchor_root": "37409823c2a47c1c6fd443794aaf28c6b8208473a606c78e8d218a080e6e1ce0"
+    "anchor_id": "e5b5dcbfe35a5edc406d8fa9cc13885a3de64cff72df6b67b718e20b57a79cfa",
+    "manifest_id": "a0228cce5173738f9c74df5f56af72a4df27cfecaef4ae47167f0f1ae8d52d59",
+    "manifest_digest": "8f3bb4b0379e12bb1d55693492c3b878d889de8256f34a41700cd459f566cd64",
+    "anchor_root": "98b50d8d2ab47dbd5d396a43a2380662bce37f6be2d3fd1aae57c8ccf9d1cad3"
   }
 }

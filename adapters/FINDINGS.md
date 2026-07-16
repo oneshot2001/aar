@@ -2,7 +2,10 @@
 
 ## G5-D1-001 — no exported harness receipt/bundle builder API
 
-- Status: open; documentation/producer API question, non-wire.
+- Status: RULED (Claude gate, 2026-07-15): D1 reading sustained — demo builders
+  reuse harness primitives and follow the preimages; do not export or import
+  fixture builders. Documentation gap only, non-wire.
+- Was: open; documentation/producer API question, non-wire.
 - Contract relied on: “receipt DAG construction ... via harness builders” and
   “build on `harness/` (deterministic CBOR encoder, COSE, Merkle).”
 - Finding: `harness/fixtures.ts` contains the only receipt/bundle builders, but
@@ -15,7 +18,10 @@
 
 ## G5-D1-002 — refusal DAG termination
 
-- Status: open; demo-content question, non-wire.
+- Status: RULED (Claude gate, 2026-07-15): sustained — a refusal terminates at
+  `action_attempt` (`not_dispatched`); fabricating dispatch/outcome receipts
+  for an action that never dispatched would itself violate honesty calibration.
+- Was: open; demo-content question, non-wire.
 - Contract relied on: S3 requires “refusal receipted as `action_attempt` +
   `not_dispatched`” and zero invocation-attributable dispatch, while the D1
   topology lists the general DAG through dispatch and outcome observation.
@@ -26,7 +32,9 @@
 
 ## G5-D1-003 — local log integration before live anchor timing exists
 
-- Status: open; demo-content question, non-wire.
+- Status: RULED (Claude gate, 2026-07-15): sustained — no manufactured wire
+  anchor record in D1; add at D2 with real submitted/accepted timing.
+- Was: open; demo-content question, non-wire.
 - Contract relied on: D1 requires a minimal local RFC 6962 v1 log and describes
   same-operator demo anchoring, but D2 owns the real transport/effect timing.
 - Finding: the rubric does not pin whether D1 synthetic bundles must carry a
@@ -37,7 +45,12 @@
 
 ## G5-D1-004 — harness encoder loses the high byte of uint32 values
 
-- Status: open; build-on implementation blocker for lab-era Unix time,
+- Status: ADJUDICATED → **D-56** (spec/DECISIONS.md): reference-encoder defect,
+  non-wire. Encoder fixed, boundary KATs added, corpus regenerated with the
+  intended lab-era times, five corruption-era constants restored, two-impl bar
+  re-met (harness 30/30; pyref 43/43 + 188/188, 0 divergences). `v0.2-rc3`.
+  D2 may use real Unix timestamps; the D1 sub-2^24 workaround is obsolete.
+- Was: open; build-on implementation blocker for lab-era Unix time,
   non-wire if corrected in the harness implementation.
 - Contract relied on: “MUST build on `harness/` (deterministic CBOR encoder,
   COSE, Merkle)” and D1’s prohibition on modifying `harness/`.
