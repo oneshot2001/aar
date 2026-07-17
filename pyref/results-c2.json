@@ -1,6 +1,6 @@
 {
   "deterministic": true,
-  "deterministic_fixtures": 188,
+  "deterministic_fixtures": 191,
   "divergence_count": 0,
   "divergences": [],
   "entry_point_findings": 1,
@@ -2637,10 +2637,52 @@
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
       "verdict_sha256": "dd2c5d4ebb1143b000535a9516ddd35e8be699bc21f5c1ddddd662d580669a8f"
+    },
+    {
+      "deterministic": true,
+      "expected_class": "unknown",
+      "expected_code": null,
+      "expected_result": "conformant",
+      "first_failure_step": null,
+      "fixture": "kats/terminal-state/outcome-terminal-ranked-after-unknown.cbor",
+      "matched": true,
+      "produced_class": "unknown",
+      "produced_code": null,
+      "produced_result": "conformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "36f64a6672bdb5f414cc99c165788e5685be8fafac5f61eb4fcbaced8012d9a1"
+    },
+    {
+      "deterministic": true,
+      "expected_class": "contradicted",
+      "expected_code": null,
+      "expected_result": "conformant",
+      "first_failure_step": null,
+      "fixture": "kats/terminal-state/outcome-terminals-contradicted-before-unknown.cbor",
+      "matched": true,
+      "produced_class": "contradicted",
+      "produced_code": null,
+      "produced_result": "conformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "f9382f88796342e12cdc6638d4cc790108bb200a099e79a86f429d71ca086087"
+    },
+    {
+      "deterministic": true,
+      "expected_class": "contradicted",
+      "expected_code": null,
+      "expected_result": "conformant",
+      "first_failure_step": null,
+      "fixture": "kats/terminal-state/outcome-terminals-unknown-before-contradicted.cbor",
+      "matched": true,
+      "produced_class": "contradicted",
+      "produced_code": null,
+      "produced_result": "conformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "8e9e12867bb1cfcd22f26bba9d879a8ec0b2b5a7dee05955692fc065a6db9db6"
     }
   ],
-  "fixtures_evaluated": 188,
-  "matches": 188,
+  "fixtures_evaluated": 191,
+  "matches": 191,
   "mismatches": 0,
   "schema_version": 1,
   "slice": "C2"

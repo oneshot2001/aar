@@ -1594,10 +1594,13 @@ def _evidence_classes(state: State) -> None:
                 observer_domain = receipt["body"].get("observer", {}).get("failure_domain_id")
                 if observer_domain in source_domains:
                     _fail("evidence/observer-not-independent", 19)
-            if level in outcome_order and (maximum_outcome == "not_evaluated"
-                                           or outcome_order[level] > outcome_order[maximum_outcome]):
+            if level == "contradicted":
                 maximum_outcome = level
-            elif level in {"contradicted", "unknown"}:
+            elif level == "unknown" and maximum_outcome != "contradicted":
+                maximum_outcome = level
+            elif level in outcome_order and maximum_outcome not in {"contradicted", "unknown"} \
+                    and (maximum_outcome == "not_evaluated"
+                         or outcome_order[level] > outcome_order[maximum_outcome]):
                 maximum_outcome = level
     state.classes = {"time": maximum_time, "provenance": maximum_provenance, "outcome": maximum_outcome}
 

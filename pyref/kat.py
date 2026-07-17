@@ -16,7 +16,11 @@ from .verifier import Evaluation, evaluate
 
 
 ROOT = Path(__file__).resolve().parent.parent
-KAT_DIRECTORIES = (ROOT / "kats" / "positive", ROOT / "kats" / "class-boundary")
+KAT_DIRECTORIES = (
+    ROOT / "kats" / "positive",
+    ROOT / "kats" / "class-boundary",
+    ROOT / "kats" / "terminal-state",
+)
 RESULTS_PATH = Path(__file__).resolve().parent / "results-c1.json"
 C2_RESULTS_PATH = Path(__file__).resolve().parent / "results-c2.json"
 DIVERGENCES_PATH = Path(__file__).resolve().parent / "DIVERGENCES.md"
@@ -641,6 +645,7 @@ OBJECT_ARTIFACT_CATEGORY = {
 def _c2_fixture_paths() -> list[Path]:
     paths = list((ROOT / "kats" / "positive").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "class-boundary").glob("*.cbor"))
+    paths.extend((ROOT / "kats" / "terminal-state").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "negative").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "negative" / "stateful").glob("*.bundle.cbor"))
     return sorted(paths)

@@ -1,7 +1,7 @@
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildClassBoundaryFixtures, buildNegativeFixtures } from "./negative-fixtures";
+import { buildClassBoundaryFixtures, buildNegativeFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
 import { buildStatefulFixtures } from "./stateful-fixtures";
 
 const harnessDirectory = dirname(fileURLToPath(import.meta.url));
@@ -37,4 +37,13 @@ for (const fixture of classBoundaries) {
   await writeFile(join(classDirectory, `${fixture.filename}.json`), `${JSON.stringify(fixture.descriptor, null, 2)}\n`);
 }
 
-console.log(`generated ${fixtures.length} stateless, ${stateful.length} stateful, and ${classBoundaries.length} class-boundary KATs`);
+const terminalDirectory = join(outputDirectory, "..", "terminal-state");
+await mkdir(terminalDirectory, { recursive: true });
+for (const entry of await readdir(terminalDirectory)) if (entry.endsWith(".cbor") || entry.endsWith(".json")) await rm(join(terminalDirectory, entry));
+const terminalOutcomes = buildTerminalOutcomeFixtures();
+for (const fixture of terminalOutcomes) {
+  await writeFile(join(terminalDirectory, `${fixture.filename}.cbor`), fixture.bytes);
+  await writeFile(join(terminalDirectory, `${fixture.filename}.json`), `${JSON.stringify(fixture.descriptor, null, 2)}\n`);
+}
+
+console.log(`generated ${fixtures.length} stateless, ${stateful.length} stateful, ${classBoundaries.length} class-boundary, and ${terminalOutcomes.length} terminal-state KATs`);

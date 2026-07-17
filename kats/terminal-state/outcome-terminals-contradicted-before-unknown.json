@@ -1,0 +1,7 @@
+{
+  "name": "outcome-terminals-contradicted-before-unknown",
+  "object_type": "bundle",
+  "terminal_order": "contradicted_before_unknown",
+  "expectation": "conformant",
+  "expected_class": "contradicted"
+}

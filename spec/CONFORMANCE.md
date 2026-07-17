@@ -218,7 +218,12 @@ normative as the step order itself (D-54).
     opaquely and does not cryptographically interpret TPM quotes, provider
     signature formats, predicates, or other attestation content; deep validation
     is a v0.3 or stronger-profile concern. Contradicted and unknown remain honest
-    terminal labels, never successful independent sensing.
+    terminal labels, never successful independent sensing. `maximum_outcome_level`
+    MUST be a pure function of the multiset of committed receipts' declared
+    `evidence.outcome.level` values, independent of receipt-ID sort order:
+    `contradicted` if any receipt declares it; else `unknown` if any receipt
+    declares it; else the highest-ranked declared level (`independently_sensed` >
+    `device_acknowledged` > `dispatched` > `accepted`); else `not_evaluated`.
 20. **Verdict.** Construct, deterministically encode, and sign exactly one verdict
     under section 5. The result is `conformant` only if every requested check
     succeeded. Missing external policy, key, expected head, or replay state yields

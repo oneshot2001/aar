@@ -30,6 +30,18 @@ export interface ClassBoundaryFixture {
   };
 }
 
+export interface TerminalOutcomeFixture {
+  filename: string;
+  bytes: Uint8Array;
+  descriptor: {
+    name: string;
+    object_type: "bundle";
+    terminal_order: string;
+    expectation: "conformant";
+    expected_class: "contradicted" | "unknown";
+  };
+}
+
 function object(value: CborValue | undefined): value is Obj {
   return typeof value === "object" && value !== null && !Array.isArray(value) && !(value instanceof Uint8Array) && !(value instanceof Map);
 }
@@ -806,6 +818,110 @@ export function buildClassBoundaryFixtures(): ClassBoundaryFixture[] {
 
   addBoundary("outcome-device-acknowledged-declared-independently-sensed", "device_acknowledged_to_independently_sensed", "reject", "evidence/outcome-class-unsatisfied", (bundle) => { clearJournal(bundle); mutateReceiptWhere(bundle, (value) => value.kind === "outcome_observation", (receipt) => { ((receipt.evidence as Obj).outcome as Obj).level = "independently_sensed"; }); });
   addBoundary("outcome-independently-sensed-satisfied", "device_acknowledged_to_independently_sensed", "conformant", "independently_sensed", (bundle) => { clearJournal(bundle); const predicateId = addOpaquePayload(bundle, "qualification:independent"); mutateReceiptWhere(bundle, (value) => value.kind === "outcome_observation", (receipt) => { const outcome = (receipt.evidence as Obj).outcome as Obj; outcome.level = "independently_sensed"; outcome.qualifying_predicate_id = predicateId; (((receipt.body as Obj).observer as Obj).failure_domain_id) = id16("failure-domain:independent-observer"); }); });
+
+  result.sort((a, b) => a.filename.localeCompare(b.filename));
+  return result;
+}
+
+export function buildTerminalOutcomeFixtures(): TerminalOutcomeFixture[] {
+  const result: TerminalOutcomeFixture[] = [];
+  const makeTerminal = (source: CborValue, level: "contradicted" | "unknown", epochSeq: number, issuerSeq: number, committedAt: number, nonceLabel: string): CborValue[] => {
+    const next = clone(payload(source));
+    ((next.evidence as Obj).outcome as Obj).level = level;
+    (next.binding as Obj).epoch_seq = epochSeq;
+    (next.emission as Obj).issuer_seq = issuerSeq;
+    (next.emission as Obj).committed_at = committedAt;
+    (next.freshness as Obj).nonce = id16(`nonce:terminal-state:${nonceLabel}`);
+    return resign(source, next, true);
+  };
+  const findTerminal = (
+    source: CborValue,
+    level: "contradicted" | "unknown",
+    epochSeq: number,
+    issuerSeq: number,
+    committedAt: number,
+    label: string,
+    predicate: (candidate: CborValue[]) => boolean,
+  ): CborValue[] => {
+    for (let salt = 0; salt < 10_000; salt += 1) {
+      const candidate = makeTerminal(source, level, epochSeq, issuerSeq, committedAt, `${label}:${salt}`);
+      if (predicate(candidate)) return candidate;
+    }
+    throw new Error(`could not construct terminal outcome ordering for ${label}`);
+  };
+  const receiptId = (envelope: CborValue): CborValue => payload(envelope).receipt_id!;
+  const add = (
+    filename: string,
+    terminalOrder: string,
+    expectedClass: "contradicted" | "unknown",
+    mutation: (bundle: Obj) => void,
+  ): void => {
+    const bundle = clone(baseBundle());
+    clearJournal(bundle);
+    mutation(bundle);
+    result.push({
+      filename,
+      bytes: encodeCbor(bundle),
+      descriptor: {
+        name: filename,
+        object_type: "bundle",
+        terminal_order: terminalOrder,
+        expectation: "conformant",
+        expected_class: expectedClass,
+      },
+    });
+  };
+
+  add("outcome-terminal-ranked-after-unknown", "unknown_before_ranked", "unknown", (bundle) => {
+    const source = receiptBy(bundle, (value) => value.kind === "outcome_observation");
+    const ranked = receiptBy(bundle, (value) => value.kind === "dispatch");
+    const sourcePayload = payload(source);
+    const terminal = findTerminal(
+      source,
+      "unknown",
+      (sourcePayload.binding as Obj).epoch_seq as number,
+      (sourcePayload.emission as Obj).issuer_seq as number,
+      (sourcePayload.emission as Obj).committed_at as number,
+      "ranked-after",
+      (candidate) => compare(receiptId(candidate), receiptId(ranked)) < 0,
+    );
+    const list = receiptList(bundle);
+    list[list.indexOf(source)] = terminal;
+    sortArtifacts(bundle, "receipts");
+  });
+
+  for (const contradictedFirst of [true, false]) {
+    const order = contradictedFirst ? "contradicted_before_unknown" : "unknown_before_contradicted";
+    add(`outcome-terminals-${order.replaceAll("_", "-")}`, order, "contradicted", (bundle) => {
+      const source = receiptBy(bundle, (value) => value.kind === "outcome_observation");
+      const sourcePayload = payload(source);
+      const binding = sourcePayload.binding as Obj;
+      const emission = sourcePayload.emission as Obj;
+      const unknown = makeTerminal(
+        source,
+        "unknown",
+        binding.epoch_seq as number,
+        emission.issuer_seq as number,
+        emission.committed_at as number,
+        `${order}:unknown`,
+      );
+      const contradicted = findTerminal(
+        source,
+        "contradicted",
+        (binding.epoch_seq as number) + 1,
+        (emission.issuer_seq as number) + 1,
+        (emission.committed_at as number) + 1,
+        `${order}:contradicted`,
+        (candidate) => contradictedFirst
+          ? compare(receiptId(candidate), receiptId(unknown)) < 0
+          : compare(receiptId(candidate), receiptId(unknown)) > 0,
+      );
+      const list = receiptList(bundle);
+      list[list.indexOf(source)] = unknown;
+      list.push(contradicted);
+      sortArtifacts(bundle, "receipts");
+    });
+  }
 
   result.sort((a, b) => a.filename.localeCompare(b.filename));
   return result;

@@ -1,0 +1,7 @@
+{
+  "name": "outcome-terminal-ranked-after-unknown",
+  "object_type": "bundle",
+  "terminal_order": "unknown_before_ranked",
+  "expectation": "conformant",
+  "expected_class": "unknown"
+}

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { decodeCbor, encodeCbor, equalBytes } from "./cbor";
 import { verifySigned } from "./crypto";
 import { buildFixtures } from "./fixtures";
-import { buildClassBoundaryFixtures } from "./negative-fixtures";
+import { buildClassBoundaryFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
 import { TEST_KEYS } from "./testkeys";
 import { verifyBundle } from "./verifier";
 import { readFileSync } from "node:fs";
@@ -73,4 +73,31 @@ describe("positive KAT harness", () => {
       expect(JSON.parse(readFileSync(join(root, "kats", "class-boundary", `${fixture.filename}.json`), "utf8")), fixture.filename).toEqual(fixture.descriptor);
     }
   });
+
+  test("terminal outcome aggregation is order-independent and matches generated files", () => {
+    const first = buildTerminalOutcomeFixtures(); const second = buildTerminalOutcomeFixtures();
+    expect(first.map((fixture) => fixture.filename)).toEqual(second.map((fixture) => fixture.filename));
+    for (let index = 0; index < first.length; index += 1) {
+      const fixture = first[index]!;
+      expect(equalBytes(fixture.bytes, second[index]!.bytes), fixture.filename).toBe(true);
+      expect(equalBytes(fixture.bytes, readFileSync(join(root, "kats", "terminal-state", `${fixture.filename}.cbor`))), fixture.filename).toBe(true);
+      expect(JSON.parse(readFileSync(join(root, "kats", "terminal-state", `${fixture.filename}.json`), "utf8")), fixture.filename).toEqual(fixture.descriptor);
+      const result = verifyBundle(fixture.bytes);
+      expect(result.ok, fixture.filename).toBe(true);
+      if (result.ok) {
+        const limits = result.verdict.limits as Record<string, string>;
+        expect(limits.maximum_outcome_level, fixture.filename).toBe(fixture.descriptor.expected_class);
+      }
+      const bundle = decodeCbor(fixture.bytes, { strict: true }) as Record<string, CborValue>;
+      const artifacts = bundle.artifacts as Record<string, CborValue>;
+      const receipts = (artifacts.receipts as CborValue[]).map((entry) => decodeCbor((entry as CborValue[])[0] as Uint8Array, { strict: true }) as Record<string, CborValue>);
+      const levels = receipts.map((receipt) => ((receipt.evidence as Record<string, CborValue>).outcome as Record<string, CborValue> | undefined)?.level);
+      if (fixture.descriptor.terminal_order === "unknown_before_ranked") {
+        expect(levels.indexOf("unknown"), fixture.filename).toBeLessThan(levels.indexOf("dispatched"));
+      } else {
+        const terminals = levels.filter((level) => level === "contradicted" || level === "unknown");
+        expect(`${terminals[0]}_before_${terminals[1]}`, fixture.filename).toBe(fixture.descriptor.terminal_order);
+      }
+    }
+  }, 30_000);
 });

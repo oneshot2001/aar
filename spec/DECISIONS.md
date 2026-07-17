@@ -787,3 +787,38 @@ fixture-value defect only.
 pyref C2 188/188 verdict + reason agreement, determinism 188/188, zero
 divergences — the two-implementation bar re-met on the corrected corpus.
 Tagged `v0.2-rc3`.
+
+## D-57 — `maximum_outcome_level` aggregation is order-independent; terminal labels dominate
+
+**Decision.** Step 19's verdict field `maximum_outcome_level` is a pure
+function of the multiset of committed receipts' `evidence.outcome.level`
+values, independent of receipt-ID sort order: `contradicted` if any receipt
+declares it; else `unknown` if any receipt declares it; else the
+highest-ranked declared level (`independently_sensed` >
+`device_acknowledged` > `dispatched` > `accepted`); else `not_evaluated`.
+CONFORMANCE step 19 gains the normative sentence. Both implementations are
+corrected: the reference implementation let a ranked level encountered after
+a terminal label silently overwrite it (guarded lookup, last-wins); pyref
+raised `KeyError` on the same ordering (`outcome_order[maximum]` with a
+terminal maximum). The demo producer's interim workaround — grinding the
+outcome receipt's freshness nonce until its receipt ID sorted after the
+action-attempt and dispatch receipts (G5-D2a-007 D2a reading) — is removed;
+conformant producers need no ordering discipline. Fixture coverage is added
+for ranked-after-terminal and for bundles carrying both `contradicted` and
+`unknown` in both sort orders; existing corpus verdict bytes must be shown
+unchanged.
+
+**Why.** Found in gate 5 slice D2a (G5-D2a-007): S6's terminal outcomes gave
+the outcome-observation receipt a content-addressed ID that sorts before the
+dispatch receipt roughly half the time, crashing the public reference
+verifier on wire-valid conformant input. The spec sentence "Contradicted and
+unknown remain honest terminal labels" implied dominance but never pinned the
+aggregation, so the two clean-room implementations improvised divergently —
+in a **signed verdict field**. Gates 1–4 could not see it because no corpus
+fixture carried a ranked level sorting after a terminal one (the D-56 lesson
+restated: two-implementation agreement proves unambiguity only over the
+corpus's coverage). Terminal-dominates is the honesty-first reading: a run
+whose outcome was contradicted or unresolved must not report a stronger
+level because a lower-ranked receipt happened to sort last; `contradicted`
+outranks `unknown` because it is a positive observation of contradiction,
+not mere absence of evidence.

@@ -2,17 +2,17 @@
   "checks": {
     "id_digest_recomputation": {
       "failed": 0,
-      "passed": 43,
+      "passed": 46,
       "skipped": 0
     },
     "round_trip": {
       "failed": 0,
-      "passed": 43,
+      "passed": 46,
       "skipped": 0
     },
     "signature_recomputation": {
       "failed": 0,
-      "passed": 43,
+      "passed": 46,
       "skipped": 0
     }
   },
@@ -706,9 +706,57 @@
         }
       },
       "fixture": "kats/positive/status-snapshot-good.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 53,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 27,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/terminal-state/outcome-terminal-ranked-after-unknown.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 54,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 28,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/terminal-state/outcome-terminals-contradicted-before-unknown.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 54,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 28,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/terminal-state/outcome-terminals-unknown-before-contradicted.cbor"
     }
   ],
-  "fixtures_checked": 43,
+  "fixtures_checked": 46,
   "schema_version": 1,
   "slice": "C1"
 }

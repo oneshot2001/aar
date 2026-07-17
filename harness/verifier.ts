@@ -1386,8 +1386,10 @@ function validateEvidence(bundle: Obj, parsed: Parsed): EvidenceLimits | B1Failu
         const sourceDomains = ancestors.map((entry) => ((entry.payload.body as Obj).source_device as Obj | undefined)?.failure_domain_id).filter((value): value is CborValue => value !== undefined);
         if (sourceDomains.some((domain) => same(domain, observer.failure_domain_id))) return failure(19, "evidence/observer-not-independent", "receipt.body.observer.failure_domain_id");
       }
-      if (level === "contradicted" || level === "unknown") outcome = level;
-      else if (outcome === "not_evaluated" || outcome === "contradicted" || outcome === "unknown" || outcomeRank[level]! > (outcomeRank[outcome] ?? -1)) outcome = level;
+      if (level === "contradicted") outcome = level;
+      else if (level === "unknown" && outcome !== "contradicted") outcome = level;
+      else if (outcome !== "contradicted" && outcome !== "unknown"
+        && (outcome === "not_evaluated" || outcomeRank[level]! > outcomeRank[outcome]!)) outcome = level;
     }
   }
   return { time, provenance, outcome };
