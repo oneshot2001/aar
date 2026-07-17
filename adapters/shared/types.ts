@@ -62,10 +62,21 @@ export interface DispatchContext {
   readonly commandDigestHex: string;
   readonly witnessLogPath: string;
   readonly observedAt: number;
+  readonly afterActionDispatched?: () => Promise<void>;
 }
 
 export interface DemoAdapter {
   readonly id: AdapterId;
   readonly version: string;
   dispatch(command: CommandManifest, context: DispatchContext): Promise<DispatchResult>;
+  reconcile?(command: CommandManifest, context: DispatchContext): Promise<DispatchResult>;
+}
+
+export interface CredentialAccess {
+  readonly reference: string;
+  readonly secret: string;
+}
+
+export interface CredentialProvider {
+  get(reference: string): Promise<CredentialAccess>;
 }

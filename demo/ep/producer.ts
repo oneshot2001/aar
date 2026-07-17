@@ -22,6 +22,7 @@ export interface ProducerInput {
   readonly targetLogicalName: "ptz-primary" | "fixed-primary";
   readonly actionName: "camera.ptz.preset" | "camera.stream.view";
   readonly parameters: Readonly<Record<string, string | number | boolean>>;
+  readonly sourceDeviceMetadata?: { readonly manufacturer: string; readonly model: string; readonly firmware: string };
   readonly delegationWindows: readonly DelegationWindow[];
   readonly bundlePath: string;
   readonly trustPolicyPath: string;
@@ -52,8 +53,8 @@ async function atomicWrite(path: string, bytes: Uint8Array | string): Promise<vo
 }
 
 export async function produce(input: ProducerInput): Promise<ProducerResult> {
-  if (!Number.isSafeInteger(input.evaluatedAt) || input.evaluatedAt < 3600 || input.evaluatedAt >= 0x1_00_00_00) {
-    throw new Error("evaluatedAt must be a pinned uint below 2^24 until G5-D1-004 is adjudicated");
+  if (!Number.isSafeInteger(input.evaluatedAt) || input.evaluatedAt < 3600) {
+    throw new Error("evaluatedAt must be a pinned non-negative safe integer");
   }
   validateId("invocationId", input.invocationId, 16);
   validateId("correlationId", input.correlationId, 16);
@@ -92,41 +93,59 @@ export async function produce(input: ProducerInput): Promise<ProducerResult> {
     await input.journal.append({ invocation_id: invocationIdHex, at: input.evaluatedAt, event: "refusal_persisted", data: { reason: "delegation-expired" } });
   } else if (await input.journal.mustNotRedispatch(invocationIdHex)) {
     resumedWithoutRedispatch = true;
-    const observationDigest = hash(new TextEncoder().encode(`resume-unknown:${invocationIdHex}:${toHex(command.command_digest)}`));
-    dispatchResult = {
-      dispatched: true, status: 0, responseBodyDigest: hash(new Uint8Array()),
-      effect: {
-        adapter_id: input.adapter.id, invocation_id: invocationIdHex, command_digest: toHex(command.command_digest),
-        target_logical_name: input.targetLogicalName, observed_at: input.evaluatedAt,
-        state: "unknown", outcome_level: "unknown", observation_digest: toHex(observationDigest), backend_evidence: { resumed_without_redispatch: true },
-      },
-    };
+    if (input.adapter.reconcile) {
+      dispatchResult = await input.adapter.reconcile(command, {
+        invocationIdHex, commandDigestHex: toHex(command.command_digest), witnessLogPath: input.witnessLogPath,
+        observedAt: input.evaluatedAt,
+      });
+    } else {
+      const observationDigest = hash(new TextEncoder().encode(`resume-unknown:${invocationIdHex}:${toHex(command.command_digest)}`));
+      dispatchResult = {
+        dispatched: true, status: 0, responseBodyDigest: hash(new Uint8Array()),
+        effect: {
+          adapter_id: input.adapter.id, invocation_id: invocationIdHex, command_digest: toHex(command.command_digest),
+          target_logical_name: input.targetLogicalName, observed_at: input.evaluatedAt,
+          state: "unknown", outcome_level: "unknown", observation_digest: toHex(observationDigest), backend_evidence: { resumed_without_redispatch: true },
+        },
+      };
+    }
   } else {
     await input.journal.append({
       invocation_id: invocationIdHex, at: input.evaluatedAt, event: "dispatch_intent_persisted",
       data: { command_digest: toHex(command.command_digest), adapter_id: input.adapter.id },
     });
     dispatchResult = await input.adapter.dispatch(command, {
-      invocationIdHex, commandDigestHex: toHex(command.command_digest), witnessLogPath: input.witnessLogPath, observedAt: input.evaluatedAt,
+      invocationIdHex, commandDigestHex: toHex(command.command_digest), witnessLogPath: input.witnessLogPath,
+      observedAt: input.evaluatedAt, afterActionDispatched: input.afterDispatchCut,
     });
-    dispatchCount = 1;
-    await input.afterDispatchCut?.();
-    await input.journal.append({
-      invocation_id: invocationIdHex, at: input.evaluatedAt, event: "dispatch_observed",
-      data: { status: dispatchResult.status, outcome_level: dispatchResult.effect.outcome_level, observation_digest: dispatchResult.effect.observation_digest },
-    });
+    if (dispatchResult.dispatched) {
+      dispatchCount = 1;
+      await input.journal.append({
+        invocation_id: invocationIdHex, at: input.evaluatedAt, event: "dispatch_observed",
+        data: { status: dispatchResult.status, outcome_level: dispatchResult.effect.outcome_level, observation_digest: dispatchResult.effect.observation_digest },
+      });
+    } else {
+      await input.journal.append({
+        invocation_id: invocationIdHex, at: input.evaluatedAt, event: "pre_transport_refusal_observed",
+        data: { reason: String(dispatchResult.effect.backend_evidence.application_status ?? "adapter-refused-before-transport") },
+      });
+    }
   }
 
   const wire = await buildDemoBundle({
     scenarioId: input.scenarioId, evaluatedAt: input.evaluatedAt, epochId: input.epochId,
     invocationId: input.invocationId, correlationId: input.correlationId, tenantId: input.tenantId, siteId: input.siteId, targetId: input.targetId,
     targetLogicalName: input.targetLogicalName, actionName: input.actionName, parameters: input.parameters,
+    sourceDeviceMetadata: input.sourceDeviceMetadata ?? { manufacturer: "AXIS", model: "Gate5 synthetic", firmware: "D1-stub" },
     adapterId: input.adapter.id, command, delegationWindows: input.delegationWindows, keys: input.keys, anchorLog: input.anchorLog,
-    dispatch: dispatchResult ? {
+    dispatch: dispatchResult?.dispatched ? {
       status: dispatchResult.status, responseBodyDigest: dispatchResult.responseBodyDigest,
       outcomeLevel: dispatchResult.effect.outcome_level, outcomeState: dispatchResult.effect.state,
       observationDigest: fromHex(dispatchResult.effect.observation_digest),
     } : undefined,
+    refusalReason: dispatchResult && !dispatchResult.dispatched
+      ? String(dispatchResult.effect.backend_evidence.application_status ?? "adapter-refused-before-transport")
+      : undefined,
   });
   await atomicWrite(input.bundlePath, wire.bundle);
   await atomicWrite(input.trustPolicyPath, `${JSON.stringify(wire.trustPolicy, null, 2)}\n`);

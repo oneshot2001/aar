@@ -6,6 +6,7 @@ export type JournalEvent =
   | "authorization_evaluated"
   | "dispatch_intent_persisted"
   | "dispatch_observed"
+  | "pre_transport_refusal_observed"
   | "refusal_persisted"
   | "bundle_emitted";
 
@@ -44,7 +45,11 @@ export class DurableInvocationJournal {
   }
 
   async mustNotRedispatch(invocationId: string): Promise<boolean> {
-    return (await this.records(invocationId)).some((record) =>
-      record.event === "dispatch_intent_persisted" || record.event === "dispatch_observed");
+    let pendingOrDispatched = false;
+    for (const record of await this.records(invocationId)) {
+      if (record.event === "dispatch_intent_persisted" || record.event === "dispatch_observed") pendingOrDispatched = true;
+      if (record.event === "pre_transport_refusal_observed") pendingOrDispatched = false;
+    }
+    return pendingOrDispatched;
   }
 }

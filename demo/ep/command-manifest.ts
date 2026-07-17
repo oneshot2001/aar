@@ -1,4 +1,4 @@
-import { encodeCbor } from "../../harness/cbor";
+import { encodeCbor, type CborValue } from "../../harness/cbor";
 import { domainHash, hash } from "../../harness/crypto";
 import type { AdapterId, CommandManifest, LogicalCommandRequest, SecretFree } from "../../adapters/shared/types";
 
@@ -27,5 +27,5 @@ export function buildCommandManifest<T extends LogicalCommandRequest>(
     excluded_fields: [{ name: "authorization", reason: "injected_only_at_transport" }],
     idempotency_key: request.invocationId,
   };
-  return { command_id: domainHash("AAR-COMMAND-MANIFEST-v1", fields), ...fields };
+  return { command_id: domainHash("AAR-COMMAND-MANIFEST-v1", fields as unknown as CborValue), ...fields };
 }

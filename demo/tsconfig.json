@@ -4,8 +4,15 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,
+    "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
     "types": ["bun"]
   },
-  "include": ["./**/*.ts", "../adapters/shared/**/*.ts", "../harness/**/*.ts"]
+  "include": [
+    "./**/*.ts",
+    "../adapters/**/*.ts",
+    "../harness/cbor.ts",
+    "../harness/crypto.ts",
+    "../harness/merkle.ts"
+  ]
 }

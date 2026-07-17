@@ -20,6 +20,7 @@ function createStub(id: AdapterId): DemoAdapter {
         response_line: "HTTP/1.1 202 Accepted",
         response_body_sha256: toHex(responseBodyDigest),
       });
+      await context.afterActionDispatched?.();
       const oracleData = encodeCbor({
         adapter_id: id, invocation_id: context.invocationIdHex, command_digest: context.commandDigestHex,
         action: command.action_name, state: "consistent", observed_at: context.observedAt,

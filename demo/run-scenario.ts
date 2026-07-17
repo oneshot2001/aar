@@ -26,6 +26,7 @@ export interface GateInputFile {
   readonly target_logical_name: "ptz-primary" | "fixed-primary";
   readonly action_name: "camera.ptz.preset" | "camera.stream.view";
   readonly parameters: Readonly<Record<string, string | number | boolean>>;
+  readonly source_device?: { readonly manufacturer: string; readonly model: string; readonly firmware: string };
   readonly expected_outcome_level: "accepted" | "device_acknowledged" | "contradicted" | "unknown";
   readonly adapter: "vapix" | "vms";
   readonly delegation_candidates: readonly { readonly not_before: number; readonly not_after: number }[];
@@ -43,6 +44,14 @@ export interface ScenarioRunResult {
   readonly pyrefOutput: string;
   readonly producer: ProducerResult;
   readonly witness: readonly WitnessObservation[];
+  readonly verificationResult: "conformant" | "nonconformant";
+}
+
+export interface ScenarioRunOptions {
+  readonly expectedVerification?: "conformant" | "nonconformant";
+  readonly expectedFailureReason?: string;
+  readonly transformBundle?: (bundle: Uint8Array) => Uint8Array;
+  readonly afterDispatchCut?: () => Promise<void>;
 }
 
 function object(value: CborValue | undefined): value is Obj {
@@ -66,24 +75,18 @@ function artifactsOf(bundleBytes: Uint8Array): Obj {
   return bundle.artifacts;
 }
 
-export function assertContent(
+export function assertBundleContent(
   scenarioId: ScenarioId,
   gate: GateInputFile,
   adapter: DemoAdapter,
   bundleBytes: Uint8Array,
-  pyrefOutput: string,
 ): void {
-  if (!pyrefOutput.includes("Result: conformant")) throw new Error("pyref did not report conformant");
-  if (pyrefOutput.includes("empty_scope")) throw new Error("content assertion failed: empty_scope");
-  if (pyrefOutput.includes("stateful_not_evaluated")) throw new Error("content assertion failed: stateful_not_evaluated");
-  if (!pyrefOutput.includes("evaluated_profile: AAR-3")) throw new Error("content assertion failed: evaluated profile is not AAR-3");
-  if (!pyrefOutput.includes("coverage: complete")) throw new Error("content assertion failed: scope is not complete");
-
   const artifacts = artifactsOf(bundleBytes);
   const receipts = (artifacts.receipts as CborValue[]).map(decodePayload);
   const requests = (artifacts.requests as CborValue[]).map(decodePayload);
   const kinds = new Set(receipts.map((receipt) => receipt.kind as string));
-  const expected = scenarioId === "S3"
+  const notDispatched = !kinds.has("dispatch");
+  const expected = notDispatched
     ? ["observation", "inference", "authorization", "action_attempt"]
     : ["observation", "inference", "authorization", "action_attempt", "dispatch", "outcome_observation"];
   if (kinds.size !== expected.length || expected.some((kind) => !kinds.has(kind))) throw new Error(`content assertion failed: receipt kinds ${[...kinds].join(",")}`);
@@ -106,14 +109,42 @@ export function assertContent(
   if (command.adapter_id !== adapter.id) throw new Error("content assertion failed: adapter identity mismatch");
   const authorization = receipts.find((receipt) => receipt.kind === "authorization")!;
   if (((authorization.body as Obj).decision as Obj).profile !== "AAR-3") throw new Error("content assertion failed: decision profile mismatch");
+  if (gate.source_device) {
+    const observation = receipts.find((receipt) => receipt.kind === "observation")!;
+    const source = (observation.body as Obj).source_device as Obj;
+    if (source.manufacturer !== gate.source_device.manufacturer || source.model !== gate.source_device.model || source.firmware !== gate.source_device.firmware) {
+      throw new Error("content assertion failed: source-device metadata mismatch");
+    }
+  }
 
-  if (scenarioId === "S3") {
-    if (attemptBody.disposition !== "not_dispatched" || attemptBody.refusal_reason !== "delegation-expired") throw new Error("content assertion failed: refusal not receipted");
+  if (notDispatched) {
+    const refusalReason = attemptBody.refusal_reason;
+    if (attemptBody.disposition !== "not_dispatched"
+      || typeof refusalReason !== "string"
+      || !refusalReason
+      || (scenarioId === "S3" && refusalReason !== "delegation-expired")) {
+      throw new Error("content assertion failed: refusal not receipted");
+    }
     if (((attempt.evidence as Obj).outcome as Obj).level !== gate.expected_outcome_level) throw new Error("content assertion failed: refusal outcome level mismatch");
   } else {
     const outcome = receipts.find((receipt) => receipt.kind === "outcome_observation")!;
     if (((outcome.evidence as Obj).outcome as Obj).level !== gate.expected_outcome_level) throw new Error("content assertion failed: outcome level mismatch");
   }
+}
+
+export function assertContent(
+  scenarioId: ScenarioId,
+  gate: GateInputFile,
+  adapter: DemoAdapter,
+  bundleBytes: Uint8Array,
+  pyrefOutput: string,
+): void {
+  if (!pyrefOutput.includes("Result: conformant")) throw new Error("pyref did not report conformant");
+  if (pyrefOutput.includes("empty_scope")) throw new Error("content assertion failed: empty_scope");
+  if (pyrefOutput.includes("stateful_not_evaluated")) throw new Error("content assertion failed: stateful_not_evaluated");
+  if (!pyrefOutput.includes("evaluated_profile: AAR-3")) throw new Error("content assertion failed: evaluated profile is not AAR-3");
+  if (!pyrefOutput.includes("coverage: complete")) throw new Error("content assertion failed: scope is not complete");
+  assertBundleContent(scenarioId, gate, adapter, bundleBytes);
 }
 
 export async function assertOnlineOracle(
@@ -132,12 +163,56 @@ export async function assertOnlineOracle(
     }
     return;
   }
-  if (producer.dispatchCount !== 1 || attributable.length !== 1 || !producer.dispatchResult) throw new Error("online oracle failed: dispatch accounting");
+  if ((!producer.resumedWithoutRedispatch && producer.dispatchCount !== 1) || (producer.resumedWithoutRedispatch && producer.dispatchCount !== 0) || !producer.dispatchResult) {
+    if (!producer.dispatchResult || producer.dispatchResult.dispatched || producer.dispatchCount !== 0 || producer.resumedWithoutRedispatch || attributable.length !== 0) {
+      throw new Error("online oracle failed: EP dispatch accounting");
+    }
+  }
   const attempt = producer.wire.receipts.find((receipt) => receipt.kind === "action_attempt")!;
   const command = (attempt.fields.body as Obj).command as Obj;
   const commandDigest = toHex(command.command_digest as Uint8Array);
-  if (attributable[0]!.command_digest !== commandDigest || attributable[0]!.request_body_sha256 !== commandDigest) throw new Error("online oracle failed: witness/command manifest binding");
+  if (!producer.dispatchResult.dispatched) {
+    if (producer.dispatchResult.effect.invocation_id !== gate.invocation_id || producer.dispatchResult.effect.command_digest !== commandDigest) {
+      throw new Error("online oracle failed: refusal effect binding");
+    }
+    const evidence = producer.dispatchResult.effect.backend_evidence;
+    if (!("http_status" in evidence) || !("application_status" in evidence)) throw new Error("online oracle failed: refusal evidence missing");
+    return;
+  }
+  const commandAttempts = attributable.filter((entry) => entry.command_digest === commandDigest);
+  const staleRepair = commandAttempts.length === 2
+    && commandAttempts[0]!.response_line.includes(" 401 ")
+    && !commandAttempts[1]!.response_line.includes(" 401 ")
+    && commandAttempts[0]!.request_line === commandAttempts[1]!.request_line;
+  if (commandAttempts.length !== 1 && !staleRepair) throw new Error("online oracle failed: witness/command manifest binding");
+  for (const attemptWitness of commandAttempts) {
+    if (attemptWitness.request_line.startsWith("POST ") && attemptWitness.request_body_sha256 !== commandDigest) {
+      throw new Error("online oracle failed: request body/command digest binding");
+    }
+  }
+  if (producer.dispatchResult.effect.adapter_id === "vapix") {
+    const expectedRequestLine = gate.action_name === "camera.ptz.preset"
+      ? "GET /axis-cgi/com/ptz.cgi?gotoserverpresetname=<sanitized> HTTP/1.1"
+      : "GET /axis-cgi/jpg/image.cgi?streamprofile=<sanitized> HTTP/1.1";
+    if (commandAttempts.some((entry) => entry.request_line !== expectedRequestLine)) {
+      throw new Error("online oracle failed: VAPIX request-line shape binding");
+    }
+  }
   if (producer.dispatchResult.effect.invocation_id !== gate.invocation_id || producer.dispatchResult.effect.command_digest !== commandDigest) throw new Error("online oracle failed: effect binding");
+  if (producer.dispatchResult.effect.adapter_id !== gate.adapter && producer.dispatchResult.effect.adapter_id !== `${gate.adapter}-stub`) {
+    throw new Error("online oracle failed: effect adapter identity");
+  }
+  const evidence = producer.dispatchResult.effect.backend_evidence;
+  if (!("http_status" in evidence) || !("application_status" in evidence)) throw new Error("online oracle failed: required backend evidence missing");
+  if (gate.action_name === "camera.ptz.preset" && producer.dispatchResult.effect.adapter_id === "vapix") {
+    const restorationAttempts = attributable.filter((entry) => entry.command_digest === null);
+    if (restorationAttempts.length !== 1 || evidence.restore_verified !== true) throw new Error("online oracle failed: PTZ restoration evidence");
+  }
+  if (gate.action_name === "camera.stream.view" && producer.dispatchResult.effect.adapter_id === "vapix"
+    && producer.dispatchResult.effect.outcome_level === "device_acknowledged"
+    && (evidence.media_unit_valid !== true || typeof evidence.profile !== "string")) {
+    throw new Error("online oracle failed: stream media/profile evidence");
+  }
   const dispatch = producer.wire.receipts.find((receipt) => receipt.kind === "dispatch")!;
   if (!equalBytes((dispatch.fields.body as Obj).command_id as Uint8Array, command.command_id as Uint8Array)) throw new Error("online oracle failed: dispatch/command ID binding");
   const outcome = producer.wire.receipts.find((receipt) => receipt.kind === "outcome_observation")!;
@@ -170,7 +245,13 @@ async function advancePriorState(path: string, producer: ProducerResult): Promis
   await writeFile(path, `${JSON.stringify(state, null, 2)}\n`);
 }
 
-export async function runScenario(scenarioId: ScenarioId, gate: GateInputFile, adapter: DemoAdapter, baseDirectory = process.cwd()): Promise<ScenarioRunResult> {
+export async function runScenario(
+  scenarioId: ScenarioId,
+  gate: GateInputFile,
+  adapter: DemoAdapter,
+  baseDirectory = process.cwd(),
+  options: ScenarioRunOptions = {},
+): Promise<ScenarioRunResult> {
   if (gate.version !== 1) throw new Error("gate input version must be 1");
   if (adapter.id !== `${gate.adapter}-stub` && adapter.id !== gate.adapter) throw new Error("injected adapter does not match gate input backend");
   const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -192,25 +273,39 @@ export async function runScenario(scenarioId: ScenarioId, gate: GateInputFile, a
     scenarioId, evaluatedAt: gate.evaluated_at, epochId: gate.epoch_id,
     invocationId: fromHex(gate.invocation_id), correlationId: fromHex(gate.correlation_id), tenantId: fromHex(gate.tenant_id), siteId: fromHex(gate.site_id), targetId: fromHex(gate.target_id),
     targetLogicalName: gate.target_logical_name, actionName: gate.action_name, parameters: gate.parameters,
+    sourceDeviceMetadata: gate.source_device,
     delegationWindows: gate.delegation_candidates.map((item) => ({ notBefore: item.not_before, notAfter: item.not_after })),
     bundlePath, trustPolicyPath, witnessLogPath, adapter, keys: await loadDemoKeys(keyDirectory),
     journal: new DurableInvocationJournal(join(outputDirectory, "ep.journal.jsonl")),
     anchorLog: new LocalRfc6962Log(join(outputDirectory, "anchor.jsonl")),
+    afterDispatchCut: options.afterDispatchCut,
   });
+  if (options.transformBundle) await writeFile(bundlePath, options.transformBundle(producer.wire.bundle));
   const process = Bun.spawn([
-    "python", "-m", "pyref", "verify", bundlePath, "--at", String(gate.evaluated_at),
+    "python3", "-m", "pyref", "verify", bundlePath, "--at", String(gate.evaluated_at),
     "--trust-policy", trustPolicyPath, "--prior-state", priorStatePath,
   ], { cwd: repo, stdout: "pipe", stderr: "pipe" });
   const [exitCode, stdout, stderr] = await Promise.all([process.exited, new Response(process.stdout).text(), new Response(process.stderr).text()]);
   const pyrefOutput = `${stdout}${stderr}`;
   const pyrefOutputPath = join(outputDirectory, `${scenarioId}.pyref.txt`);
   await writeFile(pyrefOutputPath, pyrefOutput);
-  if (exitCode !== 0) throw new Error(`pyref verify exited ${exitCode}\n${pyrefOutput}`);
-  assertContent(scenarioId, gate, adapter, producer.wire.bundle, pyrefOutput);
+  const expectedVerification = options.expectedVerification ?? "conformant";
+  if (expectedVerification === "conformant") {
+    if (exitCode !== 0) throw new Error(`pyref verify exited ${exitCode}\n${pyrefOutput}`);
+    assertContent(scenarioId, gate, adapter, producer.wire.bundle, pyrefOutput);
+  } else {
+    if (exitCode !== 1 || !pyrefOutput.includes("Result: nonconformant")) throw new Error(`pyref did not return the expected nonconformant exit 1\n${pyrefOutput}`);
+    if (!options.expectedFailureReason) throw new Error("nonconformant scenario requires an expected failure reason");
+    if (!pyrefOutput.includes(`First failure: step 6 (${options.expectedFailureReason})`) || !pyrefOutput.includes(`reason: ${options.expectedFailureReason}`)) {
+      throw new Error(`pyref first-failure reason did not match ${options.expectedFailureReason}\n${pyrefOutput}`);
+    }
+    if (pyrefOutput.includes("stateful_not_evaluated")) throw new Error("content assertion failed: stateful_not_evaluated");
+    assertBundleContent(scenarioId, gate, adapter, producer.wire.bundle);
+  }
   const witness = await new AppendOnlyWitnessLog(witnessLogPath).entries();
   await assertOnlineOracle(scenarioId, gate, producer, witness);
-  await advancePriorState(priorStatePath, producer);
-  return { scenarioId, bundlePath, trustPolicyPath, pyrefOutputPath, pyrefOutput, producer, witness };
+  if (expectedVerification === "conformant") await advancePriorState(priorStatePath, producer);
+  return { scenarioId, bundlePath, trustPolicyPath, pyrefOutputPath, pyrefOutput, producer, witness, verificationResult: expectedVerification };
 }
 
 if (import.meta.main) {

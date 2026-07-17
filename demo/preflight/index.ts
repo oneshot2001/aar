@@ -1,11 +1,6 @@
-export interface CredentialAccess {
-  readonly reference: string;
-  readonly secret: string;
-}
+import type { CredentialAccess, CredentialProvider } from "../../adapters/shared/types";
 
-export interface CredentialProvider {
-  get(reference: string): Promise<CredentialAccess>;
-}
+export type { CredentialAccess, CredentialProvider } from "../../adapters/shared/types";
 
 export interface PreflightTransport {
   get(url: string, credential: CredentialAccess): Promise<{ status: number; body: string }>;

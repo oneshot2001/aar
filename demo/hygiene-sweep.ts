@@ -20,6 +20,10 @@ function md5(value: string): string {
   return createHash("md5").update(value, "utf8").digest("hex");
 }
 
+function sha256(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
 export function canaryTransforms(options: Pick<HygieneSweepOptions, "canary" | "digestUsername" | "digestRealm">): ReadonlyMap<string, Uint8Array> {
   if (!options.canary) throw new Error("canary must be non-empty");
   const values = new Map<string, string>([
@@ -27,9 +31,11 @@ export function canaryTransforms(options: Pick<HygieneSweepOptions, "canary" | "
     ["base64", Buffer.from(options.canary, "utf8").toString("base64")],
     ["percent_encoded", encodeURIComponent(options.canary)],
     ["md5_literal", md5(options.canary)],
+    ["sha256_literal", sha256(options.canary)],
   ]);
   if (options.digestUsername !== undefined && options.digestRealm !== undefined) {
     values.set("digest_ha1", md5(`${options.digestUsername}:${options.digestRealm}:${options.canary}`));
+    values.set("digest_ha1_sha256", sha256(`${options.digestUsername}:${options.digestRealm}:${options.canary}`));
   }
   return new Map([...values].map(([name, value]) => [name, new TextEncoder().encode(value)]));
 }

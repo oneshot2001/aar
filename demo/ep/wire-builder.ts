@@ -36,6 +36,7 @@ export interface WireBuildInput {
   readonly targetLogicalName: LogicalTargetName;
   readonly actionName: ActionName;
   readonly parameters: Readonly<Record<string, string | number | boolean>>;
+  readonly sourceDeviceMetadata: { readonly manufacturer: string; readonly model: string; readonly firmware: string };
   readonly adapterId: AdapterId;
   readonly command: BuiltCommandManifest;
   readonly delegationWindows: readonly DelegationWindow[];
@@ -46,6 +47,7 @@ export interface WireBuildInput {
     readonly outcomeState: "consistent" | "contradicted" | "unknown";
     readonly observationDigest: Uint8Array;
   };
+  readonly refusalReason?: string;
   readonly keys: Readonly<Record<DemoKeyRole, DemoKey>>;
   readonly anchorLog: LocalRfc6962Log;
 }
@@ -289,8 +291,8 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
   const consumptionFields: Obj = { items: [] };
   const consumption: Obj = { manifest_digest: domainHash("AAR-CONSUMPTION-MANIFEST-v1", consumptionFields), ...consumptionFields };
   const sourceDevice: Obj = {
-    device_id: input.targetId, manufacturer: "AXIS", model: "Gate5 synthetic",
-    firmware: "D1-stub", device_credential_id: opaque(`device-credential:${toHex(input.targetId)}`), failure_domain_id: opaque(`failure-domain:${toHex(input.targetId)}`),
+    device_id: input.targetId, manufacturer: input.sourceDeviceMetadata.manufacturer, model: input.sourceDeviceMetadata.model,
+    firmware: input.sourceDeviceMetadata.firmware, device_credential_id: opaque(`device-credential:${toHex(input.targetId)}`), failure_domain_id: opaque(`failure-domain:${toHex(input.targetId)}`),
   };
   const observation = makeReceipt(input, "observation", "agent", 0, [], { source_device: sourceDevice, consumption, observed_at: input.evaluatedAt - 49 }, requestRoot);
 
@@ -330,15 +332,16 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
     informational_reversibility: "reversible", operational_reversibility: "reversible",
   };
   const command = input.command as unknown as Obj;
+  const refused = input.scenarioId === "S3" || input.refusalReason !== undefined;
   const attemptBody: Obj = {
     action, command, authorization_id: authorization.id, decision_commitment: decisionCommitment,
-    disposition: input.scenarioId === "S3" ? "not_dispatched" : "eligible_for_dispatch",
+    disposition: refused ? "not_dispatched" : "eligible_for_dispatch",
   };
-  if (input.scenarioId === "S3") attemptBody.refusal_reason = "delegation-expired";
+  if (refused) attemptBody.refusal_reason = input.refusalReason ?? "delegation-expired";
   const attempt = makeReceipt(input, "action_attempt", "ep", 3, [parent(authorization, "authorized_by", input)], attemptBody);
   const receipts: ReceiptBuild[] = [observation, inference, authorization, attempt];
 
-  if (input.scenarioId !== "S3") {
+  if (!refused) {
     if (!input.dispatch) throw new Error("authorized scenario requires dispatch result");
     const dispatch = makeReceipt(input, "dispatch", "ep", 4, [parent(attempt, "attempted_as", input)], {
       attempt_id: attempt.id, command_id: input.command.command_id, dispatched_at: input.evaluatedAt - 46,

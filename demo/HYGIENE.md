@@ -10,8 +10,9 @@ bun run demo/hygiene-sweep.ts \
   --root /path/to/argv-env-log-temp-pcap-har-captures
 ```
 
-The sweep checks the literal canary, Base64, percent-encoded form, MD5 of the
-literal, and Digest HA1 (`MD5(username:realm:canary)`). It recursively scans
+The sweep checks the literal canary, Base64, percent-encoded form, MD5 and
+SHA-256 of the literal, and both MD5 and SHA-256 Digest HA1 forms
+(`H(username:realm:canary)`). It recursively scans
 binary and text artifacts. Private key directories should not be included;
 credential capture locations must be included. A hit exits 1 and prints only
 the transform name and file path, never the secret.
