@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "checks": {
+    "mediator_healthz": true,
+    "ptz_identity": true,
+    "stream_identity": true,
+    "firmware_readback": true,
+    "park_position_readback": true
+  },
+  "mediator": "vigil-control",
+  "sanitized": {
+    "ptz": {
+      "model": "AXIS Q6358-LE PTZ Camera",
+      "firmware": "12.9.57"
+    },
+    "stream": {
+      "model": "AXIS Q6325-LE PTZ Camera",
+      "firmware": "12.9.57"
+    }
+  }
+}

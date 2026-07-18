@@ -18,6 +18,7 @@ function testMediatorConfig(secret = "offline-test-canary-secret"): MockVigilCon
     credentialReference: "camera-ref", secret,
     expectedHost: "cam.invalid", expectedUsername: "operator",
     presetBackendName: "preset-7", streamBackendProfile: "profile-1",
+    model: "mock", serial: "mock", firmware: "mock",
     baseline: { pan: 0, tilt: 0, zoom: 1 }, safePreset: { pan: 5, tilt: 3, zoom: 2 }, settlingReads: 1,
   };
 }

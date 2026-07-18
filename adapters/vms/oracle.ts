@@ -5,7 +5,7 @@ import type { GateInputFile, ScenarioRunResult } from "../../demo/run-scenario";
 // branches are VAPIX-only; these are the VMS equivalents and must run in
 // BOTH legs so the live run is not materially weaker than offline).
 
-export const MEDIATOR_PATHS = new Set(["/dispatch", "/ptz/position", "/healthz"]);
+export const MEDIATOR_PATHS = new Set(["/dispatch", "/ptz/position", "/device/info", "/healthz"]);
 
 export const DISPATCH_REQUEST_LINES = {
   "camera.ptz.preset": "POST /dispatch?cred=<sanitized>&digest=<sanitized>&host=<sanitized>&op=<sanitized>&port=<sanitized>&preset=<sanitized>&username=<sanitized> HTTP/1.1",

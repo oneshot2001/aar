@@ -61,6 +61,9 @@ export async function runVmsOfflineSuite(requestedRoot?: string): Promise<VmsOff
     expectedUsername,
     presetBackendName: "mock-vms-safe-preset",
     streamBackendProfile: "mock-vms-stream-profile",
+    model: "VMS-Mediated Offline Test Double",
+    serial: "OFFLINE-NOT-A-DEVICE",
+    firmware: "D3-offline",
     baseline: { pan: 0, tilt: 0, zoom: 1 },
     safePreset: { pan: 12, tilt: -4, zoom: 2 },
     settlingReads: 2,
@@ -105,9 +108,13 @@ export async function runVmsOfflineSuite(requestedRoot?: string): Promise<VmsOff
     const health = await client.request({ method: "GET", url: new URL("/healthz", adapterConfig.mediatorBaseUrl), context: { invocationId: hex16(), actionBearing: false } });
     const position = await client.request({ method: "GET", url: routed("/ptz/position"), context: { invocationId: hex16(), actionBearing: false } });
     const positionEffect = JSON.parse(new TextDecoder().decode(position.body)) as { application_status?: string; pan?: number };
+    const identity = await client.request({ method: "GET", url: routed("/device/info"), context: { invocationId: hex16(), actionBearing: false } });
+    const identityEffect = JSON.parse(new TextDecoder().decode(identity.body)) as { application_status?: string; model?: string; serial?: string };
     const checks = {
       mediator_healthz: health.status === 200,
       mediator_position_readback: position.status === 200 && positionEffect.application_status === "ok" && Number.isFinite(positionEffect.pan),
+      mediator_identity: identity.status === 200 && identityEffect.application_status === "ok"
+        && identityEffect.model === mediatorConfig.model && identityEffect.serial === mediatorConfig.serial,
       preset_mapping_present: Boolean(adapterConfig.presetMappings["gate5-safe"]),
       stream_profile_mapping_present: Boolean(adapterConfig.streamProfileMappings["gate5-offline"]),
     };

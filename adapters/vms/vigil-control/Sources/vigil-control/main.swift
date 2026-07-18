@@ -42,6 +42,9 @@ struct DispatchEffect: Encodable {
   var payload_bytes: Int?
   var media_valid: Bool?
   var profile: String?
+  var model: String?
+  var serial: String?
+  var firmware: String?
   var error: String?
 }
 
@@ -109,6 +112,30 @@ func position(_ route: Route) async -> DispatchEffect {
     effect.pan = pos.pan
     effect.tilt = pos.tilt
     effect.zoom = pos.zoom
+  } catch let VAPIXError.httpError(status) {
+    effect.application_status = "http_rejected_\(status)"
+  } catch let error as CredError {
+    effect.application_status = "routing_error"
+    effect.error = "\(error)"
+  } catch {
+    effect.application_status = "transport_error"
+    effect.error = "\(error)"
+  }
+  return effect
+}
+
+// Identity readback for the live preflight (G5-D2b-007 parity: model/serial/
+// firmware come from the device via the VMS seam, not gate constants).
+func deviceInfo(_ route: Route) async -> DispatchEffect {
+  var effect = DispatchEffect(op: "device.info", http_ok: false, application_status: "not_executed")
+  do {
+    let client = try makeClient(route)
+    let info = try await client.getDeviceInfo()
+    effect.http_ok = true
+    effect.application_status = "ok"
+    effect.model = info.productFullName.isEmpty ? info.model : info.productFullName
+    effect.serial = info.serialNumber
+    effect.firmware = info.firmwareVersion
   } catch let VAPIXError.httpError(status) {
     effect.application_status = "http_rejected_\(status)"
   } catch let error as CredError {
@@ -209,6 +236,12 @@ final class DispatchHandler: ChannelInboundHandler, @unchecked Sendable {
       } else if head.method == .GET && path == "/ptz/position" {
         Task {
           let effect = await position(route)
+          let payload = (try? JSONEncoder().encode(effect)) ?? Data("{}".utf8)
+          loop.execute { Self.respond(channel: channel, status: .ok, body: payload) }
+        }
+      } else if head.method == .GET && path == "/device/info" {
+        Task {
+          let effect = await deviceInfo(route)
           let payload = (try? JSONEncoder().encode(effect)) ?? Data("{}".utf8)
           loop.execute { Self.respond(channel: channel, status: .ok, body: payload) }
         }

@@ -19,6 +19,9 @@ export interface MockVigilControlConfig {
   readonly expectedUsername: string;
   readonly presetBackendName: string;
   readonly streamBackendProfile: string;
+  readonly model: string;
+  readonly serial: string;
+  readonly firmware: string;
   readonly baseline: PtzPosition;
   readonly safePreset: PtzPosition;
   readonly settlingReads: number;
@@ -48,6 +51,9 @@ interface Effect {
   payload_bytes?: number;
   media_valid?: boolean;
   profile?: string;
+  model?: string;
+  serial?: string;
+  firmware?: string;
   error?: string;
 }
 
@@ -120,6 +126,14 @@ export class MockVigilControl {
     if (request.method === "GET" && url.pathname === "/healthz") {
       const body = new TextEncoder().encode('{"ok":true}');
       return { status: 200, statusMessage: "OK", headers: { "content-type": "application/json" }, body };
+    }
+    if (request.method === "GET" && url.pathname === "/device/info") {
+      const routingError = this.resolveRouting(url);
+      if (routingError) return this.json({ op: "device.info", http_ok: false, application_status: routingError });
+      return this.json({
+        op: "device.info", http_ok: true, application_status: "ok",
+        model: this.config.model, serial: this.config.serial, firmware: this.config.firmware,
+      });
     }
     if (request.method === "GET" && url.pathname === "/ptz/position") {
       this.counts.positionReads += 1;

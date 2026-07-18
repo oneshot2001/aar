@@ -1,0 +1,47 @@
+{
+  "scenarios": [
+    {
+      "scenario": "S1",
+      "verification": "conformant",
+      "outcome": "device_acknowledged",
+      "applicationStatus": "position_within_tolerance",
+      "oracle": "PASS"
+    },
+    {
+      "scenario": "S2",
+      "verification": "conformant",
+      "outcome": "device_acknowledged",
+      "applicationStatus": "media_payload_valid",
+      "oracle": "PASS"
+    },
+    {
+      "scenario": "S3",
+      "verification": "conformant",
+      "outcome": "not_dispatched",
+      "applicationStatus": "not_dispatched",
+      "oracle": "PASS"
+    },
+    {
+      "scenario": "S4",
+      "verification": "nonconformant",
+      "outcome": "device_acknowledged",
+      "applicationStatus": "position_within_tolerance",
+      "oracle": "PASS"
+    },
+    {
+      "scenario": "S6-rejection",
+      "verification": "conformant",
+      "outcome": "contradicted",
+      "applicationStatus": "position_outside_tolerance",
+      "oracle": "PASS"
+    },
+    {
+      "scenario": "S6-after-send-timeout",
+      "verification": "conformant",
+      "outcome": "unknown",
+      "applicationStatus": "transport_timeout_after_send",
+      "oracle": "PASS"
+    }
+  ],
+  "hygiene_hits": 0
+}

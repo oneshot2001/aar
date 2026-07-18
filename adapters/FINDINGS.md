@@ -380,3 +380,27 @@ reproduced identically. Artifacts under ~/.aar-demo/d2b-*.
   ptz.goto_preset, ptz.goto restore, stream.view via real vigil-control +
   cameras) has NOT been live-exercised — only GET /ptz/position and /healthz
   were live-proven. The live leg is D3 step 4, after this gate.**
+
+## D3 LIVE RESULT — 2026-07-18 (D3 CLOSED)
+
+Two independent full runs, EP → transport witness → REAL vigil-control
+(VigilCore.VAPIXClient, own process, `cred get` in-process) → owned cameras
+(Q6358-LE .33 PTZ / Q6325-LE .32 stream, AXIS OS 12.9.57), identical
+scenario verdicts both runs:
+- S1 conformant · device_acknowledged · position_within_tolerance
+- S2 conformant · device_acknowledged · media_payload_valid
+- S3 conformant · not_dispatched (zero attributable mediated dispatch)
+- S4 nonconformant · sig/verify-failed (pinned tamper)
+- S6-rejection conformant · contradicted · position_outside_tolerance
+  (absent preset = error-in-200, contrary readback is the evidence — as
+  G5-D3-003 predicted)
+- S6-after-send-timeout conformant · unknown · transport_timeout_after_send
+  (real move, withheld reply, F19 restore verified)
+Hygiene 0 hits both runs; camera rests at operator park. New `/device/info`
+mediator op gives preflight identity+firmware readback (G5-D2b-007 parity).
+The D3 step 2+3 ledger's **verification_gap is CLOSED**: the full contract-v2
+action-bearing surface (digest-bound goto_preset, unbound goto restore,
+stream.view, plus refusal paths) is now live-exercised. Round-2 checkpoint
+held: the live runner imports both adapters/vms/oracle.ts checks.
+Gate trail: spec/GATE5-D3-PLAN.md + GATE5-D3-REVIEW.md; evidence
+adapters/vms/live/evidence/.
