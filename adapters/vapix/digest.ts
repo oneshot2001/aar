@@ -235,7 +235,9 @@ export class DigestHttpClient {
         clearTimeout(deadline);
         callback();
       };
+      let responseStarted = false;
       const request = (proxy.protocol === "https:" ? httpsRequest : httpRequest)(options, (response) => {
+        responseStarted = true;
         const chunks: Buffer[] = [];
         response.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
         response.on("end", () => finish(() => resolve({
@@ -245,10 +247,19 @@ export class DigestHttpClient {
           body: new Uint8Array(Buffer.concat(chunks)),
         })));
         response.on("error", (error) => finish(() => reject(new DigestTransportError(`VAPIX response failed: ${error.message}`, sent, context.actionBearing))));
+        // A response that starts but never ends (socket cut mid-body) settles
+        // here; if "end" already fired, finish() is latched and this is inert.
+        response.on("close", () => finish(() => reject(new DigestTransportError("VAPIX response failed: socket closed mid-body", sent, context.actionBearing))));
       });
       request.setTimeout(timeoutMs, () => request.destroy(new Error("request deadline exceeded")));
       deadline = setTimeout(() => request.destroy(new Error("total request deadline exceeded")), timeoutMs);
       request.on("error", (error) => finish(() => reject(new DigestTransportError(`VAPIX request failed: ${error.message}`, sent, context.actionBearing))));
+      // G5-D2b-002: Bun's client emits only "close" (no "error") when the
+      // request is destroyed by the deadline timers. If no response ever
+      // arrived, that IS the after-send withhold/failure — reject now. If a
+      // response has started, the response-side handlers above own settling
+      // (deterministic; no reliance on close-vs-end ordering).
+      request.on("close", () => { if (!responseStarted) finish(() => reject(new DigestTransportError("VAPIX request failed: socket closed before response", sent, context.actionBearing))); });
       sent = true;
       request.end(body);
     });

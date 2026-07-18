@@ -50,6 +50,7 @@ export interface WireBuildInput {
   readonly refusalReason?: string;
   readonly keys: Readonly<Record<DemoKeyRole, DemoKey>>;
   readonly anchorLog: LocalRfc6962Log;
+  readonly anchorObservedAt?: number;
 }
 
 export interface ReceiptBuild {
@@ -379,7 +380,9 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
   };
   const manifestId = domainHash("AAR-EPOCH-MANIFEST-ID-v1", manifestFields);
   const manifest = signDemoDetached({ manifest_id: manifestId, ...manifestFields }, CONTENT_TYPES.epochManifest, input.keys.ep);
-  const logHead = await input.anchorLog.append(manifest.payloadBytes, input.evaluatedAt - 39);
+  // G5-D1-003: live runs supply the real anchor submission time; the offline
+  // default keeps corpus determinism (fixed offset inside the epoch window).
+  const logHead = await input.anchorLog.append(manifest.payloadBytes, input.anchorObservedAt ?? input.evaluatedAt - 39);
 
   const rootRecord: Obj = {
     root_id: opaque(`trust-root:${toHex(input.keys["verifier-trust"].kid)}`), root_kid: input.keys["verifier-trust"].kid,

@@ -37,7 +37,7 @@ function hex16(): string {
   return randomBytes(16).toString("hex");
 }
 
-function tamperPinnedRequestSignature(bundleBytes: Uint8Array): Uint8Array {
+export function tamperPinnedRequestSignature(bundleBytes: Uint8Array): Uint8Array {
   const bundle = decodeCbor(bundleBytes, { strict: true });
   if (typeof bundle !== "object" || bundle === null || Array.isArray(bundle) || bundle instanceof Uint8Array || bundle instanceof Map) {
     throw new Error("S4 source is not an AAR bundle map");

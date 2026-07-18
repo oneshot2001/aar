@@ -29,6 +29,7 @@ export interface GateInputFile {
   readonly source_device?: { readonly manufacturer: string; readonly model: string; readonly firmware: string };
   readonly expected_outcome_level: "accepted" | "device_acknowledged" | "contradicted" | "unknown";
   readonly adapter: "vapix" | "vms";
+  readonly anchor_observed_at?: number;
   readonly delegation_candidates: readonly { readonly not_before: number; readonly not_after: number }[];
   readonly key_dir: string;
   readonly output_dir: string;
@@ -278,6 +279,7 @@ export async function runScenario(
     bundlePath, trustPolicyPath, witnessLogPath, adapter, keys: await loadDemoKeys(keyDirectory),
     journal: new DurableInvocationJournal(join(outputDirectory, "ep.journal.jsonl")),
     anchorLog: new LocalRfc6962Log(join(outputDirectory, "anchor.jsonl")),
+    anchorObservedAt: gate.anchor_observed_at,
     afterDispatchCut: options.afterDispatchCut,
   });
   if (options.transformBundle) await writeFile(bundlePath, options.transformBundle(producer.wire.bundle));

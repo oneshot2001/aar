@@ -1,0 +1,45 @@
+{
+  "ok": true,
+  "checks": {
+    "credential_access": true,
+    "identity": true,
+    "model_firmware": true,
+    "preset": true,
+    "stream_profile": true,
+    "backend_mapping": true
+  },
+  "targets": {
+    "ptz": {
+      "ok": false,
+      "checks": {
+        "credential_access": true,
+        "identity": true,
+        "model_firmware": true,
+        "preset": true,
+        "stream_profile": false,
+        "backend_mapping": true
+      },
+      "sanitized": {
+        "model": "AXIS Q6358-LE PTZ Camera",
+        "firmware": "12.9.57",
+        "serial": "E82725146996"
+      }
+    },
+    "stream": {
+      "ok": true,
+      "checks": {
+        "credential_access": true,
+        "identity": true,
+        "model_firmware": true,
+        "preset": true,
+        "stream_profile": true,
+        "backend_mapping": true
+      },
+      "sanitized": {
+        "model": "AXIS Q6325-LE PTZ Camera",
+        "firmware": "12.9.57",
+        "serial": "E827252C9B9F"
+      }
+    }
+  }
+}

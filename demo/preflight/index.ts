@@ -23,8 +23,10 @@ export interface PreflightResult {
 }
 
 export class CredStoreProvider implements CredentialProvider {
+  constructor(private readonly binary: string = "cred") {}
+
   async get(reference: string): Promise<CredentialAccess> {
-    const child = Bun.spawn(["cred", "get", reference], { stdout: "pipe", stderr: "ignore" });
+    const child = Bun.spawn([this.binary, "get", reference], { stdout: "pipe", stderr: "ignore" });
     const [exitCode, stdout] = await Promise.all([child.exited, new Response(child.stdout).text()]);
     if (exitCode !== 0) throw new Error(`cred get failed for reference ${reference}`);
     const secret = stdout.replace(/\r?\n$/, "");
@@ -44,7 +46,10 @@ export async function runPreflight(config: PreflightConfig, transport: Preflight
   const credential = await credentials.get(config.credentialReference);
   const query = new URL("/axis-cgi/param.cgi", config.baseUrl);
   query.searchParams.set("action", "list");
-  query.searchParams.set("group", "Properties.System,root.Brand,root.PTZ.Preset,root.StreamProfile");
+  // Properties.Firmware is a sibling group of Properties.System on real Axis
+  // devices; without it root.Properties.Firmware.Version is absent and the
+  // firmware check fails live (G5-D2b-005, verified against the Q6358).
+  query.searchParams.set("group", "Properties.System,Properties.Firmware,root.Brand,root.PTZ.Preset,root.StreamProfile");
   const response = await transport.get(query.toString(), credential);
   const values = parseParamList(response.body);
   const model = values["root.Brand.ProdFullName"] ?? values["Properties.System.ProductName"] ?? "";

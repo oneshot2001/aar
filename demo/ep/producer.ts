@@ -29,6 +29,7 @@ export interface ProducerInput {
   readonly witnessLogPath: string;
   readonly journal: DurableInvocationJournal;
   readonly anchorLog: LocalRfc6962Log;
+  readonly anchorObservedAt?: number;
   readonly adapter: DemoAdapter;
   readonly keys: Readonly<Record<DemoKeyRole, DemoKey>>;
   readonly afterDispatchCut?: () => Promise<void>;
@@ -137,7 +138,7 @@ export async function produce(input: ProducerInput): Promise<ProducerResult> {
     invocationId: input.invocationId, correlationId: input.correlationId, tenantId: input.tenantId, siteId: input.siteId, targetId: input.targetId,
     targetLogicalName: input.targetLogicalName, actionName: input.actionName, parameters: input.parameters,
     sourceDeviceMetadata: input.sourceDeviceMetadata ?? { manufacturer: "AXIS", model: "Gate5 synthetic", firmware: "D1-stub" },
-    adapterId: input.adapter.id, command, delegationWindows: input.delegationWindows, keys: input.keys, anchorLog: input.anchorLog,
+    adapterId: input.adapter.id, command, delegationWindows: input.delegationWindows, keys: input.keys, anchorLog: input.anchorLog, anchorObservedAt: input.anchorObservedAt,
     dispatch: dispatchResult?.dispatched ? {
       status: dispatchResult.status, responseBodyDigest: dispatchResult.responseBodyDigest,
       outcomeLevel: dispatchResult.effect.outcome_level, outcomeState: dispatchResult.effect.state,

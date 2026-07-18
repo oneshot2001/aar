@@ -144,3 +144,181 @@
   un-declare a dispatch that left the transport (`dispatched` latches true
   once the action-bearing request resolves or fails after send); a false
   non-dispatch claim orphans a physically dispatched action (F15).
+
+## G5-D2b-002 — Bun HTTP client emits only "close" (not "error") when the request is destroyed
+
+- Status: RULED (Claude, 2026-07-18, during D2b live-runner build).
+- Context: the DigestHttpClient (`adapters/vapix/digest.ts`) settled its
+  request promise only on the `response` callback or an `error` event. Under
+  Bun 1.3.x, a client request destroyed by a deadline timer — or by an
+  after-send fault where the upstream never replies — emits `close` with no
+  `error`. The promise never rejected, so the S6-after-send-timeout path (and
+  any real socket-death after send) would hang instead of surfacing an honest
+  `transport_timeout_after_send`.
+- Fix: added a `close` handler that rejects with a DigestTransportError
+  carrying `afterSend = sent`, preserving the F15 dispatch-latch semantics
+  (a close after the bytes left the socket is an after-send fault → dispatch
+  latches, outcome is honest `unknown`). Because `close` also fires just
+  before a normal response's `end`, the close-rejection is deferred one
+  macrotask and gated by the same `finish()` latch, so a completed response
+  always wins. Verified by event-ordering probe (response → data → req-close
+  → res-end) and by the live-runner test suite.
+- Scope: transport-settling robustness only. No wire, verdict, or pyref
+  change; `harness/` and `pyref/` untouched.
+
+## G5-D2b-003 — witness after-send fault seam is demo-kit surface, not a wire change
+
+- Status: RULED (Claude, 2026-07-18). The S6-after-send-timeout scenario needs
+  a real dispatch that the client never hears back from. Implemented as an
+  optional `WitnessFaultInjection` on the transport witness proxy
+  (`demo/witness/proxy.ts`): when set AND the request is action-bearing, the
+  proxy forwards upstream (the dispatch is genuinely delivered), records the
+  exchange with an `INJECTED_FAULT_WITHHELD_RESPONSE` response line, and does
+  not reply — the client hits its own deadline.
+- Why acceptable: the witness proxy is demo-kit surface (GATE5-D2-SLICES.md
+  permits demo/adapters changes); the flag is default-off, applies only to
+  action-bearing traffic, and the injected fault is itself witnessed (it does
+  not hide a dispatch — it records one whose outcome the caller cannot
+  observe, which is exactly the honest state S6 must produce). Non-action
+  traffic (challenge discovery, readbacks) is never affected, so preflight
+  and restoration still complete.
+- Scope: demo transport only. No wire/verdict/pyref change.
+
+> Note: G5-D2b-003 below is SUPERSEDED by G5-D2b-004 — its sentences
+> "applies only to action-bearing traffic … restoration still complete" were
+> the exact defect 004 fixes; the seam is now scoped to command-bound traffic.
+
+## G5-D2b-004 — S6 fault seam must withhold ONLY the command dispatch, not the F19 restore (P1 blocker)
+
+- Status: RULED + FIXED (adversarial reviewer P1, 2026-07-18; fix re-verified).
+- Finding (reviewer): the seam withheld ALL action-bearing requests. The F19
+  restore move (`adapter.ts` `restoreAndVerify`) is action-bearing, so it was
+  withheld too → `restore_verified=false` → `assertOnlineOracle`
+  ("PTZ restoration evidence") throws every run; the recovery record never
+  unlinks and leaks into the D4 corpus; F19's restore+verify bar is not met.
+  Passed offline only because the D2a mock fault is one-shot.
+- Fix: the withhold now additionally requires an `x-aar-command-digest` header
+  (present only on the command dispatch via `bindCommand=true`; the restore is
+  command-unbound). The dispatch is withheld (honest after-send `unknown`); the
+  restore forwards, completes, verifies, and the recovery record unlinks.
+  Test now asserts the command-unbound action passes through while the
+  command-bound dispatch is withheld.
+
+## G5-D2b-005 — live preflight firmware group (P2)
+
+- Status: RULED + FIXED. Preflight queried `Properties.System` but read
+  `Properties.Firmware.Version`, a sibling group not returned by that list;
+  live firmware would be "" and preflight would abort before S1. Verified
+  against the real Q6358 (`Properties.Firmware` is its own group). Added
+  `Properties.Firmware` to the query group.
+
+## G5-D2b-006 — hygiene realm extraction must fail loud (P2)
+
+- Status: RULED + FIXED. HA1 canary transforms were dropped silently if a
+  first-`realm=` regex missed (or a Basic scheme poisoned it), reporting
+  "0 hits" without ever testing the transformed-variant bar. Now parses the
+  Digest challenge via `parseDigestChallenge` and throws if the realm is
+  unrecoverable.
+
+## G5-D2b-007 — firmware self-assertion made a real cross-check (P3)
+
+- Status: FIXED. `source_device.firmware` was a hardcoded "12.9.57" compared
+  against itself. Now sourced from the live preflight readback per leg, so the
+  content assertion cross-checks the device.
+
+## G5-D2b-008 — close-rejection race hardened; S5 worker leak closed (P3)
+
+- Status: FIXED. The G5-D2b-002 close handler no longer relies on close-vs-end
+  timing: it rejects on request `close` only when no response ever started;
+  a started response settles via its own end/error/close handlers
+  (deterministic for the 626 KB S2 body). The S5 crash worker is now killed
+  and awaited if any `waitFor` times out (no leaked credentialed process), and
+  its stdout/stderr pipes are drained. Park verification references the config
+  tolerance (single source of truth).
+
+## Reviewer items acknowledged, not gate-blocking (2026-07-18)
+
+- Pre-existing `sent=true` before connect means a connection-refused failure
+  reports `transport_timeout_after_send` and latches dispatch — over-latching
+  is the F15-safe direction (never un-declares a real send); evidence label is
+  conservative. Carried, not changed in D2b.
+- Restoration exactly-one oracle count doesn't tolerate a stale-nonce repair on
+  the restore move (only command attempts have repair tolerance). Low-probability
+  live flake; carried.
+- Honesty ledger for this handoff — changed: witness seam scoping, preflight
+  group, hygiene realm, firmware sourcing, close-rejection, worker lifecycle;
+  related-untouched: spec/harness/pyref (no wire/verdict change);
+  noticed-not-fixed: the two pre-existing items above; residual-uncertainty:
+  live behavior of the 626 KB stream body under the close race;
+  **verification_gap: the live suite has NOT been executed against the cameras
+  yet — all evidence to this point is offline-mock + real read-only probes.**
+
+## G5-D2b-009 — client-deadline destroy mid-body resolves truncated (P3, fail-closed)
+
+- Status: NOTED (re-review empirical probe, Bun 1.3.5). A client-deadline
+  `request.destroy()` that fires mid-body resolves with the partial bytes
+  (status 200, truncated) rather than rejecting. Live exposure: only S2's JPEG
+  is large enough to dribble past the 10 s deadline, and the adapter's EOI
+  media-unit check (`adapter.ts` dispatchStream) rejects a truncated JPEG →
+  `media_payload_invalid` → loud failure. Never manufactured success; no fix
+  taken. Recorded for trail completeness.
+- Pre-window checklist (carried): the restoration exactly-one oracle count is
+  intolerant of a stale-nonce repair on the restore move (repair tolerance is
+  wired only for command attempts). If S1/S4/S6 fails with "PTZ restoration
+  evidence" AND the witness shows a repaired 401 pair on the pan/tilt/zoom
+  line, that is the known low-probability flake — rerun, not a regression.
+
+## G5-D2b-010 — witness proxy forwarded framing headers, breaking against real cameras (live)
+
+- Status: RULED + FIXED (live run, 2026-07-18). The transport witness proxy
+  buffers the full upstream body but re-emitted the upstream response headers
+  verbatim. Real Axis devices (Q6358/Q6325, AXIS OS 12.9.57) return BOTH
+  `Content-Length` AND `Transfer-Encoding: chunked`; forwarding either
+  alongside a fixed buffered body produced an unparseable response
+  (Bun: `InvalidHTTPResponse`), aborting at the very first preflight request.
+  The unit tests never caught it — the mock upstream set clean single-framing
+  headers. Fix: strip `transfer-encoding` and `content-length` from the
+  forwarded headers and let the response derive Content-Length from the
+  buffer. Demo-kit surface; no wire/verdict change. First live gate-run then
+  reached all scenarios.
+
+## G5-D2b-011 — hygiene sweep false-positives on short secrets via reversible substring match (live)
+
+- Status: RULED + FIXED (live run, 2026-07-18). The real camera passwords are
+  4 characters; the `literal` and `percent_encoded` transforms are 4-char
+  needles that match arbitrary committed hex/text as substrings — the first
+  live sweep reported 684 hits, ALL `literal`/`percent_encoded` in committed
+  spec/test files (which by definition cannot contain a runtime-fetched
+  secret), ZERO in any hash form. No actual leak. Fix: `sweepCanary` now takes
+  `hashOnlyRoots` — roots scanned with only the collision-free irreversible
+  (md5/sha256/HA1) transforms. The generated artifact tree gets the full
+  transform set (any occurrence there IS a leak); the committed source tree
+  gets hash-only. Live re-run: 0 hits, HA1 legs still covered.
+- OPERATOR NOTE (non-code): the lab cameras use 4-character VAPIX passwords.
+  That is weak for anything beyond an isolated lab LAN. Flagged for Matthew;
+  not changed here (camera-config decision, and out of scope for the gate).
+
+## D2b LIVE RESULT — 2026-07-18 (F17 satisfied; D2 CLOSED)
+
+Two independent full runs against the owned cameras (Q6358-LE .33 PTZ /
+Q6325-LE .32 stream, both AXIS OS 12.9.57), byte-identical scenario verdicts:
+- S1 conformant · device_acknowledged · position_within_tolerance (real goto
+  Home + readback poll to 0.5°/100u tolerance)
+- S2 conformant · device_acknowledged · media_payload_valid (real JPEG,
+  gate5 profile, EOI-validated, ≥4 KB)
+- S3 conformant · not_dispatched (delegation-expired refusal; zero
+  invocation-attributable dispatch, transport-witnessed)
+- S4 nonconformant · first failure sig/verify-failed (pinned tamper, F21)
+- S5 conformant · unknown · outcome_unknown_restore_verified (real EP
+  crash-cut after send, resume w/ zero redispatch, F19 restore verified)
+- S6-rejection conformant · contradicted · vapix_application_error +
+  position_observation outside_tolerance (absent-preset, positive contrary
+  readback)
+- S6-after-send-timeout conformant · unknown · transport_timeout_after_send
+  (witness-layer withhold of the command dispatch only; F19 restore still
+  completed and verified)
+- Hygiene sweep 0 hits both runs. Camera rests at operator park.
+Every run through EP → transport witness → VAPIX adapter → real camera →
+online oracle → `python -m pyref verify` (pinned --at, trust policy,
+--prior-state advanced across runs). Gate live re-run (exit bar #8)
+reproduced identically. Artifacts under ~/.aar-demo/d2b-*.

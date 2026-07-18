@@ -5,6 +5,14 @@ import { resolve } from "node:path";
 export interface HygieneSweepOptions {
   readonly canary: string;
   readonly roots: readonly string[];
+  /**
+   * Roots scanned with ONLY the irreversible (hash) transforms. A raw or
+   * percent-encoded short secret collides with arbitrary text as a substring
+   * (a 4-char password matches committed hex everywhere), so the reversible
+   * transforms are credible only inside freshly-generated artifact trees.
+   * Use this for the committed source tree (G5-D2b-011).
+   */
+  readonly hashOnlyRoots?: readonly string[];
   readonly digestUsername?: string;
   readonly digestRealm?: string;
 }
@@ -13,6 +21,10 @@ export interface HygieneHit {
   readonly path: string;
   readonly transform: string;
 }
+
+// Irreversible transforms: 32/64-char hex whose appearance in any file is an
+// unambiguous leak signal (chance collision is negligible).
+const IRREVERSIBLE_TRANSFORMS = new Set(["md5_literal", "sha256_literal", "digest_ha1", "digest_ha1_sha256"]);
 
 const SKIP_DIRECTORIES = new Set([".git", "node_modules", "__pycache__"]);
 
@@ -53,20 +65,31 @@ async function filesUnder(path: string): Promise<string[]> {
 
 export async function sweepCanary(options: HygieneSweepOptions): Promise<HygieneHit[]> {
   const transforms = canaryTransforms(options);
-  const roots = [...new Set(options.roots.map((root) => resolve(root)))];
-  const fileGroups = await Promise.all(roots.map(async (root) => {
-    try { return await filesUnder(root); } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw error;
-    }
-  }));
+  const collect = async (rawRoots: readonly string[]): Promise<Set<string>> => {
+    const roots = [...new Set(rawRoots.map((root) => resolve(root)))];
+    const groups = await Promise.all(roots.map(async (root) => {
+      try { return await filesUnder(root); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+        throw error;
+      }
+    }));
+    return new Set(groups.flat());
+  };
+  const fullFiles = await collect(options.roots);
+  const hashOnlyFiles = await collect(options.hashOnlyRoots ?? []);
   const hits: HygieneHit[] = [];
-  for (const path of [...new Set(fileGroups.flat())]) {
-    const contents = new Uint8Array(await readFile(path));
-    for (const [name, needle] of transforms) {
-      if (Buffer.from(contents).indexOf(needle) >= 0) hits.push({ path, transform: name });
+  const scan = async (files: Set<string>, hashOnly: boolean): Promise<void> => {
+    for (const path of files) {
+      if (hashOnly && fullFiles.has(path)) continue; // scanned in the full pass
+      const contents = Buffer.from(await readFile(path));
+      for (const [name, needle] of transforms) {
+        if (hashOnly && !IRREVERSIBLE_TRANSFORMS.has(name)) continue;
+        if (contents.indexOf(needle) >= 0) hits.push({ path, transform: name });
+      }
     }
-  }
+  };
+  await scan(fullFiles, false);
+  await scan(hashOnlyFiles, true);
   return hits;
 }
 

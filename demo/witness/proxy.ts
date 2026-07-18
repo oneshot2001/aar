@@ -10,10 +10,26 @@ async function bodyOf(message: IncomingMessage): Promise<Uint8Array> {
   return new Uint8Array(Buffer.concat(chunks));
 }
 
+export interface WitnessFaultInjection {
+  /**
+   * Gate-controlled S6 fault: forward the upstream request (the dispatch is
+   * real), record the exchange with an INJECTED_FAULT response line, then
+   * withhold the reply so the client hits its own deadline. Default off.
+   *
+   * Applies ONLY to the command dispatch — the request that carries an
+   * x-aar-command-digest header — NOT to every action-bearing request. The
+   * F19 restore move is action-bearing but command-unbound; withholding it
+   * too would leave the camera unverified and fail the online oracle's
+   * restore_verified check every run (G5-D2b-004).
+   */
+  readonly withholdResponseAfterForward: boolean;
+}
+
 async function handle(
   clientRequest: IncomingMessage,
   clientResponse: ServerResponse,
   log: AppendOnlyWitnessLog,
+  fault?: WitnessFaultInjection,
 ): Promise<void> {
   const method = clientRequest.method ?? "GET";
   const rawUrl = clientRequest.url ?? "";
@@ -90,15 +106,32 @@ async function handle(
     return;
   }
   const responseLine = `HTTP/1.1 ${response.statusCode} ${response.statusMessage}`.trimEnd();
+  const commandBound = typeof commandDigest === "string" && commandDigest.length > 0;
+  if (fault?.withholdResponseAfterForward && actionBearing && commandBound) {
+    // The dispatch was real (forwarded, upstream replied); the client never
+    // hears back and must hit its own deadline — an honest after-send fault.
+    // Only the command-bound dispatch is withheld so the F19 restore that
+    // follows still completes and verifies.
+    await record(`INJECTED_FAULT_WITHHELD_RESPONSE (upstream ${responseLine})`, response.body);
+    return;
+  }
   await record(responseLine, response.body);
-  clientResponse.writeHead(response.statusCode, response.statusMessage, response.headers);
+  // G5-D2b-010: the proxy buffers the full body, so it must NOT forward the
+  // upstream's framing headers. Real Axis devices return BOTH Content-Length
+  // and Transfer-Encoding: chunked; re-emitting either alongside a fixed
+  // buffered body yields an unparseable response (Bun: InvalidHTTPResponse).
+  // Strip both and let the response set Content-Length from the buffer.
+  const forwardedHeaders = { ...response.headers };
+  delete forwardedHeaders["transfer-encoding"];
+  delete forwardedHeaders["content-length"];
+  clientResponse.writeHead(response.statusCode, response.statusMessage, forwardedHeaders);
   clientResponse.end(response.body);
 }
 
-export function createWitnessProxy(logPath: string) {
+export function createWitnessProxy(logPath: string, fault?: WitnessFaultInjection) {
   const log = new AppendOnlyWitnessLog(logPath);
   return createServer((request, response) => {
-    handle(request, response, log).catch((error) => {
+    handle(request, response, log, fault).catch((error) => {
       response.writeHead(502, "Upstream failure");
       response.end();
       process.stderr.write(`witness proxy error: ${error instanceof Error ? error.message : String(error)}\n`);
