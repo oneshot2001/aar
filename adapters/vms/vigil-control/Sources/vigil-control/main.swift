@@ -1,34 +1,35 @@
 import AxisEngine
+import CryptoKit
 import Foundation
 import NIOCore
 import NIOHTTP1
 import NIOPosix
 
-// vigil-control — AAR D3 VMS-leg mediator.
+// vigil-control — AAR D3 VMS-leg mediator (contract v2).
 //
 // A loopback HTTP service that wraps VigilCore.AxisEngine.VAPIXClient. The AAR
-// TS VmsAdapter POSTs an abstract op to /dispatch (through the transport
-// witness); this service resolves the camera credential via `cred get`,
-// executes ONE device operation via VAPIXClient, and returns a JSON effect.
-// F19 PTZ safety (baseline/restore/poll) is orchestrated by the TS adapter as
-// a sequence of atomic ops, so each request here is a single device action.
+// TS VmsAdapter calls this service THROUGH the transport witness, so the wire
+// this service speaks is what the witness attests. Contract:
 //
-// Credentials: the request carries a credential REFERENCE, never a secret.
+//   GET  /healthz
+//   GET  /ptz/position?host=&port=&username=&cred=
+//   POST /dispatch?op=ptz.goto_preset&preset=&digest=&host=&port=&username=&cred=
+//   POST /dispatch?op=ptz.goto&pan=&tilt=&zoom=&host=&port=&username=&cred=
+//   POST /dispatch?op=stream.view&profile=&digest=&host=&port=&username=&cred=
+//
+// Digest-bound ops (`digest` present): the POST body is the AAR canonical
+// command CBOR, and this service refuses to act unless sha256(body) equals the
+// `digest` value. That makes the witnessed request body the exact command the
+// EP committed to in the AAR bundle — the mediator-side half of the online
+// oracle's POST-body/command-digest binding. The restore op (ptz.goto) is
+// action-bearing but intentionally unbound: it is F19 safety orchestration by
+// the adapter, not the committed command.
+//
+// Credentials: requests carry a credential REFERENCE (`cred`), never a secret.
 // This service runs `cred get <reference>` in its own process; the secret
-// never crosses argv/stdin and is never logged or echoed.
-
-struct DispatchRequest: Decodable {
-  let op: String  // "ptz.position" | "ptz.goto_preset" | "ptz.goto" | "stream.view"
-  let host: String
-  let port: Int?
-  let username: String
-  let credentialReference: String
-  let preset: String?
-  let profile: String?  // stream profile name → mapped to a snapshot compression proxy; VAPIX stream-view is /jpg/image.cgi?streamprofile=
-  let pan: Double?
-  let tilt: Double?
-  let zoom: Double?
-}
+// never crosses argv/stdin and is never present in any response or log. The
+// stream profile name is a logical identifier echoed back for evidence; the
+// media unit itself is fetched via the VMS's own snapshot seam.
 
 struct DispatchEffect: Encodable {
   var op: String
@@ -40,6 +41,7 @@ struct DispatchEffect: Encodable {
   var content_type: String?
   var payload_bytes: Int?
   var media_valid: Bool?
+  var profile: String?
   var error: String?
 }
 
@@ -62,36 +64,85 @@ func credGet(_ reference: String) throws -> String {
   return secret
 }
 
-func handle(_ request: DispatchRequest) async -> DispatchEffect {
-  var effect = DispatchEffect(op: request.op, http_ok: false, application_status: "not_executed")
+struct Route {
+  let query: [String: String]
+  func value(_ name: String) -> String? { query[name] }
+}
+
+func parseQuery(_ uri: String) -> Route {
+  guard let components = URLComponents(string: uri) else { return Route(query: [:]) }
+  var query: [String: String] = [:]
+  for item in components.queryItems ?? [] { query[item.name] = item.value ?? "" }
+  return Route(query: query)
+}
+
+func makeClient(_ route: Route) throws -> VAPIXClient {
+  guard let host = route.value("host"), !host.isEmpty,
+    let username = route.value("username"), !username.isEmpty,
+    let reference = route.value("cred"), !reference.isEmpty
+  else { throw CredError.failed("missing host/username/cred routing parameters") }
+  let port = route.value("port").flatMap(Int.init) ?? 80
+  let secret = try credGet(reference)
+  return try VAPIXClient(host: host, port: port, username: username, password: secret, useHTTPS: false)
+}
+
+func sha256Hex(_ data: Data) -> String {
+  SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+}
+
+func position(_ route: Route) async -> DispatchEffect {
+  var effect = DispatchEffect(op: "ptz.position", http_ok: false, application_status: "not_executed")
   do {
-    let secret = try credGet(request.credentialReference)
-    let client = try VAPIXClient(
-      host: request.host, port: request.port ?? 80,
-      username: request.username, password: secret, useHTTPS: false)
-    switch request.op {
-    case "ptz.position":
-      let pos = try await client.ptzGetPosition()
-      effect.http_ok = true
-      effect.application_status = "ok"
-      effect.pan = pos.pan; effect.tilt = pos.tilt; effect.zoom = pos.zoom
+    let client = try makeClient(route)
+    let pos = try await client.ptzGetPosition()
+    effect.http_ok = true
+    effect.application_status = "ok"
+    effect.pan = pos.pan
+    effect.tilt = pos.tilt
+    effect.zoom = pos.zoom
+  } catch let VAPIXError.httpError(status) {
+    effect.application_status = "http_rejected_\(status)"
+  } catch {
+    effect.application_status = "transport_error"
+    effect.error = "\(error)"
+  }
+  return effect
+}
+
+func dispatch(_ route: Route, body: Data) async -> DispatchEffect {
+  let op = route.value("op") ?? "unknown"
+  var effect = DispatchEffect(op: op, http_ok: false, application_status: "not_executed")
+  // Digest-bound ops must carry the canonical command as the body.
+  if let digest = route.value("digest") {
+    guard sha256Hex(body) == digest.lowercased() else {
+      effect.application_status = "body_digest_mismatch"
+      return effect
+    }
+  }
+  do {
+    let client = try makeClient(route)
+    switch op {
     case "ptz.goto_preset":
-      guard let preset = request.preset else { effect.application_status = "missing_preset"; return effect }
+      guard route.value("digest") != nil else { effect.application_status = "digest_required"; return effect }
+      guard let preset = route.value("preset"), !preset.isEmpty else { effect.application_status = "missing_preset"; return effect }
       try await client.ptzGotoPreset(name: preset)
       effect.http_ok = true
       effect.application_status = "ok"
     case "ptz.goto":
-      guard let pan = request.pan, let tilt = request.tilt, let zoom = request.zoom else {
-        effect.application_status = "missing_coordinates"; return effect
-      }
+      guard let pan = route.value("pan").flatMap(Double.init),
+        let tilt = route.value("tilt").flatMap(Double.init),
+        let zoom = route.value("zoom").flatMap(Double.init)
+      else { effect.application_status = "missing_coordinates"; return effect }
       try await client.ptzGoto(pan: pan, tilt: tilt, zoom: zoom)
       effect.http_ok = true
       effect.application_status = "ok"
     case "stream.view":
-      // VAPIX stream-view for the demo = one explicitly requested JPEG frame
-      // via the configured stream profile (same channel D2b's adapter used).
+      guard route.value("digest") != nil else { effect.application_status = "digest_required"; return effect }
+      guard let profile = route.value("profile"), !profile.isEmpty else { effect.application_status = "missing_profile"; return effect }
+      // One explicitly requested media unit via the VMS's own snapshot seam.
       let data = try await client.getSnapshot()
       effect.http_ok = true
+      effect.profile = profile
       effect.payload_bytes = data.count
       // JPEG SOI 0xFFD8 .. EOI 0xFFD9 — a real media unit, not an error page.
       let valid = data.count >= 4 && data.first == 0xFF && data[data.index(after: data.startIndex)] == 0xD8
@@ -104,6 +155,9 @@ func handle(_ request: DispatchRequest) async -> DispatchEffect {
     }
   } catch let VAPIXError.httpError(status) {
     effect.application_status = "http_rejected_\(status)"
+  } catch let error as CredError {
+    effect.application_status = "routing_error"
+    effect.error = "\(error)"
   } catch {
     effect.application_status = "transport_error"
     effect.error = "\(error)"
@@ -132,15 +186,16 @@ final class DispatchHandler: ChannelInboundHandler, @unchecked Sendable {
       let bytes = Data(bodyBuffer.readBytes(length: bodyBuffer.readableBytes) ?? [])
       let loop = context.eventLoop
       let channel = context.channel
+      let route = parseQuery(head.uri)
       if head.method == .POST && head.uri.hasPrefix("/dispatch") {
         Task {
-          let effect: DispatchEffect
-          do {
-            let request = try JSONDecoder().decode(DispatchRequest.self, from: bytes)
-            effect = await handle(request)
-          } catch {
-            effect = DispatchEffect(op: "unknown", http_ok: false, application_status: "bad_request", error: "\(error)")
-          }
+          let effect = await dispatch(route, body: bytes)
+          let payload = (try? JSONEncoder().encode(effect)) ?? Data("{}".utf8)
+          loop.execute { Self.respond(channel: channel, status: .ok, body: payload) }
+        }
+      } else if head.method == .GET && head.uri.hasPrefix("/ptz/position") {
+        Task {
+          let effect = await position(route)
           let payload = (try? JSONEncoder().encode(effect)) ?? Data("{}".utf8)
           loop.execute { Self.respond(channel: channel, status: .ok, body: payload) }
         }
