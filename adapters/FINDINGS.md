@@ -404,3 +404,27 @@ stream.view, plus refusal paths) is now live-exercised. Round-2 checkpoint
 held: the live runner imports both adapters/vms/oracle.ts checks.
 Gate trail: spec/GATE5-D3-PLAN.md + GATE5-D3-REVIEW.md; evidence
 adapters/vms/live/evidence/.
+
+## D4 packaging Honesty Ledger (2026-07-18)
+
+- Built: demo/README.md + demo/results/run-manifest.json (F20 run manifest +
+  evidence index). Docs-only slice: no changes under spec/, harness/, pyref/,
+  adapters/ code (exit bar #5 trivially clean).
+- Reviewer gate round 1 = FIX-FIRST: P1-1 stale pyref counts (43/188 era ->
+  46/46 + 191/191 post D-57) and P1-2 misattributed 60/60-to-harness/ (60/60 is
+  the FULL Bun+TS suite at v0.2-rc5; harness/ core = 31/31) — both were
+  transcribed from older gate docs without re-verification; fixed. P2s fixed:
+  full 5-bullet verbatim claim boundary, "byte-identical scenario verdicts"
+  wording, this ledger, pyref synopsis alignment, role-scoped preflight note.
+- Verified: reviewer executed both offline one-command entrypoints as
+  documented (VAPIX S1–S6, VMS S1–S4+S6, hygiene 0 hits); scenario tables,
+  devices, tags/commits, finding-ID citations, F20 field coverage, claim
+  boundary, and secrets hygiene all checked clean.
+- verification_gap: the two LIVE entrypoints (adapters/*/live/run.ts) were not
+  re-executed for D4 — requires a camera exclusive-control window; their
+  results are cited from the D2b/D3 gate records, not re-run.
+- noticed_not_fixed: pre-existing wording in spec/GATE5-D2B-REVIEW.md:93
+  ("two-protocol/same-vendor VAPIX only") reads as a typo for one-protocol/
+  two-target; committed gate doc, left untouched (rename wording = Matthew's
+  call per rubric).
+- residual_uncertainty: none beyond the named verification_gap.

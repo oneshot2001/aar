@@ -1,0 +1,97 @@
+{
+  "manifest_version": 1,
+  "kind": "aar-demo-run-manifest",
+  "spec": "AAR v0.2 (spec/aar-core.cddl + spec/CONFORMANCE.md, decisions D-01..D-57)",
+  "gate": "Gate 5 two-adapter live-lab demo",
+  "sanitization": "No credentials, private keys, raw traces, or lab config. Canary-credential sweep (incl. transformed variants, hash-only-root scoping per G5-D2b-011) ran clean on every run.",
+  "anchoring_disclosure": "Same-operator demo anchoring (F22): the RFC 6962 anchor log is operated by the same party as the producer. No independent timestamping or withholding-resistance is claimed.",
+  "adapter_identity_disclosure": "Adapter/mediator identity and model/firmware strings are self-asserted by the producing side; preflight cross-checks them against device readback (G5-D2b-007) but no third party attests them.",
+  "legs": [
+    {
+      "leg": "vapix",
+      "slice": "D2b",
+      "closed": "2026-07-18",
+      "tag": "v0.2-rc5",
+      "commit": "248f72890df8acb9b50b7dc93ccdb49ff1cc020c",
+      "adapter": "adapters/vapix (TypeScript, RFC 7616 Digest direct to device)",
+      "mediator": null,
+      "devices": [
+        { "role": "ptz", "model": "AXIS Q6358-LE PTZ Camera", "firmware": "12.9.57", "serial": "E82725146996" },
+        { "role": "stream", "model": "AXIS Q6325-LE PTZ Camera", "firmware": "12.9.57", "serial": "E827252C9B9F" }
+      ],
+      "gate_supplied_inputs": "Per-scenario fresh invocation/correlation IDs, evaluation time, epoch, delegation windows, expected outcome level (demo/run-scenario.ts GateInputFile); S4 pinned tamper byte + expected first-failure code supplied by the gate (G5-D2a-005).",
+      "command_effect_mapping": {
+        "camera.ptz.preset": "VAPIX param/ptz.cgi goto designated safe preset -> position readback polled to pan/tilt/zoom tolerance within settling deadline",
+        "camera.stream.view": "VAPIX single-JPEG endpoint via configured stream profile -> payload validated as JPEG above minimum size by the online oracle"
+      },
+      "transport_observations": "Independent witness proxy records request boundaries (no headers, no bodies-with-secrets); dispatch LATCHES at action-bearing send (G5-D2a-008); framing headers stripped after G5-D2b-010; S6 fault seam withholds only command-bound dispatch via x-aar-command-digest (G5-D2b-004).",
+      "scenarios": [
+        { "scenario": "S1", "verification": "conformant", "outcome": "device_acknowledged", "application_status": "position_within_tolerance", "oracle": "PASS", "downgrade_rationale": null },
+        { "scenario": "S2", "verification": "conformant", "outcome": "device_acknowledged", "application_status": "media_payload_valid", "oracle": "PASS", "downgrade_rationale": null },
+        { "scenario": "S3", "verification": "conformant", "outcome": "not_dispatched", "application_status": "not_dispatched", "oracle": "PASS", "downgrade_rationale": "Refusal by design: unauthorized request produced a refusal receipt and zero invocation-attributable dispatch (R-1), confirmed by instrumentation and transport witness." },
+        { "scenario": "S4", "verification": "nonconformant", "outcome": "device_acknowledged", "application_status": "position_within_tolerance", "oracle": "PASS", "downgrade_rationale": "Intentional pinned single-byte signature tamper; verifier fails with the expected first-failure code (F21). Physical effect occurred; the evidence is what fails." },
+        { "scenario": "S5", "verification": "conformant", "outcome": "unknown", "application_status": "outcome_unknown_restore_verified", "oracle": "PASS", "downgrade_rationale": "Real producer crash-cut after send: outcome honestly encoded unknown (no independent observation of effect), resume without redispatch proven, F19 restore verified. Ran once via EP+VAPIX per Q5-2 ruling." },
+        { "scenario": "S6-rejection", "verification": "conformant", "outcome": "contradicted", "application_status": "vapix_application_error", "oracle": "PASS", "downgrade_rationale": "Backend rejected under a valid delegation; contradicted asserted only on a positively observed off-tolerance position readback, not on the rejection alone (G5-D2a-008)." },
+        { "scenario": "S6-after-send-timeout", "verification": "conformant", "outcome": "unknown", "application_status": "transport_timeout_after_send", "oracle": "PASS", "downgrade_rationale": "Transport timed out after the action-bearing send; effect unobservable at deadline, so outcome stays unknown rather than claiming success or failure." }
+      ],
+      "hygiene_hits": 0,
+      "reruns": "Two independent full live runs with byte-identical scenario verdicts; gate live re-run reproduced (exit bar #8); camera rests at park.",
+      "preflight_note": "Preflight checks are role-scoped: the PTZ target's stream_profile check is false by design (stream runs on the stream target); top-level ok reflects the role-scoped gates that S1 requires.",
+      "evidence": [
+        "adapters/vapix/live/evidence/d2b-preflight.json",
+        "adapters/vapix/live/evidence/d2b-live-summary.json"
+      ],
+      "gate_trail": ["spec/GATE5-D2B-PLAN.md", "spec/GATE5-D2B-REVIEW.md"]
+    },
+    {
+      "leg": "vms",
+      "slice": "D3",
+      "closed": "2026-07-18",
+      "tag": "v0.2-rc6",
+      "commit": "f1581c22412c5f2c0c3f64f1952a7e59b2ca9412",
+      "adapter": "adapters/vms (TypeScript VmsAdapter; no device secret ever enters the TS process)",
+      "mediator": "adapters/vms/vigil-control (Swift/NIOHTTP1 loopback service wrapping VigilCore.AxisEngine.VAPIXClient; resolves credential REFERENCE via its own cred get; POST body = canonical command CBOR sha256-verified mediator-side)",
+      "claim_boundary": "VMS-mediated + second independent implementation (Swift vs TypeScript). NOT a second-protocol or cross-vendor claim: Vigil speaks VAPIX under the hood. Sentence of record: spec/GATE5-D3-REVIEW.md.",
+      "devices": [
+        { "role": "ptz", "model": "AXIS Q6358-LE PTZ Camera", "firmware": "12.9.57" },
+        { "role": "stream", "model": "AXIS Q6325-LE PTZ Camera", "firmware": "12.9.57" }
+      ],
+      "gate_supplied_inputs": "Same GateInputFile shape and gate-supplied fresh IDs as the VAPIX leg, driving the SAME abstract commands through the mediator.",
+      "command_effect_mapping": {
+        "camera.ptz.preset": "abstract op -> vigil-control /dispatch -> VigilCore VAPIXClient goto preset -> position readback to tolerance (all-zeros readback treated as sentinel, never a positive observation, per G5-D3-001)",
+        "camera.stream.view": "abstract op -> vigil-control /dispatch -> snapshot fetch -> payload validated by oracle; stream profile is echo-only through the VMS seam (G5-D3-003)"
+      },
+      "transport_observations": "Witness sits at the AAR->mediator boundary (proves whether the EP handed a dispatch to the VMS; ambient VMS chatter excluded per F16). Contradiction asserted only on positively contrary observation (G5-D3-002).",
+      "scenarios": [
+        { "scenario": "S1", "verification": "conformant", "outcome": "device_acknowledged", "application_status": "position_within_tolerance", "oracle": "PASS", "downgrade_rationale": null },
+        { "scenario": "S2", "verification": "conformant", "outcome": "device_acknowledged", "application_status": "media_payload_valid", "oracle": "PASS", "downgrade_rationale": null },
+        { "scenario": "S3", "verification": "conformant", "outcome": "not_dispatched", "application_status": "not_dispatched", "oracle": "PASS", "downgrade_rationale": "Refusal by design; zero invocation-attributable dispatch at the AAR->mediator boundary (R-1)." },
+        { "scenario": "S4", "verification": "nonconformant", "outcome": "device_acknowledged", "application_status": "position_within_tolerance", "oracle": "PASS", "downgrade_rationale": "Intentional pinned tamper; expected first-failure code (F21)." },
+        { "scenario": "S6-rejection", "verification": "conformant", "outcome": "contradicted", "application_status": "position_outside_tolerance", "oracle": "PASS", "downgrade_rationale": "Mediator-path fault under valid delegation; contradicted via off-tolerance position readback (position-based, not http_rejected_N — G5-D3-003)." },
+        { "scenario": "S6-after-send-timeout", "verification": "conformant", "outcome": "unknown", "application_status": "transport_timeout_after_send", "oracle": "PASS", "downgrade_rationale": "Timeout after action-bearing send with a real device move; restore verified; outcome stays unknown." }
+      ],
+      "hygiene_hits": 0,
+      "reruns": "Two independent full live runs with identical verdicts; camera rests at park.",
+      "evidence": [
+        "adapters/vms/live/evidence/d3-preflight.json",
+        "adapters/vms/live/evidence/d3-live-summary.json"
+      ],
+      "gate_trail": ["spec/GATE5-D3-PLAN.md", "spec/GATE5-D3-SPIKE.md", "spec/GATE5-D3-REVIEW.md"]
+    }
+  ],
+  "known_residuals": [
+    "Adapter/mediator identity is self-asserted (preflight cross-check only; no third-party attestation).",
+    "Same-operator demo anchoring: no independent timestamping or withholding-resistance (F22).",
+    "Producer-declared completeness only: ingress completeness not_established without an independent census/reconciliation artifact (G3).",
+    "G5-D3-001 residual: a fabricated position readback with any non-zero field would still pass the sentinel check.",
+    "G5-D3-003: stream profile is echo-only through the VMS seam; profile fidelity is not independently confirmed on that leg.",
+    "S5 crash-cut exercised once, on the EP+VAPIX leg only (Q5-2 ruling).",
+    "Verifier statefulness: cross-evaluation replay/sequence properties are evaluated only when prior-state is supplied; gated runs supplied it (no stateful_not_evaluated in gated verdicts).",
+    "Operator environment: lab cameras use short (4-char) VAPIX passwords — weak beyond the lab LAN; flagged to the operator, unchanged. Cameras left digest-only (anonymous viewer/PTZ off)."
+  ],
+  "verification_toolchain": {
+    "reference_harness": "Full Bun+TS suite (harness + adapters + demo) — 60/60 tests at v0.2-rc5 (D2b close); harness/ core suite 31/31",
+    "independent_verifier": "pyref/ (Python 3.11+ stdlib clean-room) — 46/46 encoder KATs, 191/191 corpus agreement + determinism post D-57 (all 188 pre-existing verdict byte sequences proven unchanged), 0 divergences",
+    "public_cli": "python -m pyref verify BUNDLE.cbor --at UNIX_SECONDS [--trust-policy POLICY.json] [--prior-state PRIOR.json]"
+  }
+}
