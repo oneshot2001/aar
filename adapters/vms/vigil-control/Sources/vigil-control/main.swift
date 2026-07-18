@@ -95,6 +95,15 @@ func position(_ route: Route) async -> DispatchEffect {
   do {
     let client = try makeClient(route)
     let pos = try await client.ptzGetPosition()
+    // G5-D3-001: PTZPosition.parse never fails — an error body inside HTTP
+    // 2xx (a class proven reachable live in D2b) parses to defaulted zeros.
+    // Axis PTZ zoom is 1-based (1..9999), so a true all-zeros triple cannot
+    // occur on a real readback; refuse to report a fabricated position as a
+    // positive observation.
+    if pos.pan == 0 && pos.tilt == 0 && pos.zoom == 0 {
+      effect.application_status = "position_unavailable"
+      return effect
+    }
     effect.http_ok = true
     effect.application_status = "ok"
     effect.pan = pos.pan
@@ -102,6 +111,9 @@ func position(_ route: Route) async -> DispatchEffect {
     effect.zoom = pos.zoom
   } catch let VAPIXError.httpError(status) {
     effect.application_status = "http_rejected_\(status)"
+  } catch let error as CredError {
+    effect.application_status = "routing_error"
+    effect.error = "\(error)"
   } catch {
     effect.application_status = "transport_error"
     effect.error = "\(error)"
@@ -187,19 +199,20 @@ final class DispatchHandler: ChannelInboundHandler, @unchecked Sendable {
       let loop = context.eventLoop
       let channel = context.channel
       let route = parseQuery(head.uri)
-      if head.method == .POST && head.uri.hasPrefix("/dispatch") {
+      let path = URLComponents(string: head.uri)?.path ?? head.uri
+      if head.method == .POST && path == "/dispatch" {
         Task {
           let effect = await dispatch(route, body: bytes)
           let payload = (try? JSONEncoder().encode(effect)) ?? Data("{}".utf8)
           loop.execute { Self.respond(channel: channel, status: .ok, body: payload) }
         }
-      } else if head.method == .GET && head.uri.hasPrefix("/ptz/position") {
+      } else if head.method == .GET && path == "/ptz/position" {
         Task {
           let effect = await position(route)
           let payload = (try? JSONEncoder().encode(effect)) ?? Data("{}".utf8)
           loop.execute { Self.respond(channel: channel, status: .ok, body: payload) }
         }
-      } else if head.method == .GET && head.uri.hasPrefix("/healthz") {
+      } else if head.method == .GET && path == "/healthz" {
         Self.respond(channel: channel, status: .ok, body: Data("{\"ok\":true}".utf8))
       } else {
         Self.respond(channel: channel, status: .notFound, body: Data("{\"error\":\"not_found\"}".utf8))

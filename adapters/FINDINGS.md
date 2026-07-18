@@ -322,3 +322,61 @@ Every run through EP → transport witness → VAPIX adapter → real camera →
 online oracle → `python -m pyref verify` (pinned --at, trust policy,
 --prior-state advanced across runs). Gate live re-run (exit bar #8)
 reproduced identically. Artifacts under ~/.aar-demo/d2b-*.
+
+## G5-D3-001 — vigil-control fabricated all-zeros position on error-in-200 (P1, FIXED)
+
+- Status: RULED + FIXED (D3 step 2+3 reviewer gate, 2026-07-18).
+  `VigilCore.PTZPosition.parse` never fails: any 2xx body (VAPIX `Error:`
+  text, HTML error page, empty) parses to defaulted zeros, and this class is
+  proven reachable live (D2b S6-rejection produced exactly an error body in
+  HTTP 2xx). The mediator would report a fabricated position as a positive
+  observation — worst case the F19 baseline is captured as 0/0/0 and the
+  camera is later physically "restored" there with `restore_verified: true`.
+  Fix: vigil-control refuses all-zeros readbacks (`position_unavailable`) —
+  a true 0/0/0 cannot occur on real Axis PTZ (zoom is 1-based, 1..9999).
+  Vigil stays unmodified (`VAPIXClient.request` is private, the raw body is
+  unreachable); the sentinel is the strongest mediator-side guard available.
+  Residual: a fabricated readback with any non-zero field would still pass —
+  accepted; the live preflight should sanity-check the park position.
+
+## G5-D3-002 — VMS stream catch-all reported contradicted without observation (P1, FIXED)
+
+- Status: RULED + FIXED. The stream outcome's else-branch bucketed
+  mediator-internal failures (`transport_error`, `routing_error`,
+  `mediator_http_N`, unparseable effect) into `contradicted` with zero device
+  observation — camera unplugged during live S2 would have produced a
+  contradicted receipt. Now `contradicted` requires a positively observed
+  contrary result (`http_rejected_N`, observed invalid/undersized media);
+  mediator-internal failures are `unknown`. Unit-tested both directions.
+
+## G5-D3-003 — stream profile is echo-only through the VMS seam (P2, DOCUMENTED)
+
+- Status: RULED. `VigilCore.getSnapshot()` has no profile parameter; the
+  mediator echoes the logical profile and fetches via the VMS's own snapshot
+  seam. The mock originally rejected profile mismatches — faking a check the
+  live leg does not perform (dangerous-direction fidelity gap). Mock relaxed
+  to mirror reality; README states the claim as "one validated media unit via
+  the VMS control seam", NOT "media from the mapped profile". Related: a live
+  S6-rejection induced via unknown preset surfaces as position-based
+  contradiction, not `http_rejected_N` (error-in-200 on ptz.cgi) — the live
+  runner must induce S6-rejection accordingly (readback provides the positive
+  contrary evidence, as in D2b).
+
+## D3 step 2+3 Honesty Ledger (offline build, pre-live)
+
+- Changed: vigil-control contract v2 (body-digest binding, query routing,
+  zero-sentinel, exact-path routing, CredError mapping); TS VmsAdapter +
+  witnessed mediator client + mock + offline S1–S4/S6 suite; VMS oracle
+  checks factored to `adapters/vms/oracle.ts` for offline+live reuse (P2-2).
+- Related-untouched: spec/ wire text, harness/, pyref/, Vigil repo, D2b
+  VAPIX adapter and its suite (cross-imports only).
+- Noticed-not-fixed: `sent=true` over-latching carry (D2b P3); reconcile()
+  mirrored but unexercised on this leg (S5 runs once on EP+VAPIX per Q5-2);
+  `cred get` fork/exec per mediator request (tune poll interval live).
+- Residual-uncertainty: live behavior of the real vigil-control under the
+  witness proxy (framing headers — D2b hit G5-D2b-010 there); space-in-value
+  encoding mismatch is fail-closed.
+- **verification_gap: the contract-v2 action-bearing surface (digest refusal,
+  ptz.goto_preset, ptz.goto restore, stream.view via real vigil-control +
+  cameras) has NOT been live-exercised — only GET /ptz/position and /healthz
+  were live-proven. The live leg is D3 step 4, after this gate.**

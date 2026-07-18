@@ -381,18 +381,31 @@ export class VmsAdapter implements DemoAdapter {
         && effect?.media_valid === true
         && contentType === "image/jpeg"
         && payloadBytes >= this.config.streamMinimumPayloadBytes;
+      // G5-D3-002: contradicted requires a positively observed contrary
+      // result — the backend rejected the request, or the mediator observed
+      // and reported a media unit that fails validation. Mediator-internal
+      // failures (transport_error, routing_error, mediator_http_N,
+      // unparseable effect) carry no device observation and stay unknown.
+      const positivelyContrary = !validMedia
+        && (status.startsWith("http_rejected_") || status === "media_payload_invalid" || status === "media_payload_valid");
       const outcome: Outcome = validMedia ? {
         state: "consistent", level: "device_acknowledged", status: response.status, responseDigest: hash(response.body),
         evidence: {
           http_status: response.status, application_status: "media_payload_valid", profile: parameters.stream_profile,
           content_type: contentType, payload_bytes: payloadBytes, media_unit_valid: true,
         },
-      } : {
+      } : positivelyContrary ? {
         state: "contradicted", level: "contradicted", status: response.status, responseDigest: hash(response.body),
         evidence: {
           http_status: response.status, application_status: status === "media_payload_valid" ? "media_payload_undersized" : status,
           profile: parameters.stream_profile, content_type: contentType, payload_bytes: payloadBytes,
           media_unit_valid: false,
+        },
+      } : {
+        state: "unknown", level: "unknown", status: response.status, responseDigest: hash(response.body),
+        evidence: {
+          http_status: response.status, application_status: status,
+          profile: parameters.stream_profile, media_unit_valid: false,
         },
       };
       return this.effectResult(command, context, "fixed-primary", outcome);

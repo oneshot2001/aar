@@ -23,6 +23,22 @@ oracle's POST-body binding). vigil-control independently refuses to act when
 `sha256(body) != digest`. The F19 restore (`op=ptz.goto`) is action-bearing
 but intentionally unbound — safety orchestration, not the committed command.
 
+## Known limitations (on the record)
+
+- **Stream profile is echo-only** (G5-D3-003): the mediator fetches the media
+  unit via the VMS's snapshot seam and echoes the logical profile for
+  evidence; it does not bind the fetch to the mapped backend profile. The
+  evidence claim is "one validated media unit via the VMS control seam", not
+  "media from the mapped profile". The mock mirrors this.
+- **Error-in-200 masking** (G5-D3-001): `VigilCore.PTZPosition.parse` never
+  fails, so vigil-control refuses all-zeros readbacks (impossible on real
+  Axis PTZ — zoom is 1-based) rather than report a fabricated position. A
+  live S6-rejection induced by an unknown preset surfaces as position-based
+  contradiction (`position_outside_tolerance`), not `http_rejected_N` —
+  plan the live fault induction accordingly.
+- `FILL-AT-D3` values must not contain spaces (URLSearchParams `+` encoding
+  vs Swift URLComponents non-decoding mismatch — fail-closed, but confusing).
+
 ## Secrets
 
 The TS process never holds a device secret. Requests carry a credential

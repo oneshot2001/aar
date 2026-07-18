@@ -10,7 +10,7 @@ import type { PtzPosition } from "../config";
 // inside the real service: the secret is held here and never appears in any
 // response, mirroring the reference-only contract the TS adapter sees.
 
-export type MockVmsFaultMode = "normal" | "reject" | "after-send-timeout";
+export type MockVmsFaultMode = "normal" | "reject" | "after-send-timeout" | "invalid-media" | "backend-transport-error";
 
 export interface MockVigilControlConfig {
   readonly credentialReference: string;
@@ -147,6 +147,7 @@ export class MockVigilControl {
         this.mode = "normal";
         if (mode === "reject") return this.json({ op, http_ok: false, application_status: "http_rejected_503" });
         if (mode === "after-send-timeout") return new Promise<DigestResponse>(() => {});
+        if (mode === "backend-transport-error") return this.json({ op, http_ok: false, application_status: "transport_error", error: "mock backend unreachable" });
         if (url.searchParams.get("preset") !== this.config.presetBackendName) {
           return this.json({ op, http_ok: false, application_status: "http_rejected_404" });
         }
@@ -171,9 +172,14 @@ export class MockVigilControl {
         this.mode = "normal";
         if (mode === "reject") return this.json({ op, http_ok: false, application_status: "http_rejected_503" });
         if (mode === "after-send-timeout") return new Promise<DigestResponse>(() => {});
-        const profile = url.searchParams.get("profile");
-        if (profile !== this.config.streamBackendProfile) {
-          return this.json({ op, http_ok: false, application_status: "media_payload_invalid", profile: profile ?? "", media_valid: false });
+        if (mode === "backend-transport-error") return this.json({ op, http_ok: false, application_status: "transport_error", error: "mock backend unreachable" });
+        // G5-D3-003: the real mediator fetches via the VMS snapshot seam and
+        // ECHOES the profile — it does not bind the fetch to it. The mock
+        // mirrors that (a profile-mismatch rejection here would fake a check
+        // the live leg does not perform).
+        const profile = url.searchParams.get("profile") ?? "";
+        if (mode === "invalid-media") {
+          return this.json({ op, http_ok: true, application_status: "media_payload_invalid", profile, content_type: "unknown", payload_bytes: 5, media_valid: false });
         }
         return this.json({
           op, http_ok: true, application_status: "media_payload_valid",

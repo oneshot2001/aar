@@ -11,6 +11,7 @@ import type { VmsRuntimeConfig } from "../config";
 import { MediatorHttpClient } from "../client";
 import { MockVigilControl, type MockVigilControlConfig, type MockVmsFaultMode } from "../mock/vigil-control";
 import { InMemoryMediatorWitnessTransport } from "../mock/transport";
+import { assertVmsMediationDiscipline, assertVmsPtzRestoreDiscipline } from "../oracle";
 
 // D3 offline suite — the VMS-mediated leg (S1–S4 + S6; S5 crash-cut runs once
 // on the EP+VAPIX leg per Q5-2, the VMS leg encodes outcome_unknown via
@@ -31,12 +32,6 @@ export interface VmsOfflineSuiteResult {
   readonly hygieneHits: number;
   readonly mediatorCounters: ReturnType<MockVigilControl["counters"]>;
 }
-
-const MEDIATOR_PATHS = new Set(["/dispatch", "/ptz/position", "/healthz"]);
-const DISPATCH_REQUEST_LINES = {
-  "camera.ptz.preset": "POST /dispatch?cred=<sanitized>&digest=<sanitized>&host=<sanitized>&op=<sanitized>&port=<sanitized>&preset=<sanitized>&username=<sanitized> HTTP/1.1",
-  "camera.stream.view": "POST /dispatch?cred=<sanitized>&digest=<sanitized>&host=<sanitized>&op=<sanitized>&port=<sanitized>&profile=<sanitized>&username=<sanitized> HTTP/1.1",
-} as const;
 
 function hex16(): string {
   return randomBytes(16).toString("hex");
@@ -183,25 +178,8 @@ export async function runVmsOfflineSuite(requestedRoot?: string): Promise<VmsOff
       throw new Error("S6 rejection lacked positive contrary position evidence");
     }
     if (name === "S6-after-send-timeout" && applicationStatus !== "transport_timeout_after_send") throw new Error("S6 timeout evidence assertion failed");
-    if (result.producer.dispatchResult && result.producer.dispatchResult.dispatched && evidence.vms_mediated !== true) {
-      throw new Error("VMS mediation marker missing from effect evidence");
-    }
-    // Full-mediation proof: every witnessed exchange is with the mediator's
-    // HTTP surface — no direct device path (/axis-cgi/...) ever appears at
-    // the AAR->mediator boundary.
-    for (const entry of result.witness) {
-      const path = entry.request_line.split(" ")[1]!.split("?")[0]!;
-      if (!MEDIATOR_PATHS.has(path)) throw new Error(`non-mediated witnessed request: ${entry.request_line}`);
-    }
-    const attributable = result.witness.filter((entry) => entry.invocation_id === input.invocation_id && entry.action_bearing);
-    const bound = attributable.filter((entry) => entry.command_digest !== null);
-    if (bound.length && bound.some((entry) => entry.request_line !== DISPATCH_REQUEST_LINES[input.action_name])) {
-      throw new Error("VMS dispatch request-line shape assertion failed");
-    }
-    if (name === "S1") {
-      const restores = attributable.filter((entry) => entry.command_digest === null);
-      if (restores.length !== 1 || evidence.restore_verified !== true) throw new Error("S1 F19 restore evidence assertion failed");
-    }
+    assertVmsMediationDiscipline(result, input);
+    if (name === "S1") assertVmsPtzRestoreDiscipline(result, input);
     summaries.push({
       scenario: name,
       verification: result.verificationResult,

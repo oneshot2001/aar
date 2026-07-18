@@ -137,6 +137,34 @@ describe("VMS adapter", () => {
     expect(result.effect.backend_evidence.application_status).toBe("transport_timeout_after_send");
   });
 
+  test("stream: observed invalid media is contradicted; mediator-internal failure stays unknown", async () => {
+    const streamManifest = () => buildCommandManifest({
+      actionName: "camera.stream.view", targetId: id16("vms-test-stream-target"), targetLogicalName: "fixed-primary",
+      parameters: { stream_profile: "test" }, invocationId: id16("vms-test-stream-invocation"),
+    }, "vms", "0.1.0-d3");
+    {
+      const root = await mkdtemp(join(tmpdir(), "aar-vms-unit-"));
+      const mediator = new MockVigilControl(testMediatorConfig());
+      const { adapter } = testHarness(root, mediator);
+      mediator.setFaultMode("invalid-media");
+      const manifest = streamManifest();
+      const result = await adapter.dispatch(manifest, testContext(root, toHex(manifest.command_digest)));
+      expect(result.effect.outcome_level).toBe("contradicted");
+      expect(result.effect.backend_evidence.application_status).toBe("media_payload_invalid");
+    }
+    {
+      const root = await mkdtemp(join(tmpdir(), "aar-vms-unit-"));
+      const mediator = new MockVigilControl(testMediatorConfig());
+      const { adapter } = testHarness(root, mediator);
+      mediator.setFaultMode("backend-transport-error");
+      const manifest = streamManifest();
+      const result = await adapter.dispatch(manifest, testContext(root, toHex(manifest.command_digest)));
+      expect(result.effect.outcome_level).toBe("unknown");
+      expect(result.effect.state).toBe("unknown");
+      expect(result.effect.backend_evidence.application_status).toBe("transport_error");
+    }
+  });
+
   test("only the gate5-safe logical preset is permitted", async () => {
     const root = await mkdtemp(join(tmpdir(), "aar-vms-unit-"));
     const mediator = new MockVigilControl(testMediatorConfig());

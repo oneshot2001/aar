@@ -79,6 +79,9 @@ function containsPlaceholder(value: unknown): boolean {
 }
 
 export function assertVmsConfig(config: VmsRuntimeConfig): void {
+  if (containsPlaceholder(config)) {
+    throw new Error("VMS FILL-AT-D3 placeholders must be supplied by runtime configuration");
+  }
   const mediator = new URL(config.mediatorBaseUrl);
   if (mediator.protocol !== "http:") throw new Error("mediator base URL must use HTTP through the transport witness");
   const proxy = new URL(config.witnessProxyUrl);
@@ -86,9 +89,6 @@ export function assertVmsConfig(config: VmsRuntimeConfig): void {
   for (const [name, target] of Object.entries(config.targets)) {
     if (!target.host || !target.username || !target.credentialReference) throw new Error(`${name} mediator routing configuration is incomplete`);
     if (!Number.isSafeInteger(target.port) || target.port < 1 || target.port > 65535) throw new Error(`${name} mediator routing port is invalid`);
-  }
-  if (containsPlaceholder(config)) {
-    throw new Error("VMS FILL-AT-D3 placeholders must be supplied by runtime configuration");
   }
   if (!config.presetMappings["gate5-safe"] || !config.presetPositions["gate5-safe"]) throw new Error("gate5-safe preset mapping and position are required");
   if (!Object.keys(config.streamProfileMappings).length) throw new Error("at least one stream profile mapping is required");
