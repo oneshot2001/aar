@@ -428,3 +428,26 @@ adapters/vms/live/evidence/.
   two-target; committed gate doc, left untouched (rename wording = Matthew's
   call per rubric).
 - residual_uncertainty: none beyond the named verification_gap.
+
+## Phase-5 RFP-language Honesty Ledger (2026-07-18)
+
+- Built: docs/rfp-language-v0.2.md (model solicitation clauses). Docs-only.
+- Reviewer gate round 1 = FIX-FIRST. 2 P1: (1) "reference toolchain satisfies
+  this clause today" contradicted repo record — repo PRIVATE, license TBD, no
+  LICENSE file; rewritten as designed-to-satisfy + explicit release
+  precondition (publish pyref under OSI license before live use); (2) Clause 1
+  mandated AAR-2A receipts for dispositions the v0.2-rc7 wire cannot express
+  (closed two-action ontology; alert.suppress experimental, access control out
+  of v0) — SHALL scoped to the pinned ontology + issuer guidance added. P2s
+  fixed: guarantee wording de-staled per E-1 (anchored epoch manifests, not
+  "anchored completeness"); "PTZ and fixed cameras" corrected (both PTZ
+  hardware); Q5-2 single-run S5 parenthetical; this ledger. P3s folded:
+  R-31-deferred crash-durability caveat; "verified" bar tightened to
+  ontology-observer rule + same-API read-back exclusion.
+- verification_gap: availability claim was drafted without checking repo
+  licensing (the P1-1 root cause — same transcribed-not-verified class as D4
+  round 1); no legal review of clause enforceability — model text, not
+  counsel-reviewed solicitation language.
+- noticed_not_fixed: none. residual_uncertainty: whether procurement offices
+  accept rc-pinned conformance language at all — untested with a real agency.
+- related_untouched: spec/, harness/, pyref/, adapters code — untouched.
