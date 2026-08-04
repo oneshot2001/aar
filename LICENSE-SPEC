@@ -1,0 +1,15 @@
+Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+The AAR specification text — the prose and CDDL in spec/ and docs/ (including
+spec-v0.1.1-requirements-draft.md, threat-model-v0.1.md, aar-core.cddl,
+related-work-v0.2.md, and rfp-language-v0.2.md) — is licensed under the
+Creative Commons Attribution 4.0 International license.
+
+You are free to share and adapt this material for any purpose, including
+commercially, provided you give appropriate attribution to the AAR project
+(Matthew Visher) and indicate if changes were made.
+
+Full license text: https://creativecommons.org/licenses/by/4.0/legalcode
+
+All code in this repository (pyref/, harness/, kats/, adapters/, demo/) is
+licensed separately under the Apache License 2.0 — see LICENSE.
