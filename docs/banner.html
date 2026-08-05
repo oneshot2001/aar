@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 1600px; height: 500px; overflow: hidden; }
+  .banner {
+    width: 1600px; height: 500px;
+    background: radial-gradient(1200px 700px at 18% 30%, #0e2233 0%, #08131d 45%, #050b11 100%);
+    display: flex; align-items: center; justify-content: center; gap: 72px;
+    font-family: -apple-system, "SF Pro Display", "Segoe UI", Inter, sans-serif;
+    position: relative;
+  }
+  .banner::before {
+    content: ""; position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(94, 234, 212, 0.035) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(94, 234, 212, 0.035) 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+  .mark { position: relative; width: 220px; height: 220px; flex: 0 0 auto; }
+  .text { position: relative; max-width: 900px; }
+  h1 {
+    font-size: 92px; font-weight: 800; letter-spacing: -2px; color: #f2f7fa;
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  h1 .dim { color: #3ec9a7; font-size: 40px; letter-spacing: 0; font-weight: 600; vertical-align: middle; margin-left: 22px; }
+  .tag { margin-top: 18px; font-size: 33px; font-weight: 600; color: #c7d5de; letter-spacing: -0.4px; }
+  .trip { margin-top: 22px; font-size: 26px; font-weight: 500; color: #6f8494; }
+  .trip b { color: #3ec9a7; font-weight: 600; }
+  .chain { margin-top: 30px; display: flex; align-items: center; }
+  .block {
+    width: 118px; height: 10px; border-radius: 6px;
+    background: linear-gradient(90deg, #16a085, #3ec9a7);
+  }
+  .block.deny { background: linear-gradient(90deg, #b0662a, #d98e3b); }
+  .link { width: 26px; height: 2px; background: #2a4152; }
+</style>
+</head>
+<body>
+<div class="banner">
+  <div class="mark">
+    <svg viewBox="0 0 220 220" width="220" height="220">
+      <!-- tile -->
+      <rect x="30" y="18" width="160" height="184" rx="18" fill="none" stroke="#1d3648" stroke-width="7"/>
+      <rect x="30" y="18" width="160" height="184" rx="18" fill="#0a1822" opacity="0.6"/>
+      <!-- receipt sheet -->
+      <rect x="56" y="42" width="108" height="120" rx="8" fill="none" stroke="#2a6f60" stroke-width="6"/>
+      <g stroke="#2a6f60" stroke-width="6" stroke-linecap="round">
+        <line x1="72" y1="68" x2="148" y2="68"/>
+        <line x1="72" y1="92" x2="148" y2="92"/>
+        <line x1="72" y1="116" x2="118" y2="116"/>
+      </g>
+      <!-- signature seal -->
+      <circle cx="140" cy="140" r="30" fill="#0a1822"/>
+      <circle cx="140" cy="140" r="26" fill="none" stroke="#3ec9a7" stroke-width="7"/>
+      <path d="M 127 140 L 137 150 L 154 128" fill="none" stroke="#3ec9a7" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- chain stub under tile -->
+      <g>
+        <rect x="56" y="176" width="26" height="10" rx="4" fill="#3ec9a7"/>
+        <rect x="88" y="176" width="26" height="10" rx="4" fill="#3ec9a7"/>
+      </g>
+    </svg>
+  </div>
+  <div class="text">
+    <h1>AAR<span class="dim">Agent Action Receipts</span></h1>
+    <div class="tag">Evidence-grade receipts for AI agents acting on physical-security systems</div>
+    <div class="trip"><b>Attribution.</b> <b>Tamper evidence.</b> Verified offline, free, forever.</div>
+    <div class="chain">
+      <div class="block"></div><div class="link"></div>
+      <div class="block"></div><div class="link"></div>
+      <div class="block deny"></div><div class="link"></div>
+      <div class="block"></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

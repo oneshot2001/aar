@@ -1,7 +1,30 @@
+<div align="center">
+
 # Agent Action Receipts (AAR)
 
-**Vendor-neutral, evidence-grade conformance profiles for AI agents acting on
-physical-security systems.**
+<img src="docs/banner.png" alt="AAR — evidence-grade receipts for AI agents acting on physical-security systems" width="100%">
+
+### Vendor-neutral, evidence-grade conformance profiles for AI agents acting on physical-security systems.
+
+<p>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/code-Apache--2.0-blue.svg" alt="Code: Apache-2.0"></a>
+  <a href="LICENSE-SPEC"><img src="https://img.shields.io/badge/spec-CC%20BY%204.0-blue.svg" alt="Spec: CC BY 4.0"></a>
+  <a href="spec/aar-core.cddl"><img src="https://img.shields.io/badge/wire-v0.2--rc7-3ec9a7.svg" alt="Wire: v0.2-rc7"></a>
+  <a href="pyref/"><img src="https://img.shields.io/badge/verifier-offline%20%C2%B7%20stdlib--only-3ec9a7.svg" alt="Verifier: offline, stdlib-only"></a>
+  <a href="kats/"><img src="https://img.shields.io/badge/KATs-byte--pinned-1d3648.svg" alt="KATs: byte-pinned"></a>
+  <a href="#status"><img src="https://img.shields.io/badge/status-release%20candidate-d98e3b.svg" alt="Status: release candidate"></a>
+</p>
+
+<a href="spec/aar-core.cddl">Normative CDDL</a> ·
+<a href="docs/threat-model-v0.1.md">Threat model</a> ·
+<a href="pyref/">Offline verifier</a> ·
+<a href="docs/rfp-language-v0.2.md">RFP language</a> ·
+<a href="https://github.com/oneshot2001/onvif-mcp">Reference producer</a> ·
+<a href="https://github.com/oneshot2001/aar/issues">Report an issue</a>
+
+</div>
+
+---
 
 ## The question AAR answers
 
