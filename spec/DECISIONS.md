@@ -822,3 +822,52 @@ whose outcome was contradicted or unresolved must not report a stronger
 level because a lower-ranked receipt happened to sort last; `contradicted`
 outranks `unknown` because it is a positive observation of contradiction,
 not mere absence of evidence.
+
+## D-58 — Verification trust is verifier-configured; platform trust stores are out of scope (candidate)
+
+**Decision.** An AAR verifier resolves signing keys only from credentials carried
+in the bundle plus explicitly configured accepted external keys or trust-bundle
+files. No conformant workflow may require installing an AAR root, issuer, or
+device credential into an operating-system or browser trust store, and a verifier
+MUST NOT consult platform trust stores when validating any signed object.
+Documentation and tooling shipped with the spec must never instruct an operator
+to broaden OS-level trust to make verification succeed.
+
+**Why.** The existing conformance order already behaves this way
+(`key/not-found` is defined against configured keys), but the constraint was
+implicit. Field evidence 2026-08-08: Trustlix (Commend Österreich, an Axis TIP)
+ships on-camera PKI whose first-run flow installs a camera-generated root CA
+into the Windows Trusted Root store (Local Machine), giving a single edge
+device certificate-minting power over every workstation that follows the
+manual. Real vendors get this wrong; stating the principle normatively makes
+the failure mode a conformance question rather than a deployment accident.
+Teardown: vault `08-Agent-Output/2026-08-08-cmdoe-trustlix-review/review.md`.
+
+**Alternatives considered.** Staying silent (status quo — leaves integrators
+free to replicate the Trustlix pattern in AAR tooling); allowing OS trust
+stores as an optional key source (imports every platform store's revocation
+and scoping semantics into the verdict, untestable across platforms).
+
+## D-59 — One signing key per physical device; fleet-shared signing credentials are nonconformant (candidate)
+
+**Decision.** A producer credential's signing key MUST identify exactly one
+physical device (or one logical principal for non-device roles). Provisioning
+the same signing key or credential across multiple devices is nonconformant
+producer behavior: a verifier that can demonstrate the same `subject_kid`
+active on more than one device SHOULD treat affected receipts as
+`credential/usage-mismatch`. Rotation and revocation therefore always act on a
+single device's identity, never a fleet.
+
+**Why.** A receipt signed by a fleet-shared key proves an action came from
+*some* holder of that key — attribution, the product's core claim, collapses,
+and revoking one compromised device revokes the whole fleet. `credential/
+role-key-reuse` already bars cross-role sharing; this closes the cross-device
+case. Same field evidence: Trustlix's fleet deployment explicitly supports
+pushing one certificate to many cameras, destroying per-device identity and
+individual revocation in a shipping product marketed as zero trust.
+
+**Alternatives considered.** SHOULD-level guidance only (leaves the
+attribution guarantee soft exactly where a real vendor already broke it);
+enforcing via credential count limits (doesn't bind keys to devices);
+attestation-bound keys as a MUST (right direction, but hardware attestation
+availability varies — kept as the recommended profile, not the floor).
