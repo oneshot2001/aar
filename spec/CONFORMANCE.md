@@ -99,7 +99,14 @@ normative as the step order itself (D-54).
    `request_id` and require the root's `request_commitment` to equal SHA-256 of
    the exact request claims bstr. A missing request envelope is
    `bundle/dependency-missing`; a different digest is
-   `request/commitment-mismatch`. `human_request` and
+   `request/commitment-mismatch`. Then require the request's declared coordinates
+   to agree with what the receipt already asserts: `tenant_id` and `site_id` MUST
+   equal the receipt binding's, `target_ep_kid` MUST equal the binding's
+   `epoch_owner_kid`, and the request's `correlation.target_ep_kid` MUST equal its
+   own top-level `target_ep_kid`. Any disagreement is
+   `request/coordinate-mismatch` (D-60): a correct commitment proves only that
+   these are the bytes the agent signed, never that the agent signed them for this
+   tenant, this site, or this enforcement point. `human_request` and
    `standing_condition_trigger` roots remain commitment-only.
 8. **Credential lifecycle.** Enforce role-key separation; path construction;
    tenant-scoped roots; and rotation predecessor/successor continuity and monotonic
@@ -345,6 +352,7 @@ emit a code for a different trigger. Where one input has several defects, sectio
 | `key/not-p256` | The selected public key is not an EC P-256 key. |
 | `hash/mismatch` | A consumption, decision, presentation, command, structured-claim, normalized-parameter, canonical-manifest-payload, or ID-less trust-store preimage does not hash to its adjacent declared digest/ID. |
 | `request/commitment-mismatch` | An `agent_request` root's commitment is not SHA-256 of the exact claims bstr in the request envelope resolved by its request ID. |
+| `request/coordinate-mismatch` | An `agent_request` root's resolved request declares a `tenant_id`, `site_id`, or `target_ep_kid` that disagrees with the receipt binding (`epoch_owner_kid` for the EP), or its `correlation.target_ep_kid` disagrees with its own `target_ep_kid`. |
 | `manifest/payload-missing` | A referenced canonical manifest payload is absent from the bundle. |
 | `manifest/media-type-mismatch` | A manifest reference and supplied payload have different media types. |
 | `identity/receipt-id-mismatch` | Recomputed receipt ID differs from `receipt_id`. |

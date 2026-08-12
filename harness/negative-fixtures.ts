@@ -151,6 +151,53 @@ function mutateArtifact(bundle: Obj, field: string, predicate: (value: Obj) => b
   sortArtifacts(bundle, field);
 }
 
+/**
+ * Re-sign the agent request with mutated claims, then repair every agent_request root
+ * commitment that names it so `request/commitment-mismatch` cannot mask the result.
+ * Re-identifying those receipts orphans their children, but step 7 fires before the
+ * step-12 graph checks, so the coordinate rejection is what a verifier reports.
+ */
+function divergeRequest(bundle: Obj, mutation: (claims: Obj) => void): void {
+  const requests = artifacts(bundle).requests as CborValue[];
+  if (requests.length === 0) throw new Error("no request envelope to diverge");
+  const original = payload(requests[0]!);
+  const requestId = original.request_id as Uint8Array;
+  const next = clone(original);
+  mutation(next);
+  requests[0] = resign(requests[0]!, next);
+  sortArtifacts(bundle, "requests");
+  const commitment = hash((requests[0] as CborValue[])[0] as Uint8Array);
+  const receipts = artifacts(bundle).receipts as CborValue[];
+  for (let index = 0; index < receipts.length; index += 1) {
+    const value = payload(receipts[index]!);
+    if (!object(value.root) || value.root.kind !== "agent_request") continue;
+    if (!equalBytes(value.root.request_id as Uint8Array, requestId)) continue;
+    const nextReceipt = clone(value);
+    (nextReceipt.root as Obj).request_commitment = commitment;
+    receipts[index] = resign(receipts[index]!, nextReceipt, true);
+  }
+  sortArtifacts(bundle, "receipts");
+}
+
+/**
+ * Every request coordinate that duplicates a receipt-binding value, one bundle per
+ * field (D-60). The corpus carries only the target_ep_kid case because filenames derive
+ * from the reason code and it holds one fixture per code; these give per-field coverage.
+ */
+export function buildRequestCoordinateVariants(): { label: string; bytes: Uint8Array }[] {
+  const variants: { label: string; mutate: (claims: Obj) => void }[] = [
+    { label: "tenant_id", mutate: (claims) => { claims.tenant_id = id16("other-tenant"); } },
+    { label: "site_id", mutate: (claims) => { claims.site_id = id16("other-site"); } },
+    { label: "target_ep_kid", mutate: (claims) => { claims.target_ep_kid = TEST_KEYS.verifier_signing.kid; (claims.correlation as Obj).target_ep_kid = TEST_KEYS.verifier_signing.kid; } },
+    { label: "correlation.target_ep_kid", mutate: (claims) => { (claims.correlation as Obj).target_ep_kid = TEST_KEYS.verifier_signing.kid; } },
+  ];
+  return variants.map(({ label, mutate }) => {
+    const bundle = clone(baseBundle());
+    divergeRequest(bundle, mutate);
+    return { label, bytes: encodeCbor(bundle) };
+  });
+}
+
 function mutateReceipt(bundle: Obj, kind: string, mutation: (value: Obj) => void, occurrence = 0): void {
   const list = artifacts(bundle).receipts as CborValue[];
   const matches = list.map((entry, index) => ({ entry, index, value: payload(entry) })).filter(({ value }) => value.kind === kind);
@@ -573,6 +620,14 @@ export function buildNegativeFixtures(): NegativeFixture[] {
 
   add(bundleFixture("hash/mismatch", "Flip the adjacent structured-claim digest without changing its canonical bytes.", (bundle) => mutateReceipt(bundle, "inference", (value) => { const body = value.body as Obj; (body.conclusion as Obj).digest = deterministicId("wrong-claim-digest"); })));
   add(bundleFixture("request/commitment-mismatch", "Replace an agent root request commitment and re-sign/re-identify the receipt.", (bundle) => mutateReceiptWhere(bundle, (value) => object(value.root) && value.root.kind === "agent_request", (value) => { (value.root as Obj).request_commitment = deterministicId("wrong-request-commitment"); })));
+  // D-60. The request is re-signed under the same agent key and the root commitment is
+  // repaired, so the bytes are genuinely agent-signed and the commitment check passes —
+  // isolating the coordinate disagreement as the only defect. target_ep_kid is the
+  // corpus case, since that field exists solely to bind a request to one enforcement
+  // point. tenant_id, site_id, and the intra-request correlation binding are covered by
+  // "every request coordinate is checked against the receipt binding" in
+  // verifier.test.ts: the corpus carries exactly one fixture per reason code.
+  add(bundleFixture("request/coordinate-mismatch", "Address the agent request to an enforcement point other than the epoch owner.", (bundle) => divergeRequest(bundle, (claims) => { claims.target_ep_kid = TEST_KEYS.verifier_signing.kid; (claims.correlation as Obj).target_ep_kid = TEST_KEYS.verifier_signing.kid; })));
   add(bundleFixture("bundle/selector-commitment", "Replace the fixed-size selector commitment with a different digest.", (bundle) => { bundle.selector_commitment = deterministicId("wrong-selector-commitment"); }));
   add(bundleFixture("bundle/dependency-missing", "Remove the request envelope required by an agent_request root.", (bundle) => { artifacts(bundle).requests = []; }));
   add(bundleFixture("manifest/payload-missing", "Declare boot-bound time with a boot artifact ID whose canonical payload is absent.", (bundle) => { clearJournal(bundle); keepReceipts(bundle, (value) => value.kind === "inference" && object(value.root)); mutateReceiptWhere(bundle, () => true, (value) => { const time = (value.evidence as Obj).time as Obj; time.class = "boot_bound"; time.boot_attestation_id = deterministicId("missing-attestation:boot"); }); }));

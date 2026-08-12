@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CborValue, decodeCbor, encodeCbor, equalBytes } from "./cbor";
-import { buildNegativeFixtures } from "./negative-fixtures";
+import { buildNegativeFixtures, buildRequestCoordinateVariants } from "./negative-fixtures";
 import { buildStatefulFixtures, parseStatefulPrior } from "./stateful-fixtures";
 import { domainHash, verifySigned } from "./crypto";
 import { TEST_KEYS } from "./testkeys";
@@ -133,6 +133,23 @@ describe("B2 reference verifier", () => {
     if (!trustResult.ok) {
       expect(trustResult.result).toBe("indeterminate");
       expect(trustResult.reason).toBe("schema/missing-field");
+    }
+  });
+
+  test("every request coordinate is checked against the receipt binding (D-60)", () => {
+    // One bundle per duplicated coordinate. In each, the request is genuinely signed by
+    // the agent key and the root commitment is correct, so the ONLY defect is that the
+    // request declares a coordinate the receipt binding contradicts. Before D-60 all of
+    // these verified conformant at AAR-2A in both implementations.
+    const variants = buildRequestCoordinateVariants();
+    expect(variants.length).toBe(4);
+    for (const variant of variants) {
+      const result = verifyBundle(variant.bytes);
+      expect(result.ok, variant.label).toBe(false);
+      if (!result.ok) {
+        expect(result.reason, variant.label).toBe("request/coordinate-mismatch");
+        expect(result.step, variant.label).toBe(7);
+      }
     }
   });
 

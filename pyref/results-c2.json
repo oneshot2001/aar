@@ -1,6 +1,6 @@
 {
   "deterministic": true,
-  "deterministic_fixtures": 191,
+  "deterministic_fixtures": 192,
   "divergence_count": 0,
   "divergences": [],
   "entry_point_findings": 1,
@@ -1801,6 +1801,20 @@
     {
       "deterministic": true,
       "expected_class": null,
+      "expected_code": "request/coordinate-mismatch",
+      "expected_result": "nonconformant",
+      "first_failure_step": 7,
+      "fixture": "kats/negative/request-coordinate-mismatch.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "request/coordinate-mismatch",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "07f16840395413b11f31ba830589114919566c781745f97f8ce106c1222d51e0"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
       "expected_code": "resource/bundle-too-large",
       "expected_result": "nonconformant",
       "first_failure_step": 1,
@@ -2681,8 +2695,8 @@
       "verdict_sha256": "8e9e12867bb1cfcd22f26bba9d879a8ec0b2b5a7dee05955692fc065a6db9db6"
     }
   ],
-  "fixtures_evaluated": 191,
-  "matches": 191,
+  "fixtures_evaluated": 192,
+  "matches": 192,
   "mismatches": 0,
   "schema_version": 1,
   "slice": "C2"

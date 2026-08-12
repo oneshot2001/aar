@@ -709,6 +709,16 @@ function validateContent(bundle: Obj, parsed: Parsed): B1Failure | undefined {
     const request = bytes(entry.payload.root.request_id, 16) ? requests.get(toHex(entry.payload.root.request_id)) : undefined;
     if (request === undefined) return failure(7, "bundle/dependency-missing", "receipt.root.request_id");
     if (!bytes(entry.payload.root.request_commitment, 32) || !equalBytes(entry.payload.root.request_commitment, hash(request.payloadBytes))) return failure(7, "request/commitment-mismatch", "receipt.root.request_commitment");
+    // D-60. A correct commitment proves these are the bytes the agent signed; it does
+    // not prove the agent signed them for THIS tenant, site, or enforcement point.
+    // The request duplicates coordinates the receipt binding also carries, so require
+    // agreement — the same rule every other duplicated-coordinate pair already gets.
+    const binding = entry.payload.binding as Obj;
+    if (!bytes(request.payload.tenant_id, 16) || !equalBytes(request.payload.tenant_id, binding.tenant_id as Uint8Array)) return failure(7, "request/coordinate-mismatch", "request.tenant_id");
+    if (!bytes(request.payload.site_id, 16) || !equalBytes(request.payload.site_id, binding.site_id as Uint8Array)) return failure(7, "request/coordinate-mismatch", "request.site_id");
+    if (!bytes(request.payload.target_ep_kid, 32) || !equalBytes(request.payload.target_ep_kid, binding.epoch_owner_kid as Uint8Array)) return failure(7, "request/coordinate-mismatch", "request.target_ep_kid");
+    const correlation = request.payload.correlation;
+    if (!object(correlation) || !bytes(correlation.target_ep_kid, 32) || !equalBytes(correlation.target_ep_kid, request.payload.target_ep_kid as Uint8Array)) return failure(7, "request/coordinate-mismatch", "request.correlation.target_ep_kid");
   }
   return undefined;
 }

@@ -708,6 +708,21 @@ def _content_commitments(state: State) -> None:
             _fail("bundle/dependency-missing", 7)
         if hashes.sha256(request.payload_bytes) != root.get("request_commitment"):
             _fail("request/commitment-mismatch", 7)
+        # D-60. A correct commitment proves these are the bytes the agent signed; it
+        # does not prove the agent signed them for this tenant, this site, or this
+        # enforcement point. The request duplicates coordinates the receipt binding
+        # also carries, so require agreement -- the same rule every other duplicated
+        # coordinate pair already gets.
+        binding = envelope.payload["binding"]
+        claims = request.payload
+        if claims["tenant_id"] != binding["tenant_id"]:
+            _fail("request/coordinate-mismatch", 7)
+        if claims["site_id"] != binding["site_id"]:
+            _fail("request/coordinate-mismatch", 7)
+        if claims["target_ep_kid"] != binding["epoch_owner_kid"]:
+            _fail("request/coordinate-mismatch", 7)
+        if claims["correlation"]["target_ep_kid"] != claims["target_ep_kid"]:
+            _fail("request/coordinate-mismatch", 7)
 
 
 def _credential_lifecycle(state: State) -> None:
