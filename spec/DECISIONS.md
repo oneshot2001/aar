@@ -922,6 +922,28 @@ change for bundles that already agreed, so the positive corpus and all 191 exist
 fixtures are unaffected; the new code is additive. Producers that stamp their own
 coordinates (the expected implementation) are unaffected.
 
+**What the `target_ep_kid` clause depends on, and when to revisit it.** The
+`tenant_id` and `site_id` clauses rest on invariants the spec states normatively
+(§2 "All edges are same tenant/site", `graph/tenant-site-splice`). The
+`target_ep_kid` clause rests on a narrower footing and should be read with it in
+view: WQ-4 (`spec/GATE2-SLICE-A-REVIEW.md`) makes the EP sign its own journal and
+requires the signing kid to equal `epoch_owner_kid` in v0.2, which is what makes
+`epoch_owner_kid` an EP identity rather than merely a journal label. Two gaps sit
+under that. First, nothing in this spec requires one epoch **owner** per bundle —
+§2 constrains edges to the same tenant, site, and epoch (`epoch_id`), and the only
+"same owner" language anywhere is a CDDL comment on anchor time-evidence — so a
+multi-EP deployment is not defined rather than forbidden. Second, WQ-4 deliberately
+keeps a Merkle batch's separate `signer_kid` "as a seam for a future
+delegated-journal profile," i.e. the authors already anticipate separating the
+signer from the epoch owner. What holds the clause up today: §2 also says
+"Authorization, request, trigger, and attempt edges never cross an epoch boundary,"
+so a request-rooted receipt stays inside one epoch. **Revisit if** a profile ever
+defines multi-owner bundles or delegated journaling; at that point the identity a
+request addresses may legitimately differ from the owner of the epoch journaling
+its root-bearing receipt, and this clause — not the tenant/site clauses — is the
+one to relax. Recorded because the omission this entry closes was itself an
+unrecorded assumption; leaving a new one undocumented would repeat the mistake.
+
 **Alternatives considered.** A DECISIONS entry declaring request-declared
 coordinates deliberately unchecked (defensible under G4, but leaves the one
 asymmetry in a spec whose credibility rests on checking every duplicated
