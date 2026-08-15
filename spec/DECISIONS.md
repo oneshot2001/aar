@@ -823,7 +823,7 @@ level because a lower-ranked receipt happened to sort last; `contradicted`
 outranks `unknown` because it is a positive observation of contradiction,
 not mere absence of evidence.
 
-## D-58 — Signing-key resolution is bundle-plus-explicit-configuration; platform trust stores are out of scope (candidate)
+## D-58 — Signing-key resolution is bundle-plus-explicit-configuration; platform trust stores are out of scope
 
 **Decision (verifier-testable rule).** A verifier resolves signing keys only
 from credentials carried in the bundle. Any kid unresolvable from bundle
@@ -870,7 +870,7 @@ defining a trust-bundle file format now (rejected — a normative surface with
 zero corpus coverage that two clean-room implementations would improvise
 divergently; the D-56/D-57 failure shape).
 
-## D-59 — One signing key per physical device (producer provisioning requirement; policy, not conformance) (candidate)
+## D-59 — One signing key per physical device (producer provisioning requirement; policy, not conformance)
 
 **Decision.** A producer deployment MUST provision a distinct signing key per
 physical device; for non-device roles, per logical principal, where a
@@ -1007,30 +1007,27 @@ reporting per-field codes (`request/tenant-mismatch` and siblings) instead of on
 family code (rejected for consistency with `cose/receipt-coordinate-mismatch`, which
 covers principal, role, tenant, site, epoch, and sequence under a single code).
 
-## D-61 — Behavior on internal verifier error: loud crash vs. signed internal-error verdict (candidate, UNDECIDED)
+## D-61 — Behavior on internal verifier error: internal error is a loud crash, never a signed verdict
 
-**Question, not yet a decision.** When a verifier hits an internal defect on
-input that survived decode (a bug, not a malformed-input rejection), what is
-the conformant behavior? Today both reference implementations crash loudly
-with no signed verdict (pyref: `internal error`, exit 70; harness: uncaught
-throw). A 2026-08-15 hardening pass briefly added a harness catch that signed
-a `resource/internal-error` verdict; the gate review removed it: the code is
-not in CONFORMANCE §3's closed table (a signed verdict's `reason` MUST be a
-section-3 code), and it created a one-sided parity split.
+**Decision.** When a verifier hits an internal defect on input that survived
+decode (a bug, not a malformed-input rejection), it crashes loudly with no
+signed verdict (pyref: `internal error`, exit 70; harness: uncaught throw).
+A verifier MUST NOT sign a verdict whose reason attests to its own defect: an
+internal error is an operational failure, not a verification outcome, and
+signing it risks laundering a verifier bug into evidence-grade output. The
+"verifier always emits a signed verdict" property is therefore scoped:
+guaranteed for all decodable-but-malformed input (the 2026-08-15 guard
+families), never for verifier defects.
 
-**Option A — register the code.** Add `resource/internal-error` to §3 and give
-BOTH implementations a matching signed backstop. Restores the "verifier always
-emits a signed verdict" property all the way down; the cost is a signed
-verdict whose reason attests to a verifier defect rather than a bundle
-property, and KAT coverage is inherently impossible (the trigger is by
-definition an unknown bug).
+**History.** A 2026-08-15 hardening pass briefly added a harness catch that
+signed a `resource/internal-error` verdict; the gate review removed it: the
+code is not in CONFORMANCE §3's closed table (a signed verdict's `reason`
+MUST be a section-3 code), and it created a one-sided parity split (harness
+signing internal errors while pyref exits unsigned).
 
-**Option B — keep the loud crash (status quo).** An internal error is an
-operational failure, not a verification outcome; signing it risks laundering a
-verifier bug into evidence-grade output. The "always signed verdict" property
-is then scoped: guaranteed for all decodable-but-malformed input (the
-2026-08-15 guard families), not for verifier defects.
-
-**Status.** Both implementations currently implement Option B. Decision is
-the operator's; whichever way it lands, both implementations and this entry
-move together.
+**Alternatives considered.** Registering `resource/internal-error` in §3 with
+a matching signed backstop in both implementations (rejected: the reason
+would attest to a verifier defect rather than a bundle property, and KAT
+coverage is inherently impossible — the trigger is by definition an unknown
+bug). Both implementations already implement this decision; ratified
+2026-08-15.
