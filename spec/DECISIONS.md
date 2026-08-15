@@ -914,7 +914,14 @@ check. It does not assert that any current producer emits a divergent bundle —
 demo EP stamps its own tenant and site — so it is not a producer defect report, and
 G4 (guarantee = "artifacts satisfy declared class", never producer honesty) still
 holds. The check earns its place because the disagreement is wire-visible and cheap
-to detect at a step that already has both artifacts in hand.
+to detect at a step that already has both artifacts in hand. A missing or
+non-conforming coordinate on either side is treated as disagreement (same code,
+normative in CONFORMANCE step 7 — an adversarial review found both reference
+implementations diverging off-corpus on malformed coordinates, one crashing
+without a signed verdict). A signed request carried in `bundle.artifacts.requests`
+that no `agent_request` root references asserts nothing and is deliberately checked
+by nothing — orphan requests are consistent with this entry's scope and G4, not a
+gap.
 
 **Conformance impact.** Bundles that previously verified `conformant` now reject if
 their request coordinates disagree. No wire fields change and no verdict bytes

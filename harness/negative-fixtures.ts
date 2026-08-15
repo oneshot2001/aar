@@ -190,6 +190,12 @@ export function buildRequestCoordinateVariants(): { label: string; bytes: Uint8A
     { label: "site_id", mutate: (claims) => { claims.site_id = id16("other-site"); } },
     { label: "target_ep_kid", mutate: (claims) => { claims.target_ep_kid = TEST_KEYS.verifier_signing.kid; (claims.correlation as Obj).target_ep_kid = TEST_KEYS.verifier_signing.kid; } },
     { label: "correlation.target_ep_kid", mutate: (claims) => { (claims.correlation as Obj).target_ep_kid = TEST_KEYS.verifier_signing.kid; } },
+    // Malformed coordinates: treated as disagreement, never a crash — the
+    // adversarial-review classes (pyref TypeError/KeyError) that corpus parity
+    // could not see because no fixture carried them.
+    { label: "correlation non-map", mutate: (claims) => { claims.correlation = 5; } },
+    { label: "correlation missing target_ep_kid", mutate: (claims) => { delete (claims.correlation as Obj).target_ep_kid; } },
+    { label: "tenant_id wrong length", mutate: (claims) => { claims.tenant_id = new Uint8Array(15); } },
   ];
   return variants.map(({ label, mutate }) => {
     const bundle = clone(baseBundle());

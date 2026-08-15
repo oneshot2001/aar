@@ -713,12 +713,27 @@ function validateContent(bundle: Obj, parsed: Parsed): B1Failure | undefined {
     // not prove the agent signed them for THIS tenant, site, or enforcement point.
     // The request duplicates coordinates the receipt binding also carries, so require
     // agreement — the same rule every other duplicated-coordinate pair already gets.
-    const binding = entry.payload.binding as Obj;
-    if (!bytes(request.payload.tenant_id, 16) || !equalBytes(request.payload.tenant_id, binding.tenant_id as Uint8Array)) return failure(7, "request/coordinate-mismatch", "request.tenant_id");
-    if (!bytes(request.payload.site_id, 16) || !equalBytes(request.payload.site_id, binding.site_id as Uint8Array)) return failure(7, "request/coordinate-mismatch", "request.site_id");
-    if (!bytes(request.payload.target_ep_kid, 32) || !equalBytes(request.payload.target_ep_kid, binding.epoch_owner_kid as Uint8Array)) return failure(7, "request/coordinate-mismatch", "request.target_ep_kid");
+    // BOTH sides are type-guarded: a missing or non-conforming coordinate is treated
+    // as disagreement (normative, CONFORMANCE step 7). The binding-side guard also
+    // closes an equalBytes type-confusion (Uint8Array.every against a plain array of
+    // the same integers returns true) that made these clauses silent no-ops for
+    // array-typed binding coordinates.
+    const binding = entry.payload.binding;
     const correlation = request.payload.correlation;
-    if (!object(correlation) || !bytes(correlation.target_ep_kid, 32) || !equalBytes(correlation.target_ep_kid, request.payload.target_ep_kid as Uint8Array)) return failure(7, "request/coordinate-mismatch", "request.correlation.target_ep_kid");
+    const coordinate = (container: CborValue | undefined, key: string, size: number): Uint8Array | undefined => {
+      if (!object(container)) return undefined;
+      const value = container[key];
+      return bytes(value, size) ? value : undefined;
+    };
+    const pairs: readonly (readonly [Uint8Array | undefined, Uint8Array | undefined, string])[] = [
+      [coordinate(request.payload, "tenant_id", 16), coordinate(binding, "tenant_id", 16), "request.tenant_id"],
+      [coordinate(request.payload, "site_id", 16), coordinate(binding, "site_id", 16), "request.site_id"],
+      [coordinate(request.payload, "target_ep_kid", 32), coordinate(binding, "epoch_owner_kid", 32), "request.target_ep_kid"],
+      [coordinate(correlation, "target_ep_kid", 32), coordinate(request.payload, "target_ep_kid", 32), "request.correlation.target_ep_kid"],
+    ];
+    for (const [left, right, at] of pairs) {
+      if (left === undefined || right === undefined || !equalBytes(left, right)) return failure(7, "request/coordinate-mismatch", at);
+    }
   }
   return undefined;
 }

@@ -712,17 +712,26 @@ def _content_commitments(state: State) -> None:
         # does not prove the agent signed them for this tenant, this site, or this
         # enforcement point. The request duplicates coordinates the receipt binding
         # also carries, so require agreement -- the same rule every other duplicated
-        # coordinate pair already gets.
-        binding = envelope.payload["binding"]
+        # coordinate pair already gets. Both sides are type-guarded: a missing or
+        # non-conforming coordinate is treated as disagreement (normative,
+        # CONFORMANCE step 7); untrusted input must yield a signed verdict, never
+        # an unhandled exception.
+        binding = envelope.payload.get("binding")
         claims = request.payload
-        if claims["tenant_id"] != binding["tenant_id"]:
-            _fail("request/coordinate-mismatch", 7)
-        if claims["site_id"] != binding["site_id"]:
-            _fail("request/coordinate-mismatch", 7)
-        if claims["target_ep_kid"] != binding["epoch_owner_kid"]:
-            _fail("request/coordinate-mismatch", 7)
-        if claims["correlation"]["target_ep_kid"] != claims["target_ep_kid"]:
-            _fail("request/coordinate-mismatch", 7)
+
+        def _coordinate(container: object, key: str, size: int) -> bytes | None:
+            value = container.get(key) if isinstance(container, dict) else None
+            return value if isinstance(value, bytes) and len(value) == size else None
+
+        pairs = (
+            (_coordinate(claims, "tenant_id", 16), _coordinate(binding, "tenant_id", 16)),
+            (_coordinate(claims, "site_id", 16), _coordinate(binding, "site_id", 16)),
+            (_coordinate(claims, "target_ep_kid", 32), _coordinate(binding, "epoch_owner_kid", 32)),
+            (_coordinate(claims.get("correlation"), "target_ep_kid", 32), _coordinate(claims, "target_ep_kid", 32)),
+        )
+        for left, right in pairs:
+            if left is None or right is None or left != right:
+                _fail("request/coordinate-mismatch", 7)
 
 
 def _credential_lifecycle(state: State) -> None:

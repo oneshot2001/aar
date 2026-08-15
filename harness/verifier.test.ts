@@ -142,7 +142,7 @@ describe("B2 reference verifier", () => {
     // request declares a coordinate the receipt binding contradicts. Before D-60 all of
     // these verified conformant at AAR-2A in both implementations.
     const variants = buildRequestCoordinateVariants();
-    expect(variants.length).toBe(4);
+    expect(variants.length).toBe(7);
     for (const variant of variants) {
       const result = verifyBundle(variant.bytes);
       expect(result.ok, variant.label).toBe(false);
@@ -150,6 +150,26 @@ describe("B2 reference verifier", () => {
         expect(result.reason, variant.label).toBe("request/coordinate-mismatch");
         expect(result.step, variant.label).toBe(7);
       }
+    }
+  });
+
+  test("pyref agrees on every request-coordinate variant (D-60 cross-impl)", async () => {
+    // The corpus carries one fixture per reason code, so pyref's tenant/site/
+    // correlation clauses — and the malformed-coordinate classes — are exercised
+    // here: every variant must reject with the same code at step 7, as a signed
+    // verdict, never an unhandled exception.
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const directory = await mkdtemp(join(tmpdir(), "aar-d60-"));
+    for (const variant of buildRequestCoordinateVariants()) {
+      const path = join(directory, `${variant.label.replaceAll(/[^a-z_]/gu, "-")}.cbor`);
+      await writeFile(path, variant.bytes);
+      const bundle = decodeCbor(variant.bytes, { strict: true }) as Record<string, CborValue>;
+      const proc = Bun.spawnSync(["python3", "-m", "pyref", "verify", path, "--at", String(bundle.created_at)], { cwd: root });
+      const output = proc.stdout.toString() + proc.stderr.toString();
+      expect(proc.exitCode, `${variant.label}: ${output}`).toBe(1);
+      expect(output.includes("request/coordinate-mismatch"), variant.label).toBe(true);
+      expect(output.includes("Traceback"), variant.label).toBe(false);
     }
   });
 

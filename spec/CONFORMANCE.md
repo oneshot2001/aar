@@ -106,7 +106,9 @@ normative as the step order itself (D-54).
    own top-level `target_ep_kid`. Any disagreement is
    `request/coordinate-mismatch` (D-60): a correct commitment proves only that
    these are the bytes the agent signed, never that the agent signed them for this
-   tenant, this site, or this enforcement point. `human_request` and
+   tenant, this site, or this enforcement point. A missing or non-conforming
+   coordinate — on either side of any comparison — is treated as disagreement and
+   MUST yield the same code, never an implementation error. `human_request` and
    `standing_condition_trigger` roots remain commitment-only.
 8. **Credential lifecycle.** Enforce role-key separation; path construction;
    tenant-scoped roots; and rotation predecessor/successor continuity and monotonic
