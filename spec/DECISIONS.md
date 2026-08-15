@@ -823,48 +823,93 @@ level because a lower-ranked receipt happened to sort last; `contradicted`
 outranks `unknown` because it is a positive observation of contradiction,
 not mere absence of evidence.
 
-## D-58 — Verification trust is verifier-configured; platform trust stores are out of scope (candidate)
+## D-58 — Signing-key resolution is bundle-plus-explicit-configuration; platform trust stores are out of scope (candidate)
 
-**Decision.** An AAR verifier resolves signing keys only from credentials carried
-in the bundle plus explicitly configured accepted external keys or trust-bundle
-files. No conformant workflow may require installing an AAR root, issuer, or
-device credential into an operating-system or browser trust store, and a verifier
-MUST NOT consult platform trust stores when validating any signed object.
-Documentation and tooling shipped with the spec must never instruct an operator
-to broaden OS-level trust to make verification succeed.
+**Decision (verifier-testable rule).** A verifier resolves signing keys only
+from credentials carried in the bundle. Any kid unresolvable from bundle
+credentials plus explicit configuration yields a signed indeterminate
+`key/not-found` — the existing semantics (step 6 for artifact signers, step 20
+for the verifier credential); no new reason code. An
+implementation MAY additionally accept explicitly configured external keys;
+the mechanism and format are implementation-defined, MUST be reflected in the
+verdict's `config_digest`, and MUST never be sourced from a platform trust
+store. No such mechanism exists in either reference implementation; an
+interoperable external-key format is deferred (v0.3 candidate).
 
-**Why.** The existing conformance order already behaves this way
-(`key/not-found` is defined against configured keys), but the constraint was
-implicit. Field evidence 2026-08-08: Trustlix (Commend Österreich, an Axis TIP)
-ships on-camera PKI whose first-run flow installs a camera-generated root CA
-into the Windows Trusted Root store (Local Machine), giving a single edge
-device certificate-minting power over every workstation that follows the
-manual. Real vendors get this wrong; stating the principle normatively makes
-the failure mode a conformance question rather than a deployment accident.
+**Policy (not conformance).** No conformant workflow may require installing an
+AAR root, issuer, or device credential into an operating-system or browser
+trust store, and a verifier must not consult platform trust stores when
+validating any signed object. Documentation and tooling shipped with the spec
+must never instruct an operator to broaden OS-level trust to make verification
+succeed. These clauses are not observable in any verdict byte and are recorded
+as policy per the G4 precedent (checkable rules stay conformance; the rest is
+recorded explicitly as policy).
+
+**Scope note.** Default *trust* (roots, anchor heads, policy digest) is
+producer-declared via `bundle.trust_inputs`; the verifier-configured path is
+the pyref `--trust-policy` pin, which can pin but never add. The
+verifier-configured claim in this entry is about *key resolution*, which both
+reference implementations already perform bundle-only (no filesystem, network,
+environment, or platform API in the resolution path).
+
+**Why.** The existing conformance order already behaves this way for key
+resolution (`key/not-found` is defined against configured keys), but the
+constraint was implicit. Field evidence 2026-08-08: Trustlix (Commend
+Österreich, an Axis TIP) ships on-camera PKI whose first-run flow installs a
+camera-generated root CA into the Windows Trusted Root store (Local Machine),
+giving a single edge device certificate-minting power over every workstation
+that follows the manual. Real vendors get this wrong; stating the principle
+makes the failure mode a recorded rule rather than a deployment accident.
 Teardown: vault `08-Agent-Output/2026-08-08-cmdoe-trustlix-review/review.md`.
 
 **Alternatives considered.** Staying silent (status quo — leaves integrators
 free to replicate the Trustlix pattern in AAR tooling); allowing OS trust
 stores as an optional key source (imports every platform store's revocation
-and scoping semantics into the verdict, untestable across platforms).
+and scoping semantics into the verdict, untestable across platforms);
+defining a trust-bundle file format now (rejected — a normative surface with
+zero corpus coverage that two clean-room implementations would improvise
+divergently; the D-56/D-57 failure shape).
 
-## D-59 — One signing key per physical device; fleet-shared signing credentials are nonconformant (candidate)
+## D-59 — One signing key per physical device (producer provisioning requirement; policy, not conformance) (candidate)
 
-**Decision.** A producer credential's signing key MUST identify exactly one
-physical device (or one logical principal for non-device roles). Provisioning
-the same signing key or credential across multiple devices is nonconformant
-producer behavior: a verifier that can demonstrate the same `subject_kid`
-active on more than one device SHOULD treat affected receipts as
-`credential/usage-mismatch`. Rotation and revocation therefore always act on a
-single device's identity, never a fleet.
+**Decision.** A producer deployment MUST provision a distinct signing key per
+physical device; for non-device roles, per logical principal, where a
+`workload_instance` principal is exactly one runtime instance and a
+`"service"` principal MUST NOT be used to share one key across multiple hosts
+or devices. Provisioning one key or credential across a fleet is nonconformant
+*producer* behavior. Attestation-bound keys remain the recommended profile,
+not the floor.
+
+**Recorded as policy-not-conformance.** The v0.2 credential schema carries no
+device binding of any kind (`principal-type` has no device value;
+`credential-profile-object` carries no device identifier; the only wire-level
+device identity is the producer-asserted `device-identity` inside
+observation/outcome bodies, which no verification step checks). Cross-device
+key sharing is therefore not wire-decidable by any verifier — single-bundle or
+fleet-level — and no reason code is defined. `credential/usage-mismatch` is
+NOT overloaded for this: that code means key usage does not authorize the
+signed object or role, and cross-device reuse is not a usage failure.
 
 **Why.** A receipt signed by a fleet-shared key proves an action came from
 *some* holder of that key — attribution, the product's core claim, collapses,
-and revoking one compromised device revokes the whole fleet. `credential/
-role-key-reuse` already bars cross-role sharing; this closes the cross-device
-case. Same field evidence: Trustlix's fleet deployment explicitly supports
-pushing one certificate to many cameras, destroying per-device identity and
-individual revocation in a shipping product marketed as zero trust.
+and revoking one compromised device (revocation acts on `subject_kid` via
+status snapshots) revokes the whole fleet. `credential/role-key-reuse` already
+bars cross-role sharing; this records the cross-device requirement where the
+wire cannot yet enforce it. Same field evidence: Trustlix's fleet deployment
+explicitly supports pushing one certificate to many cameras, destroying
+per-device identity and individual revocation in a shipping product marketed
+as zero trust. Recording the producer requirement as policy follows G4 (the
+verifier confirms "artifacts satisfy declared class", never producer honesty)
+and the D-26/D-58 pattern: the wire-checkable half is a verifier rule, the
+rest is explicit policy.
+
+**Revisit-if.** A device-binding field (credential-level device identifier or
+attestation evidence) enters the credential schema — then define
+`credential/device-key-reuse` as a deterministic step-8 check with KAT
+coverage, and decide the HA-failover case (single logical EP with
+rotation-record handover via the existing predecessor/successor machinery, vs.
+per-node keys) in the same amendment. Multi-imager cameras are one physical
+device, one key, as written.
 
 **Alternatives considered.** SHOULD-level guidance only (leaves the
 attribution guarantee soft exactly where a real vendor already broke it);
@@ -961,3 +1006,31 @@ the agent, not the EP, so that comparison would reject every conformant bundle);
 reporting per-field codes (`request/tenant-mismatch` and siblings) instead of one
 family code (rejected for consistency with `cose/receipt-coordinate-mismatch`, which
 covers principal, role, tenant, site, epoch, and sequence under a single code).
+
+## D-61 — Behavior on internal verifier error: loud crash vs. signed internal-error verdict (candidate, UNDECIDED)
+
+**Question, not yet a decision.** When a verifier hits an internal defect on
+input that survived decode (a bug, not a malformed-input rejection), what is
+the conformant behavior? Today both reference implementations crash loudly
+with no signed verdict (pyref: `internal error`, exit 70; harness: uncaught
+throw). A 2026-08-15 hardening pass briefly added a harness catch that signed
+a `resource/internal-error` verdict; the gate review removed it: the code is
+not in CONFORMANCE §3's closed table (a signed verdict's `reason` MUST be a
+section-3 code), and it created a one-sided parity split.
+
+**Option A — register the code.** Add `resource/internal-error` to §3 and give
+BOTH implementations a matching signed backstop. Restores the "verifier always
+emits a signed verdict" property all the way down; the cost is a signed
+verdict whose reason attests to a verifier defect rather than a bundle
+property, and KAT coverage is inherently impossible (the trigger is by
+definition an unknown bug).
+
+**Option B — keep the loud crash (status quo).** An internal error is an
+operational failure, not a verification outcome; signing it risks laundering a
+verifier bug into evidence-grade output. The "always signed verdict" property
+is then scoped: guaranteed for all decodable-but-malformed input (the
+2026-08-15 guard families), not for verifier defects.
+
+**Status.** Both implementations currently implement Option B. Decision is
+the operator's; whichever way it lands, both implementations and this entry
+move together.
