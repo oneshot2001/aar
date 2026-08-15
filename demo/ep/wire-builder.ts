@@ -24,6 +24,68 @@ export interface DelegationWindow {
   readonly notAfter: number;
 }
 
+// Optional real-narrative overrides for non-demo producers. Every field
+// defaults to the original Gate-5 scenario value, so omitting this object
+// reproduces the demo bundles byte-for-byte. A producer that supplies these
+// makes the receipt BODIES real instead of scenario placeholders:
+// timestamps from its own clock, its actual model/agent record, and the
+// authorization decision it actually evaluated (policySetRoot = digest of the
+// REAL policy; decision "deny" yields a not_dispatched attempt with the given
+// refusal reason — the generalization of the S3 delegation-expiry special case).
+export interface RealNarrative {
+  // Real emission time for every receipt (ties order by epoch_seq). INVARIANT
+  // (enforced below, because the non-overridable freshness window and bundle
+  // selector stay pinned to evaluatedAt): committedAt must lie within
+  // [evaluatedAt - 60, evaluatedAt], and epochClosedAt >= committedAt must be
+  // supplied alongside it whenever committedAt > evaluatedAt - 40 (the default
+  // closed_at) — otherwise the bundle fails epoch/late-insertion.
+  readonly committedAt?: number;
+  readonly observedAt?: number;         // observation body observed_at
+  readonly dispatchedAt?: number;       // dispatch body dispatched_at
+  readonly outcomeObservedAt?: number;  // outcome_observation body observed_at
+  readonly epochOpenedAt?: number;
+  readonly epochClosedAt?: number;
+  readonly monotonicNs?: number;
+  readonly bootId?: Uint8Array;         // 16 bytes
+  readonly transportId?: string;
+  readonly model?: { readonly provider: string; readonly model: string; readonly version: string };
+  readonly uncertaintyBps?: number;
+  // "deny" REQUIRES refusalReason (no confabulated default) and forbids a
+  // dispatch input. Placeholder residue that stays demo-valued even with full
+  // narrative supplied: the legal block (purpose incident-response,
+  // jurisdiction US-CO, retention demo), delegation scope purpose_ids,
+  // correlation peer_binding_digest, decision evaluated_inputs, and
+  // counter_state_digest.
+  readonly decision?: "permit" | "deny";
+  readonly policySetRoot?: Uint8Array;  // digest of the policy actually evaluated
+}
+
+function validateNarrative(input: WireBuildInput): void {
+  const narrative = input.narrative;
+  if (!narrative) return;
+  if (narrative.decision === "deny" && input.refusalReason === undefined) {
+    throw new Error("narrative.decision \"deny\" requires an explicit refusalReason — the delegation-expired default would sign a false statement");
+  }
+  if (narrative.decision === "deny" && input.dispatch) {
+    throw new Error("narrative.decision \"deny\" cannot carry a dispatch result");
+  }
+  if (narrative.decision === "permit" && input.scenarioId === "S3") {
+    throw new Error("scenario S3 forces a refusal — narrative.decision \"permit\" would sign an incoherent permit + not_dispatched + delegation-expired artifact");
+  }
+  if (narrative.committedAt !== undefined) {
+    if (narrative.committedAt < input.evaluatedAt - 60 || narrative.committedAt > input.evaluatedAt) {
+      throw new Error("narrative.committedAt must lie within [evaluatedAt - 60, evaluatedAt] (freshness window and bundle selector are pinned to evaluatedAt)");
+    }
+    const closedAt = narrative.epochClosedAt ?? input.evaluatedAt - 40;
+    if (closedAt < narrative.committedAt) {
+      throw new Error("epoch closed_at precedes narrative.committedAt — supply epochClosedAt >= committedAt or the bundle fails epoch/late-insertion");
+    }
+  }
+  if (narrative.uncertaintyBps !== undefined && (narrative.uncertaintyBps < 0 || narrative.uncertaintyBps > 10000)) {
+    throw new Error("narrative.uncertaintyBps must be within [0, 10000]");
+  }
+}
+
 export interface WireBuildInput {
   readonly scenarioId: ScenarioId;
   readonly evaluatedAt: number;
@@ -48,6 +110,7 @@ export interface WireBuildInput {
     readonly observationDigest: Uint8Array;
   };
   readonly refusalReason?: string;
+  readonly narrative?: RealNarrative;
   readonly keys: Readonly<Record<DemoKeyRole, DemoKey>>;
   readonly anchorLog: LocalRfc6962Log;
   readonly anchorObservedAt?: number;
@@ -189,21 +252,22 @@ function makeReceipt(
   const key = input.keys[role];
   const spec = credentialSpec(role);
   const base = input.evaluatedAt - 60;
+  const committedAt = input.narrative?.committedAt ?? base + 10 + epochSeq;
   const fields: Obj = {
     v: 2, kind, issuer_principal_type: spec.principalType, issuer_role: spec.principalRole,
     binding: { tenant_id: input.tenantId, site_id: input.siteId, epoch_owner_kid: input.keys.ep.kid, epoch_id: input.epochId, epoch_seq: epochSeq },
-    emission: { issuer_seq: input.epochId * 100 + epochSeq, committed_at: base + 10 + epochSeq },
+    emission: { issuer_seq: input.epochId * 100 + epochSeq, committed_at: committedAt },
     freshness: {
       issued_at: base, expires_at: input.evaluatedAt + 3600,
       nonce: id16(`nonce:${toHex(input.invocationId)}:${epochSeq}`), replay_domain: opaque(`replay:${toHex(input.tenantId)}:${toHex(input.siteId)}`),
       invocation_id: input.invocationId, use: "reusable", intended_parents: parents.map((parent) => parent.parent_id as Uint8Array),
     },
     legal: legal(),
-    evidence: { time: { class: "asserted", wall_time: base + 10 + epochSeq, monotonic_ns: 1_000_000 + epochSeq, boot_id: id16(`boot:${input.epochId}`) } },
+    evidence: { time: { class: "asserted", wall_time: committedAt, monotonic_ns: input.narrative?.monotonicNs ?? 1_000_000 + epochSeq, boot_id: input.narrative?.bootId ?? id16(`boot:${input.epochId}`) } },
     parents,
     correlation: {
       correlation_id: input.correlationId, phase: "accounted", target_ep_kid: input.keys.ep.kid,
-      transport_id: `gate5:${input.adapterId}`, peer_binding_digest: opaque(`peer:${input.adapterId}`),
+      transport_id: input.narrative?.transportId ?? `gate5:${input.adapterId}`, peer_binding_digest: opaque(`peer:${input.adapterId}`),
     },
     body,
   };
@@ -277,6 +341,7 @@ export function buildSignedAgentRequest(input: AgentRequestInput): DemoSignedEnv
 }
 
 export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildResult> {
+  validateNarrative(input);
   const credentials = buildCredentials(input);
   const request = buildSignedAgentRequest(input);
   const requestPayload = request.payload as Obj;
@@ -295,7 +360,7 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
     device_id: input.targetId, manufacturer: input.sourceDeviceMetadata.manufacturer, model: input.sourceDeviceMetadata.model,
     firmware: input.sourceDeviceMetadata.firmware, device_credential_id: opaque(`device-credential:${toHex(input.targetId)}`), failure_domain_id: opaque(`failure-domain:${toHex(input.targetId)}`),
   };
-  const observation = makeReceipt(input, "observation", "agent", 0, [], { source_device: sourceDevice, consumption, observed_at: input.evaluatedAt - 49 }, requestRoot);
+  const observation = makeReceipt(input, "observation", "agent", 0, [], { source_device: sourceDevice, consumption, observed_at: input.narrative?.observedAt ?? input.evaluatedAt - 49 }, requestRoot);
 
   const promptBytes = encodeCbor({ intent: input.actionName, target: input.targetLogicalName, provenance: "self-asserted" });
   const retrievalBytes = encodeCbor({ documents: [] });
@@ -304,22 +369,25 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
   const retrievalDigest = hash(retrievalBytes);
   const toolsDigest = hash(toolsBytes);
   const conclusionBytes = encodeCbor({ action: input.actionName, target: input.targetLogicalName });
+  // Explicit destructure: model-identity is a closed CDDL map — a spread of a
+  // wider-typed caller object would smuggle extra keys past pyref undetected.
+  const { provider, model, version } = input.narrative?.model ?? { provider: "AAR demo", model: "scripted-agent", version: "0.1.0" };
   const inference = makeReceipt(input, "inference", "agent", 1, [parent(observation, "derived_from", input)], {
-    model: { provider: "AAR demo", model: "scripted-agent", version: "0.1.0", endpoint_credential_id: credentials.ids.agent },
+    model: { provider, model, version, endpoint_credential_id: credentials.ids.agent },
     consumption_manifest_id: (consumption.manifest_digest as Uint8Array),
     prompt_manifest: { digest: promptDigest, media_type: "application/cbor", byte_length: promptBytes.length },
     retrieval_manifest: { digest: retrievalDigest, media_type: "application/cbor", byte_length: retrievalBytes.length },
     tool_transcript_manifest: { digest: toolsDigest, media_type: "application/cbor", byte_length: toolsBytes.length },
-    conclusion: { schema_id: "aar.demo.intent.v1", canonical_cbor: conclusionBytes, digest: hash(conclusionBytes) }, uncertainty_bps: 0,
+    conclusion: { schema_id: "aar.demo.intent.v1", canonical_cbor: conclusionBytes, digest: hash(conclusionBytes) }, uncertainty_bps: input.narrative?.uncertaintyBps ?? 0,
   });
 
   const decisionFields: Obj = {
-    policy_set_root: domainHash("AAR-DEMO-TRUST-POLICY-v1", policyFields({
+    policy_set_root: input.narrative?.policySetRoot ?? domainHash("AAR-DEMO-TRUST-POLICY-v1", policyFields({
       version: 1, profile: "AAR-3", purposeId: "incident-response", authorityKid: input.keys.authority.kid,
       allowedActions: ["camera.ptz.preset", "camera.stream.view"], allowedTargets: [input.targetId],
     } satisfies DemoTrustPolicy)), effective_policy_epoch: 1,
     evaluated_inputs: [{ name: "delegation-time", value_digest: hash(encodeCbor({ not_before: selected.payload.not_before!, not_after: selected.payload.not_after!, evaluated_at: input.evaluatedAt })) }],
-    decision: input.scenarioId === "S3" ? "deny" : "permit", counter_state_digest: opaque(`counter:${toHex(input.invocationId)}`),
+    decision: input.narrative?.decision ?? (input.scenarioId === "S3" ? "deny" : "permit"), counter_state_digest: opaque(`counter:${toHex(input.invocationId)}`),
     status_snapshot_ids: [], profile: "AAR-3", delegation_id: selected.payload.delegation_id!,
   };
   const decisionCommitment = domainHash("AAR-DECISION-RECORD-v1", decisionFields);
@@ -333,7 +401,7 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
     informational_reversibility: "reversible", operational_reversibility: "reversible",
   };
   const command = input.command as unknown as Obj;
-  const refused = input.scenarioId === "S3" || input.refusalReason !== undefined;
+  const refused = input.scenarioId === "S3" || input.refusalReason !== undefined || input.narrative?.decision === "deny";
   const attemptBody: Obj = {
     action, command, authorization_id: authorization.id, decision_commitment: decisionCommitment,
     disposition: refused ? "not_dispatched" : "eligible_for_dispatch",
@@ -345,13 +413,13 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
   if (!refused) {
     if (!input.dispatch) throw new Error("authorized scenario requires dispatch result");
     const dispatch = makeReceipt(input, "dispatch", "ep", 4, [parent(attempt, "attempted_as", input)], {
-      attempt_id: attempt.id, command_id: input.command.command_id, dispatched_at: input.evaluatedAt - 46,
+      attempt_id: attempt.id, command_id: input.command.command_id, dispatched_at: input.narrative?.dispatchedAt ?? input.evaluatedAt - 46,
       target_status: input.dispatch.status, target_response_body_digest: input.dispatch.responseBodyDigest, adapter_invocation_id: input.invocationId,
     });
     receipts.push(dispatch);
     const observer: Obj = { ...sourceDevice, failure_domain_id: sourceDevice.failure_domain_id! };
     receipts.push(makeReceipt(input, "outcome_observation", "outcome", 5, [parent(dispatch, "observed_outcome", input)], {
-      subject_id: dispatch.id, observer, observed_at: input.evaluatedAt - 45,
+      subject_id: dispatch.id, observer, observed_at: input.narrative?.outcomeObservedAt ?? input.evaluatedAt - 45,
       state: input.dispatch.outcomeState, observation_commitment: input.dispatch.observationDigest,
     }));
   }
@@ -367,10 +435,10 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
     target_id: id16("anchor-target:local-rfc6962"), operator_id: id16("operator:same-demo-operator"), endpoint: "file://same-operator-demo-log",
     protocol: "rfc6962_v1", anchor_kid: input.keys.anchor.kid, independence_group: id16("independence-group:same-operator"),
   };
-  const closedAt = input.evaluatedAt - 40;
+  const closedAt = input.narrative?.epochClosedAt ?? input.evaluatedAt - 40;
   const manifestFields: Obj = {
     v: 2, tenant_id: input.tenantId, site_id: input.siteId, epoch_owner_kid: input.keys.ep.kid, epoch_id: input.epochId,
-    opened_at: input.evaluatedAt - 60, closed_at: closedAt, sequence_span: { first: 0, last: receipts.length - 1 }, item_count: receipts.length,
+    opened_at: input.narrative?.epochOpenedAt ?? input.evaluatedAt - 60, closed_at: closedAt, sequence_span: { first: 0, last: receipts.length - 1 }, item_count: receipts.length,
     close_reason: "administrative", max_duration_s: 86400, late_arrival_policy: "next_epoch_only", anchor_deadline: closedAt + 86400, fork_policy: "reject_and_surface",
     receipt_index: { ordering: "committed_at_epoch_seq_receipt_id", leaf_count: receipts.length, root: indexRoot, entries: indexEntries },
     anchor_plan: {
