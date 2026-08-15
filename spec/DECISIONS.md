@@ -872,7 +872,7 @@ enforcing via credential count limits (doesn't bind keys to devices);
 attestation-bound keys as a MUST (right direction, but hardware attestation
 availability varies — kept as the recommended profile, not the floor).
 
-## D-60 — An `agent_request` root's request must agree with the receipt binding on tenant, site, and enforcement point (candidate)
+## D-60 — An `agent_request` root's request must agree with the receipt binding on tenant, site, and enforcement point
 
 **Decision.** At step 7, after the `request_commitment` digest check, a verifier MUST
 require the resolved request's `tenant_id` and `site_id` to equal the receipt
