@@ -204,6 +204,46 @@ export function buildRequestCoordinateVariants(): { label: string; bytes: Uint8A
   });
 }
 
+/**
+ * Malformed-type variants for the crash-hardening pass: input classes the
+ * corpus does not carry (non-map containers, array-typed identifiers, non-bstr
+ * hash preimages) that previously crashed one implementation or the other.
+ * Each must yield a SIGNED verdict with the same reason code at the same step
+ * in both implementations — never an unhandled exception. Step-6 schema
+ * variants swap the payload bytes without re-signing (schema is checked before
+ * signature verification); post-signature variants re-sign.
+ */
+export function buildMalformedTypeVariants(): { label: string; bytes: Uint8Array; code: string; step: number }[] {
+  const swapPayload = (bundle: Obj, category: string, mutate: (value: Obj) => void): void => {
+    const list = artifacts(bundle)[category] as CborValue[];
+    const next = clone(payload(list[0]!));
+    mutate(next);
+    (list[0] as CborValue[])[0] = encodeCbor(next);
+  };
+  const variants: { label: string; code: string; step: number; build: (bundle: Obj) => void }[] = [
+    // The proven P1: pyref crashed with AttributeError before signature
+    // verification on a non-map receipt binding.
+    { label: "receipt binding non-map", code: "schema/bad-type", step: 6, build: (bundle) => swapPayload(bundle, "receipts", (value) => { value.binding = 5; }) },
+    { label: "request_id array", code: "schema/bad-type", step: 6, build: (bundle) => swapPayload(bundle, "requests", (value) => { value.request_id = [...(value.request_id as Uint8Array)]; }) },
+    { label: "credential subject_kid array", code: "schema/bad-type", step: 6, build: (bundle) => swapPayload(bundle, "credentials", (value) => { value.subject_kid = [...(value.subject_kid as Uint8Array)]; }) },
+    // Post-signature classes: re-signed so the guarded step is actually reached.
+    { label: "canonical_command non-bstr", code: "schema/bad-type", step: 7, build: (bundle) => mutateReceipt(bundle, "action_attempt", (value) => { ((value.body as Obj).command as Obj).canonical_command = "not-bytes"; }) },
+    { label: "binding epoch_owner_kid array", code: "schema/bad-type", step: 9, build: (bundle) => mutateReceiptWhere(bundle, (value) => !object(value.root), (value) => { const binding = value.binding as Obj; binding.epoch_owner_kid = [...(binding.epoch_owner_kid as Uint8Array)]; }) },
+    { label: "freshness issued_at non-uint", code: "schema/bad-type", step: 11, build: (bundle) => mutateReceiptWhere(bundle, (value) => !object(value.root), (value) => { (value.freshness as Obj).issued_at = "soon"; }) },
+    // Both impls must skip a non-map parent edge at the step-10 dispatch clause
+    // and converge on the step-11 parents guard (gate-proven divergence class).
+    { label: "dispatch parent edge non-map", code: "schema/bad-type", step: 11, build: (bundle) => mutateReceipt(bundle, "dispatch", (value) => { const parents = value.parents as CborValue[]; const index = parents.findIndex((parent) => object(parent) && parent.edge_type === "attempted_as"); if (index < 0) throw new Error("attempted_as edge missing"); parents[index] = 5; }) },
+    // A parent edge omitting a CDDL-required field converges on the same
+    // step-11 guard (round-2 gate class: pyref died KeyError at step 12).
+    { label: "parent edge missing edge_type", code: "schema/bad-type", step: 11, build: (bundle) => mutateReceipt(bundle, "dispatch", (value) => { const parents = value.parents as CborValue[]; const index = parents.findIndex((parent) => object(parent) && parent.edge_type === "attempted_as"); if (index < 0) throw new Error("attempted_as edge missing"); delete (parents[index] as Obj).edge_type; }) },
+  ];
+  return variants.map(({ label, code, step, build }) => {
+    const bundle = clone(baseBundle());
+    build(bundle);
+    return { label, code, step, bytes: encodeCbor(bundle) };
+  });
+}
+
 function mutateReceipt(bundle: Obj, kind: string, mutation: (value: Obj) => void, occurrence = 0): void {
   const list = artifacts(bundle).receipts as CborValue[];
   const matches = list.map((entry, index) => ({ entry, index, value: payload(entry) })).filter(({ value }) => value.kind === kind);

@@ -10,6 +10,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+// Explicit evaluation time for failure verdicts on inputs whose trust_inputs are
+// unreadable (caller-supplied always; the wall clock is never read — pyref --at symmetry). Matches the fixture corpus.
+const AT = 1_735_689_800;
 
 describe("positive KAT harness", () => {
   test("generation is byte-for-byte deterministic", () => {
@@ -49,7 +52,7 @@ describe("positive KAT harness", () => {
 
   test("class-boundary KATs have their exact rejection or supported-class outcome", () => {
     for (const fixture of buildClassBoundaryFixtures()) {
-      const result = verifyBundle(fixture.bytes);
+      const result = verifyBundle(fixture.bytes, { evaluationTime: AT });
       if (fixture.descriptor.expectation === "reject") {
         expect(result.ok, fixture.filename).toBe(false);
         if (!result.ok) expect(result.reason, fixture.filename).toBe(fixture.descriptor.expected_code);
@@ -82,7 +85,7 @@ describe("positive KAT harness", () => {
       expect(equalBytes(fixture.bytes, second[index]!.bytes), fixture.filename).toBe(true);
       expect(equalBytes(fixture.bytes, readFileSync(join(root, "kats", "terminal-state", `${fixture.filename}.cbor`))), fixture.filename).toBe(true);
       expect(JSON.parse(readFileSync(join(root, "kats", "terminal-state", `${fixture.filename}.json`), "utf8")), fixture.filename).toEqual(fixture.descriptor);
-      const result = verifyBundle(fixture.bytes);
+      const result = verifyBundle(fixture.bytes, { evaluationTime: AT });
       expect(result.ok, fixture.filename).toBe(true);
       if (result.ok) {
         const limits = result.verdict.limits as Record<string, string>;

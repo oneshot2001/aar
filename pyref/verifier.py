@@ -138,6 +138,24 @@ PRIMARY_IDS = {
     "receipts": "receipt_id",
 }
 
+# Fixed-size payload identifiers, checked at step 6 before any consumer indexes,
+# sorts, or hashes them (harness `payloadFixedFields` parity): wrong type is
+# schema/bad-type, wrong size is schema/digest-size. subject_kid is included for
+# credentials because it is used as a map key and compared to sha256(public_key).
+PAYLOAD_FIXED_FIELDS: dict[str, tuple[tuple[str, int], ...]] = {
+    CONTENT_TYPES["credentials"]: (("credential_id", 32), ("subject_kid", 32)),
+    CONTENT_TYPES["rotations"]: (("rotation_id", 32),),
+    CONTENT_TYPES["status_snapshots"]: (("snapshot_id", 32),),
+    CONTENT_TYPES["requests"]: (("request_id", 16),),
+    CONTENT_TYPES["delegations"]: (("delegation_id", 32),),
+    CONTENT_TYPES["epoch_events"]: (("event_id", 32),),
+    CONTENT_TYPES["epoch_manifests"]: (("manifest_id", 32),),
+    CONTENT_TYPES["anchors"]: (("anchor_id", 32),),
+    CONTENT_TYPES["merkle_batches"]: (("batch_id", 32),),
+    CONTENT_TYPES["receipts"]: (("receipt_id", 32),),
+    CONTENT_TYPES["presentations"]: (("presentation_id", 32),),
+}
+
 
 class ValidationError(Exception):
     def __init__(self, code: str, step: int, *, indeterminate: bool = False) -> None:
@@ -463,6 +481,24 @@ def _schema_payload(content_type: str, payload: Any) -> dict[str, Any]:
             _fail("schema/bad-type", 6)
         if payload["v"] != 2:
             _fail("schema/version-wrong", 6)
+    for field, size in PAYLOAD_FIXED_FIELDS[content_type]:
+        value = payload.get(field)
+        if not isinstance(value, bytes):
+            _fail("schema/bad-type", 6)
+        if len(value) != size:
+            _fail("schema/digest-size", 6)
+    if content_type == CONTENT_TYPES["receipts"]:
+        # Container types are pinned here so every later step may index them
+        # without a guard; malformed input must yield a signed schema verdict,
+        # never an unhandled exception (harness verifier.ts parity).
+        if payload.get("kind") not in NODE_KINDS:
+            _fail("schema/enum-unknown", 6)
+        if not (isinstance(payload.get("binding"), dict)
+                and isinstance(payload.get("emission"), dict)
+                and isinstance(payload.get("freshness"), dict)
+                and isinstance(payload.get("parents"), list)
+                and isinstance(payload.get("body"), dict)):
+            _fail("schema/bad-type", 6)
     return payload
 
 
@@ -660,14 +696,23 @@ def _content_commitments(state: State) -> None:
                     if hashes.decision_commitment(item) != item["decision_commitment"]:
                         _fail("hash/mismatch", 7)
                 if {"command_id", "canonical_command", "command_digest"}.issubset(keys):
+                    # Hash preimages must be byte strings before they are hashed:
+                    # a non-bstr preimage is a schema defect, surfaced as a signed
+                    # verdict, never a TypeError (harness receiptHashes parity).
+                    if not isinstance(item["canonical_command"], bytes):
+                        _fail("schema/bad-type", 7)
                     if hashes.sha256(item["canonical_command"]) != item["command_digest"]:
                         _fail("hash/mismatch", 7)
                     if hashes.command_id(item) != item["command_id"]:
                         _fail("hash/mismatch", 7)
                 if {"parameters_cbor", "parameters_digest"}.issubset(keys):
+                    if not isinstance(item["parameters_cbor"], bytes):
+                        _fail("schema/bad-type", 7)
                     if hashes.sha256(item["parameters_cbor"]) != item["parameters_digest"]:
                         _fail("hash/mismatch", 7)
                 if {"canonical_cbor", "digest", "schema_id"}.issubset(keys):
+                    if not isinstance(item["canonical_cbor"], bytes):
+                        _fail("schema/bad-type", 7)
                     if hashes.sha256(item["canonical_cbor"]) != item["digest"]:
                         _fail("hash/mismatch", 7)
 
@@ -844,6 +889,15 @@ def _emission_identity(state: State) -> None:
     observations: list[dict[str, Any]] = []
     for envelope in state.envelopes["receipts"]:
         receipt = envelope.payload
+        # Identity coordinates are indexed as map keys below; pin their types
+        # first so malformed input yields a signed verdict, never an unhashable
+        # TypeError (harness validateReceiptIdentity parity).
+        if not _uint(receipt["emission"].get("issuer_seq")):
+            _fail("schema/bad-type", 9)
+        if not (_bstr(receipt["binding"].get("epoch_owner_kid"), 32)
+                and _uint(receipt["binding"].get("epoch_id"))
+                and _uint(receipt["binding"].get("epoch_seq"))):
+            _fail("schema/bad-type", 9)
         observations.append({
             "issuer_kid": envelope.protected[4],
             "issuer_seq": receipt["emission"]["issuer_seq"],
@@ -893,12 +947,18 @@ def _emission_identity(state: State) -> None:
 def _body_kind(body: Any) -> str | None:
     if not isinstance(body, dict):
         return None
+    # Marker sets mirror the harness bodyKind conjunctions exactly, so a body
+    # missing one of the fields the per-kind checks index is a kind/body
+    # mismatch at step 10 in both implementations, never a KeyError.
     markers = (
-        ("source_device", "observation"), ("model", "inference"),
-        ("decision", "authorization"), ("action", "action_attempt"),
-        ("dispatched_at", "dispatch"), ("observer", "outcome_observation"),
+        (("source_device", "consumption"), "observation"),
+        (("model", "conclusion"), "inference"),
+        (("decision", "delegation"), "authorization"),
+        (("action", "command", "disposition"), "action_attempt"),
+        (("attempt_id", "dispatched_at"), "dispatch"),
+        (("observer", "observation_commitment"), "outcome_observation"),
     )
-    found = [kind for marker, kind in markers if marker in body]
+    found = [kind for keys, kind in markers if all(key in body for key in keys)]
     return found[0] if len(found) == 1 else None
 
 
@@ -924,8 +984,8 @@ def _receipt_semantics(state: State) -> None:
         evidence = receipt["evidence"]
         if not isinstance(evidence, dict) or "time" not in evidence:
             _fail("schema/missing-field", 6)
-        provenance_present = "provenance" in evidence
-        outcome_present = "outcome" in evidence
+        provenance_present = isinstance(evidence.get("provenance"), dict)
+        outcome_present = isinstance(evidence.get("outcome"), dict)
         if provenance_present != (kind == "inference"):
             _fail("evidence/provenance-class-unsatisfied", 10)
         if outcome_present != (kind in {"action_attempt", "dispatch", "outcome_observation"}):
@@ -940,40 +1000,53 @@ def _receipt_semantics(state: State) -> None:
 
         # Ordinals and direct manifest cross-references are checked after hashes.
         if kind == "observation":
-            items = body["consumption"]["items"]
-            if [item.get("ordinal") for item in items] != list(range(len(items))):
+            # Nested containers are pinned before indexing (harness parity):
+            # malformed interiors yield a signed verdict, never a TypeError.
+            consumption = body["consumption"]
+            if not isinstance(consumption, dict) or not isinstance(consumption.get("items"), list):
+                _fail("schema/bad-type", 10)
+            items = consumption["items"]
+            ordinals = [item.get("ordinal") if isinstance(item, dict) else None for item in items]
+            if ordinals != list(range(len(items))):
                 _fail("receipt/manifest-inconsistent", 10)
             for item in items:
                 transforms = item.get("transformations", [])
-                if [transform.get("ordinal") for transform in transforms] != list(range(len(transforms))):
+                if not isinstance(transforms, list):
+                    continue
+                if [transform.get("ordinal") if isinstance(transform, dict) else None
+                        for transform in transforms] != list(range(len(transforms))):
                     _fail("receipt/manifest-inconsistent", 10)
 
         if kind == "inference":
-            reference = body["consumption_manifest_id"]
-            resolved = reference in payload_digests
+            reference = body.get("consumption_manifest_id")
+            resolved = isinstance(reference, bytes) and reference in payload_digests
             for parent in receipt["parents"]:
-                if parent["edge_type"] != "derived_from":
+                if not isinstance(parent, dict) or parent.get("edge_type") != "derived_from":
                     continue
-                parent_envelope = state.receipts_by_id.get(parent["parent_id"])
+                parent_id = parent.get("parent_id")
+                parent_envelope = state.receipts_by_id.get(parent_id) if isinstance(parent_id, bytes) else None
                 if parent_envelope and parent_envelope.payload["kind"] == "observation":
-                    digest = parent_envelope.payload["body"]["consumption"]["manifest_digest"]
-                    resolved |= digest == reference
+                    parent_consumption = parent_envelope.payload["body"].get("consumption")
+                    if isinstance(parent_consumption, dict):
+                        resolved |= parent_consumption.get("manifest_digest") == reference
             if not resolved:
                 _fail("receipt/consumption-ref-unresolved", 10)
 
         if kind == "authorization":
             decision = body["decision"]
+            if not isinstance(decision, dict):
+                _fail("schema/bad-type", 10)
             presentation = body.get("presentation")
-            if (decision["decision"] == "permit_with_approval") != (presentation is not None):
+            if (decision.get("decision") == "permit_with_approval") != (presentation is not None):
                 _fail("receipt/decision-presentation", 10)
-            if decision["decision"] == "permit_with_approval" and "approver_credential_id" not in decision:
+            if decision.get("decision") == "permit_with_approval" and "approver_credential_id" not in decision:
                 _fail("receipt/decision-presentation", 10)
-            if decision["decision"] != "permit_with_approval" and "approver_credential_id" in decision:
+            if decision.get("decision") != "permit_with_approval" and "approver_credential_id" in decision:
                 _fail("receipt/decision-presentation", 10)
             if presentation is not None:
                 nested = next((item for item in state.envelopes["presentations"]
                                if item.index == envelope.index), None)
-                if nested is None or nested.payload["presenter_credential_id"] != decision["approver_credential_id"]:
+                if nested is None or nested.payload["presenter_credential_id"] != decision.get("approver_credential_id"):
                     _fail("receipt/decision-presentation", 10)
                 artifacts = nested.payload["artifacts"]
                 if [item.get("ordinal") for item in artifacts] != list(range(len(artifacts))):
@@ -984,22 +1057,36 @@ def _receipt_semantics(state: State) -> None:
             if (disposition == "not_dispatched") != ("refusal_reason" in body):
                 _fail("receipt/attempt-disposition", 10)
             action, command = body["action"], body["command"]
-            if action["action_name"] != command["action_name"] \
-                    or action["target_id"] != command["target_id"]:
-                _fail("receipt/action-command-mismatch", 10)
+            if not isinstance(action, dict) or not isinstance(command, dict):
+                _fail("schema/bad-type", 10)
+            # A missing field on either side is disagreement (harness `same`
+            # returns false when a side is absent), never a KeyError.
+            for field in ("action_name", "target_id"):
+                if action.get(field) is None or action.get(field) != command.get(field):
+                    _fail("receipt/action-command-mismatch", 10)
 
         if kind == "dispatch":
-            attempted = [parent for parent in receipt["parents"] if parent["edge_type"] == "attempted_as"]
-            if len(attempted) != 1:
-                _fail("receipt/dispatch-attempt-mismatch", 10)
-            attempt = state.receipts_by_id.get(attempted[0]["parent_id"])
-            if attempt is None or body["attempt_id"] != attempt.payload["receipt_id"] \
-                    or body["command_id"] != attempt.payload["body"]["command"]["command_id"]:
-                _fail("receipt/dispatch-attempt-mismatch", 10)
+            # Mirror the harness find() semantics exactly: take the FIRST
+            # attempted_as edge, tolerating non-map parents (the step-11 parents
+            # guard catches those), and require agreement only when the attempt
+            # resolves. A malformed attempt command is disagreement (command
+            # non-map resolves the compared command_id to undefined).
+            edge = next((parent for parent in receipt["parents"]
+                         if isinstance(parent, dict) and parent.get("edge_type") == "attempted_as"), None)
+            attempt_ref = edge.get("parent_id") if edge is not None else None
+            attempt = state.receipts_by_id.get(attempt_ref) if isinstance(attempt_ref, bytes) else None
+            if attempt is not None:
+                attempt_command = attempt.payload["body"].get("command")
+                command_id = attempt_command.get("command_id") if isinstance(attempt_command, dict) else None
+                if body["attempt_id"] != attempt.payload["receipt_id"] \
+                        or command_id is None or body.get("command_id") != command_id:
+                    _fail("receipt/dispatch-attempt-mismatch", 10)
 
         if kind == "outcome_observation":
-            outcome_parents = [parent for parent in receipt["parents"] if parent["edge_type"] == "observed_outcome"]
-            if len(outcome_parents) != 1 or body["subject_id"] != outcome_parents[0]["parent_id"]:
+            outcome_parents = [parent for parent in receipt["parents"]
+                               if isinstance(parent, dict) and parent.get("edge_type") == "observed_outcome"]
+            if len(outcome_parents) != 1 or body.get("subject_id") is None \
+                    or body.get("subject_id") != outcome_parents[0].get("parent_id"):
                 _fail("receipt/outcome-subject-mismatch", 10)
 
 
@@ -1008,23 +1095,44 @@ def _replay_freshness(state: State) -> None:
     for envelope in state.envelopes["receipts"]:
         receipt = envelope.payload
         freshness = receipt["freshness"]
+        # Pin the types this step compares and indexes (harness parity): a
+        # malformed freshness or parent edge yields a signed verdict, never a
+        # TypeError/KeyError.
+        if not (_uint(freshness.get("issued_at")) and _uint(freshness.get("expires_at"))
+                and _uint(receipt["emission"].get("committed_at"))):
+            _fail("schema/bad-type", 11)
+        if not (_bstr(freshness.get("replay_domain")) and _bstr(freshness.get("invocation_id"))):
+            _fail("schema/bad-type", 11)
+        # Each parent edge is pinned to exactly what the CDDL requires
+        # (spec/aar-core.cddl parent-edge): later steps subscript these fields
+        # bare, so malformed edges must yield a signed verdict here, never a
+        # KeyError at steps 12-13. Enum membership stays a step-12 judgment.
+        if any(not isinstance(parent, dict)
+               or not isinstance(parent.get("edge_type"), str)
+               or not _bstr(parent.get("parent_id"), 32)
+               or not isinstance(parent.get("parent_kind"), str)
+               or not _bstr(parent.get("parent_tenant_id"), 16)
+               or not _bstr(parent.get("parent_site_id"), 16)
+               or not _uint(parent.get("parent_epoch_id"))
+               for parent in receipt["parents"]):
+            _fail("schema/bad-type", 11)
         committed_at = receipt["emission"]["committed_at"]
         if freshness["issued_at"] > committed_at:
             _fail("replay/not-yet-valid", 11)
         if committed_at >= freshness["expires_at"] or state.evaluated_at >= freshness["expires_at"]:
             _fail("replay/expired", 11)
         parent_ids = [parent["parent_id"] for parent in receipt["parents"]]
-        if freshness["intended_parents"] != parent_ids:
+        if freshness.get("intended_parents") != parent_ids:
             _fail("replay/parent-binding", 11)
         for parent_id in parent_ids:
             parent = state.receipts_by_id.get(parent_id)
             if parent is None:
                 continue
             parent_freshness = parent.payload["freshness"]
-            if freshness["invocation_id"] != parent_freshness["invocation_id"] \
-                    or freshness["replay_domain"] != parent_freshness["replay_domain"]:
+            if freshness["invocation_id"] != parent_freshness.get("invocation_id") \
+                    or freshness["replay_domain"] != parent_freshness.get("replay_domain"):
                 _fail("replay/invocation-mismatch", 11)
-        if freshness["use"] == "one_time":
+        if freshness.get("use") == "one_time":
             coordinate = freshness["replay_domain"], freshness["invocation_id"]
             content = receipt["receipt_id"]
             if coordinate in replay_seen and replay_seen[coordinate] != content:
@@ -1138,8 +1246,10 @@ def _authorization_dominance(state: State, graph: dict[bytes, list[bytes]]) -> N
         if len(authorizations) > 1:
             _fail("graph/dominator-ambiguous", 13)
         authorization = state.receipts_by_id.get(authorizations[0]["parent_id"])
+        # A missing authorization_id is disagreement (harness same() parity),
+        # never a KeyError.
         if authorization is None or authorization.payload["kind"] != "authorization" \
-                or attempt.payload["body"]["authorization_id"] != authorization.payload["receipt_id"]:
+                or attempt.payload["body"].get("authorization_id") != authorization.payload["receipt_id"]:
             _fail("graph/dominator-missing", 13)
         auth_body = authorization.payload["body"]
         delegation = state.embedded_delegations.get(authorization.payload["receipt_id"])

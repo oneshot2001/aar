@@ -10,12 +10,15 @@ import { TEST_KEYS } from "./testkeys";
 import { verifyBundle } from "./verifier";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+// Explicit evaluation time for failure verdicts on inputs whose trust_inputs are
+// unreadable (caller-supplied always; the wall clock is never read — pyref --at symmetry). Matches the fixture corpus.
+const AT = 1_735_689_800;
 const negativeFixtures = buildNegativeFixtures();
 
 describe("B2 reference verifier", () => {
   test("the full positive bundle passes steps 1 through 20 and yields a round-trippable signed verdict", () => {
     const input = readFileSync(join(root, "kats", "positive", "bundle-valid-subset.cbor"));
-    const result = verifyBundle(input);
+    const result = verifyBundle(input, { evaluationTime: AT });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.result).toBe("conformant");
@@ -29,7 +32,7 @@ describe("B2 reference verifier", () => {
       if (typeof verdict !== "object" || verdict === null || Array.isArray(verdict) || verdict instanceof Uint8Array || verdict instanceof Map || !Array.isArray(cose) || !(cose[0] instanceof Uint8Array)) throw new Error("bad verdict");
       const { verdict_id, ...fields } = verdict;
       expect(equalBytes(verdict_id as Uint8Array, domainHash("AAR-VERDICT-ID-v1", cose[0], fields))).toBe(true);
-      const repeated = verifyBundle(input);
+      const repeated = verifyBundle(input, { evaluationTime: AT });
       expect(repeated.ok).toBe(true);
       if (repeated.ok) expect(equalBytes(repeated.verdictEnvelope, result.verdictEnvelope)).toBe(true);
     }
@@ -45,7 +48,7 @@ describe("B2 reference verifier", () => {
       encoded_proof_bytes: 65_536, aggregate_proof_bytes: 4_194_304, epoch_manifest_entries: 10_000,
       merkle_batch_leaves: 1_048_576, credential_path_length: 8,
     };
-    const result = verifyBundle(input);
+    const result = verifyBundle(input, { evaluationTime: AT });
     expect(result.ok).toBe(true);
     if (result.ok) {
       const verifier = result.verdict.verifier as Record<string, CborValue>;
@@ -54,7 +57,7 @@ describe("B2 reference verifier", () => {
       expect(equalBytes(policy.anchor_heads_digest as Uint8Array, domainHash("AAR-VERDICT-HEADS-v1", trust.expected_anchor_heads!))).toBe(true);
       expect(equalBytes(policy.replay_state_digest as Uint8Array, new Uint8Array(32))).toBe(true);
     }
-    const suppliedEmpty = verifyBundle(input, { replayState: [] });
+    const suppliedEmpty = verifyBundle(input, { evaluationTime: AT, replayState: [] });
     expect(suppliedEmpty.ok).toBe(true);
     if (suppliedEmpty.ok) {
       const policy = suppliedEmpty.verdict.trust_policy as Record<string, CborValue>;
@@ -97,7 +100,7 @@ describe("B2 reference verifier", () => {
 
   test("every negative fixture returns exactly its first expected reason", () => {
     for (const fixture of negativeFixtures) {
-      const result = verifyBundle(fixture.bytes);
+      const result = verifyBundle(fixture.bytes, { evaluationTime: AT });
       expect(result.ok, fixture.filename).toBe(false);
       if (!result.ok) expect(result.reason, fixture.filename).toBe(fixture.descriptor.expected_code);
     }
@@ -114,7 +117,7 @@ describe("B2 reference verifier", () => {
 
   test("unavailable key and trust policy classify as indeterminate", () => {
     const missingKey = negativeFixtures.find((fixture) => fixture.descriptor.expected_code === "key/not-found")!;
-    const keyResult = verifyBundle(missingKey.bytes);
+    const keyResult = verifyBundle(missingKey.bytes, { evaluationTime: AT });
     expect(keyResult.ok).toBe(false);
     if (!keyResult.ok) {
       expect(keyResult.result).toBe("indeterminate");
@@ -128,7 +131,7 @@ describe("B2 reference verifier", () => {
     const trust = positive.trust_inputs;
     if (typeof trust !== "object" || trust === null || Array.isArray(trust) || trust instanceof Uint8Array || trust instanceof Map) throw new Error("trust inputs are not a map");
     delete trust.verifier_policy_digest;
-    const trustResult = verifyBundle(encodeCbor(positive));
+    const trustResult = verifyBundle(encodeCbor(positive), { evaluationTime: AT });
     expect(trustResult.ok).toBe(false);
     if (!trustResult.ok) {
       expect(trustResult.result).toBe("indeterminate");
@@ -144,7 +147,7 @@ describe("B2 reference verifier", () => {
     const variants = buildRequestCoordinateVariants();
     expect(variants.length).toBe(7);
     for (const variant of variants) {
-      const result = verifyBundle(variant.bytes);
+      const result = verifyBundle(variant.bytes, { evaluationTime: AT });
       expect(result.ok, variant.label).toBe(false);
       if (!result.ok) {
         expect(result.reason, variant.label).toBe("request/coordinate-mismatch");
@@ -175,7 +178,7 @@ describe("B2 reference verifier", () => {
 
   test("stateful paired fixtures return their exact prior-state identity code", () => {
     for (const fixture of buildStatefulFixtures()) {
-      const result = verifyBundle(fixture.bundle, { priorEmissions: parseStatefulPrior(fixture.prior) });
+      const result = verifyBundle(fixture.bundle, { evaluationTime: AT, priorEmissions: parseStatefulPrior(fixture.prior) });
       expect(result.ok, fixture.name).toBe(false);
       if (!result.ok) expect(result.reason, fixture.name).toBe(fixture.descriptor.expected_code);
     }

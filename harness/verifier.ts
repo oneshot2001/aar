@@ -53,8 +53,13 @@ export interface PriorEmission {
 export interface VerifyB1Options {
   replayState?: readonly ReplayUse[];
   priorEmissions?: readonly PriorEmission[];
-  /** Used only when a bundle failure occurs before its evaluation time is known. */
-  evaluationTime?: number;
+  /**
+   * Required: evaluation time is always caller-supplied (pyref --at symmetry).
+   * The wall clock is never read. Validation prefers the bundle's own
+   * trust_inputs.evaluation_time; this value covers failure verdicts on inputs
+   * whose trust inputs are unreadable.
+   */
+  evaluationTime: number;
   product?: string;
   version?: string;
   buildDigest?: Uint8Array;
@@ -537,6 +542,10 @@ function parseEnvelope(entry: CborValue, kind: ArtifactKind, path: string): Pars
 
 function payloadFixedFields(kind: ArtifactKind): readonly (readonly [string, number])[] {
   const primary: Partial<Record<ArtifactKind, string>> = { credential: "credential_id", rotation: "rotation_id", status: "snapshot_id", request: "request_id", delegation: "delegation_id", epoch_event: "event_id", epoch_manifest: "manifest_id", anchor: "anchor_id", merkle_batch: "batch_id", receipt: "receipt_id", presentation: "presentation_id" };
+  // subject_kid is included for credentials: it is indexed as a map key and
+  // compared against sha256(public_key), where a plain array of the same
+  // integers would satisfy equalBytes (pyref _schema_payload parity).
+  if (kind === "credential") return [["credential_id", 32], ["subject_kid", 32]];
   return [[primary[kind]!, kind === "request" ? 16 : 32]];
 }
 
@@ -740,19 +749,29 @@ function validateContent(bundle: Obj, parsed: Parsed): B1Failure | undefined {
 
 function receiptHashes(payload: Obj): B1Failure | undefined {
   const body = payload.body as Obj;
-  if (payload.kind === "observation" && object(body.consumption)) {
-    if (!equalBytes(body.consumption.manifest_digest as Uint8Array, domainHash("AAR-CONSUMPTION-MANIFEST-v1", without(body.consumption, "manifest_digest")))) return failure(7, "hash/mismatch", "receipt.body.consumption.manifest_digest");
+  // Non-bstr hash PREIMAGES are a schema defect (schema/bad-type) — hashing
+  // must never throw; a non-bstr compared DIGEST is treated as a mismatch.
+  // Both rules mirror pyref _content_commitments exactly.
+  if (payload.kind === "observation" && object(body.consumption) && "manifest_digest" in body.consumption && "items" in body.consumption) {
+    if (!bytes(body.consumption.manifest_digest) || !equalBytes(body.consumption.manifest_digest, domainHash("AAR-CONSUMPTION-MANIFEST-v1", without(body.consumption, "manifest_digest")))) return failure(7, "hash/mismatch", "receipt.body.consumption.manifest_digest");
   }
-  if (payload.kind === "inference" && object(body.conclusion) && body.conclusion.canonical_cbor instanceof Uint8Array && body.conclusion.digest instanceof Uint8Array) {
-    if (!equalBytes(hash(body.conclusion.canonical_cbor), body.conclusion.digest)) return failure(7, "hash/mismatch", "receipt.body.conclusion.digest");
+  if (payload.kind === "inference" && object(body.conclusion) && "canonical_cbor" in body.conclusion && "digest" in body.conclusion && "schema_id" in body.conclusion) {
+    if (!bytes(body.conclusion.canonical_cbor)) return failure(7, "schema/bad-type", "receipt.body.conclusion.canonical_cbor");
+    if (!bytes(body.conclusion.digest) || !equalBytes(hash(body.conclusion.canonical_cbor), body.conclusion.digest)) return failure(7, "hash/mismatch", "receipt.body.conclusion.digest");
   }
-  if (payload.kind === "authorization" && object(body.decision)) {
-    if (!equalBytes(body.decision.decision_commitment as Uint8Array, domainHash("AAR-DECISION-RECORD-v1", without(body.decision, "decision_commitment")))) return failure(7, "hash/mismatch", "receipt.body.decision.decision_commitment");
+  if (payload.kind === "authorization" && object(body.decision) && "decision_commitment" in body.decision && "policy_set_root" in body.decision && "evaluated_inputs" in body.decision) {
+    if (!bytes(body.decision.decision_commitment) || !equalBytes(body.decision.decision_commitment, domainHash("AAR-DECISION-RECORD-v1", without(body.decision, "decision_commitment")))) return failure(7, "hash/mismatch", "receipt.body.decision.decision_commitment");
   }
-  if (payload.kind === "action_attempt" && object(body.action) && object(body.command)) {
-    if (!equalBytes(body.action.parameters_digest as Uint8Array, hash(body.action.parameters_cbor as Uint8Array))) return failure(7, "hash/mismatch", "receipt.body.action.parameters_digest");
-    if (!equalBytes(body.command.command_digest as Uint8Array, hash(body.command.canonical_command as Uint8Array))) return failure(7, "hash/mismatch", "receipt.body.command.command_digest");
-    if (!equalBytes(body.command.command_id as Uint8Array, domainHash("AAR-COMMAND-MANIFEST-v1", without(body.command, "command_id")))) return failure(7, "hash/mismatch", "receipt.body.command.command_id");
+  if (payload.kind === "action_attempt") {
+    if (object(body.action) && "parameters_cbor" in body.action && "parameters_digest" in body.action) {
+      if (!bytes(body.action.parameters_cbor)) return failure(7, "schema/bad-type", "receipt.body.action.parameters_cbor");
+      if (!bytes(body.action.parameters_digest) || !equalBytes(body.action.parameters_digest, hash(body.action.parameters_cbor))) return failure(7, "hash/mismatch", "receipt.body.action.parameters_digest");
+    }
+    if (object(body.command) && "command_id" in body.command && "canonical_command" in body.command && "command_digest" in body.command) {
+      if (!bytes(body.command.canonical_command)) return failure(7, "schema/bad-type", "receipt.body.command.canonical_command");
+      if (!bytes(body.command.command_digest) || !equalBytes(body.command.command_digest, hash(body.command.canonical_command))) return failure(7, "hash/mismatch", "receipt.body.command.command_digest");
+      if (!bytes(body.command.command_id) || !equalBytes(body.command.command_id, domainHash("AAR-COMMAND-MANIFEST-v1", without(body.command, "command_id")))) return failure(7, "hash/mismatch", "receipt.body.command.command_id");
+    }
   }
   return undefined;
 }
@@ -841,6 +860,11 @@ function validateEmission(parsed: Parsed, prior: readonly PriorEmission[], obser
     }
     const binding = receipt.payload.binding as Obj;
     const emission = receipt.payload.emission as Obj;
+    // Identity coordinates are used as map keys below; pin their types first so
+    // malformed input yields a signed verdict instead of a silent array-typed
+    // coordinate collision (pyref _emission_identity parity).
+    if (!uint(emission.issuer_seq)) return failure(9, "schema/bad-type", "receipt.emission.issuer_seq");
+    if (!bytes(binding.epoch_owner_kid, 32) || !uint(binding.epoch_id) || !uint(binding.epoch_seq)) return failure(9, "schema/bad-type", "receipt.binding");
     const issuer = `${toHex(receipt.kid)}:${emission.issuer_seq as number}`;
     const epoch = `${toHex(binding.epoch_owner_kid as Uint8Array)}:${binding.epoch_id as number}:${binding.epoch_seq as number}`;
     if (issuerCoordinates.has(issuer) && issuerCoordinates.get(issuer) !== id) return failure(9, "identity/coordinate-equivocation", "receipt.emission.issuer_seq");
@@ -890,7 +914,10 @@ function validateReceiptSemantics(bundle: Obj, parsed: Parsed): B1Failure | unde
       }
       if (!resolved) return failure(10, "receipt/consumption-ref-unresolved", "receipt.body.consumption_manifest_id");
     }
-    if (payload.kind === "observation" && object(body.consumption) && Array.isArray(body.consumption.items)) {
+    if (payload.kind === "observation") {
+      // Nested containers are pinned before indexing (pyref parity): malformed
+      // interiors yield a signed verdict, never a silent tolerate.
+      if (!object(body.consumption) || !Array.isArray(body.consumption.items)) return failure(10, "schema/bad-type", "receipt.body.consumption");
       for (let index = 0; index < body.consumption.items.length; index += 1) {
         const item = body.consumption.items[index];
         if (!object(item) || item.ordinal !== index) return failure(10, "receipt/manifest-inconsistent", "receipt.body.consumption.items");
@@ -901,13 +928,15 @@ function validateReceiptSemantics(bundle: Obj, parsed: Parsed): B1Failure | unde
       }
     }
     if (payload.kind === "authorization") {
-      const decision = body.decision as Obj;
+      if (!object(body.decision)) return failure(10, "schema/bad-type", "receipt.body.decision");
+      const decision = body.decision;
       const hasPresentation = body.presentation !== undefined;
       if ((decision.decision === "permit_with_approval") !== hasPresentation || (decision.decision === "permit_with_approval") !== (decision.approver_credential_id !== undefined)) return failure(10, "receipt/decision-presentation", "receipt.body");
     }
     if (payload.kind === "action_attempt") {
       if ((body.disposition === "not_dispatched") !== (body.refusal_reason !== undefined)) return failure(10, "receipt/attempt-disposition", "receipt.body.disposition");
-      const action = body.action as Obj; const command = body.command as Obj;
+      if (!object(body.action) || !object(body.command)) return failure(10, "schema/bad-type", "receipt.body");
+      const action = body.action; const command = body.command;
       let decodedCommand: CborValue | undefined;
       try { decodedCommand = decodeCbor(command.canonical_command as Uint8Array, { strict: true }); } catch { /* hash checks already ran */ }
       if (!same(action.action_name, command.action_name) || !same(action.target_id, command.target_id) || !object(decodedCommand) || !same(decodedCommand.operation, action.action_name) || !same(decodedCommand.target, action.target_id) || !same(decodedCommand.parameters_digest, action.parameters_digest)) return failure(10, "receipt/action-command-mismatch", "receipt.body.command");
@@ -932,6 +961,16 @@ function validateReplay(parsed: Parsed, replayState: readonly ReplayUse[]): B1Fa
     const payload = receipt.payload;
     const freshness = payload.freshness as Obj;
     const emission = payload.emission as Obj;
+    // Pin the types this step compares and indexes (pyref _replay_freshness
+    // parity): malformed freshness or parent edges yield a signed verdict,
+    // never a coerced comparison or an encode throw.
+    if (!uint(freshness.issued_at) || !uint(freshness.expires_at) || !uint(emission.committed_at)) return failure(11, "schema/bad-type", "receipt.freshness");
+    if (!bytes(freshness.replay_domain) || !bytes(freshness.invocation_id)) return failure(11, "schema/bad-type", "receipt.freshness");
+    // Each parent edge is pinned to exactly what the CDDL requires
+    // (spec/aar-core.cddl parent-edge): later steps read these fields bare, so
+    // malformed edges must yield a signed verdict here, never a throw or a
+    // silent tolerate at steps 12-13. Enum membership stays a step-12 judgment.
+    if (!(payload.parents as CborValue[]).every((parent) => object(parent) && typeof parent.edge_type === "string" && bytes(parent.parent_id, 32) && typeof parent.parent_kind === "string" && bytes(parent.parent_tenant_id, 16) && bytes(parent.parent_site_id, 16) && uint(parent.parent_epoch_id))) return failure(11, "schema/bad-type", "receipt.parents");
     if ((freshness.issued_at as number) > (emission.committed_at as number)) return failure(11, "replay/not-yet-valid", "receipt.freshness.issued_at");
     if ((emission.committed_at as number) >= (freshness.expires_at as number)) return failure(11, "replay/expired", "receipt.freshness.expires_at");
     const parents = (payload.parents as Obj[]).map((parent) => parent.parent_id!);
@@ -1503,7 +1542,7 @@ function emitVerdict(input: Uint8Array, bundle: Obj, parsed: Parsed, options: Ve
   return { ok: true, result: "conformant", completedThrough: 20, observations, verdict, verdictEnvelope: signed.envelopeBytes };
 }
 
-function validateBundle(input: Uint8Array, options: VerifyB1Options = {}): B1Verification {
+function validateBundle(input: Uint8Array, options: VerifyB1Options): B1Verification {
   if (input.length > LIMITS.bundleBytes) return failure(1, "resource/bundle-too-large", "bundle");
   const decoded = profileDecode(input, 2, "bundle");
   if (isFailure(decoded)) return decoded;
@@ -1557,7 +1596,9 @@ function emitFailureVerdict(input: Uint8Array, issue: B1Failure, options: Verify
   const trust = object(decoded?.trust_inputs) ? decoded.trust_inputs : {};
   const store = object(trust.trust_store) ? trust.trust_store : {};
   const zero16 = new Uint8Array(16); const zero32 = new Uint8Array(32);
-  const evaluationTime = uint(trust.evaluation_time) ? trust.evaluation_time : (options.evaluationTime ?? Math.floor(Date.now() / 1000));
+  // Evaluation time comes from the bundle or the caller — never a wall-clock
+  // read. verifyBundle enforces the caller side at the API boundary.
+  const evaluationTime = uint(trust.evaluation_time) ? trust.evaluation_time : options.evaluationTime;
   const committedFrom = uint(selector.committed_from) ? selector.committed_from : 0;
   const committedUntil = uint(selector.committed_until) ? selector.committed_until : 0;
   const receiptKinds = Array.isArray(selector.receipt_kinds) && selector.receipt_kinds.length > 0 ? selector.receipt_kinds : ["observation"];
@@ -1594,7 +1635,11 @@ function emitFailureVerdict(input: Uint8Array, issue: B1Failure, options: Verify
   return { ...issue, verdict, verdictEnvelope: signed.envelopeBytes };
 }
 
-export function verifyBundle(input: Uint8Array, options: VerifyB1Options = {}): B1Verification {
+export function verifyBundle(input: Uint8Array, options: VerifyB1Options): B1Verification {
+  // Evaluation time must be caller-supplied, checked before any verification
+  // (pyref --at symmetry); the wall clock is never read. The runtime check
+  // covers untyped callers.
+  if (options?.evaluationTime === undefined) throw new Error("verifyBundle requires options.evaluationTime; wall-clock fallback is forbidden");
   const result = validateBundle(input, options);
   return result.ok ? result : emitFailureVerdict(input, result, options);
 }
