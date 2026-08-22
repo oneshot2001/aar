@@ -1,6 +1,8 @@
 # Related-work addendum — 2026-08-21
 
-Status: draft addendum to `related-work-v0.2.md`, pending merge as §4/§5 there.
+Status: adversarially reviewed 2026-08-22 (round-1 FIX-FIRST: 2 P2 —
+publicization date pinned to launch commit 72e529e 2026-08-04, RFC 9943
+web-verified; 1 P3 — applied). Pending merge into `related-work-v0.2.md` as §4/§5.
 Same citation discipline: every external artifact is pinned; re-verify pins
 before quoting externally. Surveyed 2026-08-21 (Claude + Codex dual review of
 Wake; §B is a full read of the IETF draft's plain-text archive copy).
@@ -143,7 +145,8 @@ actually did."
 The draft's filename (`agent-action-receipts`) and requested media type occupy
 AAR's exact public name; its title does not use the phrase, and the acronym
 "AAR" appears nowhere in it. AAR's public artifacts under this name predate
-the draft (spec ship log from 2026-07-14; oneshot2001/aar public). Handling:
+the draft: repository created 2026-07-15 (gh API), public since 2026-08-04
+(launch commit 72e529e), both before sahu -00 (2026-08-16). Handling:
 any AAR public text should cite the draft by full name on first use and state
 the scope difference in one line (record format for log integrity vs
 conformance profiles for evidence-grade actuation). Do not claim the draft
@@ -167,7 +170,8 @@ to the retrospective tier discussed in §A above),
 will likely organize under; priority read**), `draft-noa-scitt-ai-agent-receipt-01`,
 and normative anchors [ISO/IEC FDIS 24970] (AI system logging) and
 [EU-AI-ACT] Art. 12 — the same regulatory hooks AAR's RFP language should
-cite. Also confirms RFC 9943 (SCITT architecture) as published June 2026.
+cite. RFC 9943 (SCITT architecture) independently verified against
+rfc-editor.org 2026-08-22.
 
 ### B.6 Disposition
 
@@ -175,7 +179,8 @@ Cite as **the minimal-record pole of the cohort**: the smallest offline-
 verifiable receipt with deployed code behind it, and the cleanest published
 statement of what self-anchored chains cannot prove. AAR's uncovered
 contributions against it are the same list as against mih -02, plus:
-DAG-vs-chain, independent-observer outcomes, completeness machinery, and a
+DAG-vs-chain, independent-observer outcomes, census-conditional
+completeness (census machinery planned, R-15), and a
 conformance corpus. Convergences to cite in AAR's defense file:
 received-bytes verification, honest-non-guarantees register, loud failure.
 

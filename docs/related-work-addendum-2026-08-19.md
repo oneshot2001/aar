@@ -1,6 +1,9 @@
 # Related work addendum — 2026-08-19 reads
 
-Status: **round-0 draft, NOT adversarially reviewed.** Written against
+Status: **adversarially reviewed 2026-08-22** (round-1 FIX-FIRST: 2 P1 — R-16
+overclaim, B.4 marked internal-only; 3 P2 — priority-claim softened, RFC 9943
+web-verified, onvif-mcp wire grade qualified; 2 P3 — all applied). Safe as a
+source for external quoting EXCEPT §B.4 (internal-only). Written against
 `v0.2-rc7` + D-58..D-61 (`65bdf8c`). Same scope rules and citation discipline
 as `related-work-v0.2.md`: pins + retrieval dates on every external claim,
 verbatim quotes where wording matters, no ranking of products, no claim that a
@@ -38,8 +41,8 @@ records prove permission was granted (may); Capsules prove what occurred
 
 ### A.1 What it specifies
 
-- **Envelope:** COSE_Sign1 Signed Statement per SCITT (RFC 9943 — note the
-  SCITT architecture is now an RFC, June 2026). CWT claims: `iss` (signing
+- **Envelope:** COSE_Sign1 Signed Statement per SCITT (RFC 9943 — the SCITT
+  architecture RFC; verified against rfc-editor.org 2026-08-22). CWT claims: `iss` (signing
   agent identity), `sub` (`urn:agent-action-capsule:OPERATOR:ACTION_ID`,
   provisional), plus closed `capsule_*` claims (`capsule_statement_type`
   "agent_action"/"outcome", `capsule_action_type`, `capsule_decision_id`).
@@ -104,12 +107,15 @@ records prove permission was granted (may); Capsules prove what occurred
 1. **The honesty boundary, stated as well as anywhere.** §13: *"Tamper-
    evidence is for record bytes, not recorder honesty… A dishonest runtime
    with no external witness can produce an internally valid record of a
-   fiction."* This is AAR's G4 exclusion, independently arrived at and
-   published first in an IETF venue. Registration *"bounds the timing of such
+   fiction."* This is AAR's G4 exclusion, independently
+   arrived at; mih states it in an IETF venue, AAR's threat model v0.1
+   (2026-07-14) is an independent statement of the same boundary — no
+   priority claim either way. Registration *"bounds the timing of such
    a record and makes its omission or later substitution detectable; it does
    not make its content true."*
 2. **Refusals as affirmative evidence.** The same rule AAR proved at Gate 5
-   S3 (zero-attributable-dispatch) and onvif-mcp's wire-emitted denials —
+   S3 (zero-attributable-dispatch) and onvif-mcp's wire-emitted denials in AAR vocabulary
+   (AAR wire conformance in progress) —
    here made a producer MUST over an extensible registry rather than an
    enumerated list.
 3. **Verifier-rederived assurance with overclaim reporting** — convergent
@@ -132,10 +138,10 @@ records prove permission was granted (may); Capsules prove what occurred
 | Authorization ("may") | out of scope — deferred to munoz permit-profile / AgentROA | native: delegation claims, scope, replay_domain, credential status (300 s at AAR-2A/3), D-52 anti-masking, D-60 coordinate checks |
 | Outcome evidence ceiling | `confirmed` = producer bound the observed response bytes; strongest seeded grade is `gate_executed` (the engine observed its own boundary) | `outcome-observation` requires a **named independent observer device identity**; "verified" barred without one; dispatch latches at action-bearing send; `contradicted` only on positively observed off-tolerance readback |
 | Completeness | registration bounds omission/back-dating timing; no census object | producer-declared epoch contents + census/reconciliation-conditional completeness (G3 narrowed), anchored manifests |
-| Verifier failure mode | structured result, never throw | D-61 Option B: internal error = loud crash, never a signed verdict — a deliberate opposite ruling worth defending on evidentiary grounds (a verdict emitted by a malfunctioning verifier is itself unsafe evidence) |
+| Verifier failure mode | structured result, never throw | D-61: internal error = loud crash, never a signed verdict — a deliberate opposite ruling worth defending on evidentiary grounds (a verdict emitted by a malfunctioning verifier is itself unsafe evidence) |
 | Extensibility | IANA registries, unknown-informational | closed pinned ontology (2 actions), extension = spec revision |
 | Anchor | any SCITT Transparency Service (VDS-agnostic) | operator-run RFC 6962 v1 log (F22 same-operator disclosure) |
-| Physical world | effect types seeded write_order / send_payment; no actuation legs claimed | live PTZ/stream legs on real cameras, restore semantics (F19), degraded-mode matrix (R-16) |
+| Physical world | effect types seeded write_order / send_payment; no actuation legs claimed | live PTZ/stream legs on real cameras, restore semantics (F19), degraded-mode matrix (R-16 — planned mitigation; one crash-cut fault leg exercised at Gate 5 S5) |
 
 ### A.4 Collisions to handle in any public text
 
@@ -189,8 +195,7 @@ assurance, evidence-grade floors, and the G4 honesty boundary. AAR's
 distinct, uncovered contributions against it: independent-observer outcomes,
 native authorization/credential-status machinery, census-conditional
 completeness, two-impl byte-pinned conformance discipline, deterministic-CBOR
-payloads, and physical-actuation experience (irreversibility, restore,
-degraded mode).
+payloads, and physical-actuation experience (irreversibility, restore).
 
 **Recommendation (Matthew's call): align, don't file a parallel capsule
 draft.** Concretely: (1) subscribe scitt@ietf.org; (2) introduce AAR to the
@@ -326,12 +331,17 @@ reference toolset; the org owns the `agent-receipts` handle and
 | Time | *"Honest system clock"* is a listed trust assumption; timestamps issuer-asserted; RFC 3161 optional | verifier-supplied evaluation time, time classes ranked by provenance, externally_anchored = prior-epoch anchor sandwich |
 | Authorization | optional `authorization.scopes` + grant_ref; opt-in grounded-principal tier | signed delegation claims, scope, replay_domain, one_time use, credential status w/ 300 s bound at AAR-2A/3, D-52 anti-masking, D-60 coordinate checks |
 | Outcome evidence | producer-asserted `outcome` + before/after state hashes; no observer identity | independent observer device identity required for "verified"; dispatch latches at send; contradicted only on positively observed off-tolerance readback |
-| Policy decisions | not in schema | authorization receipts incl. wire-emitted denials (onvif-mcp) |
+| Policy decisions | not in schema | authorization receipts incl. wire-emitted denials in AAR vocabulary (onvif-mcp; AAR wire conformance in progress) |
 | Revocation/status | planned v1.5 | shipped (status snapshots, profile-bound max age) |
 | Ontology | broad hierarchical taxonomy + `unknown` fallback | closed 2-action pinned ontology (deliberate scope) |
 | Verdict | verify result codes; no signed verdict object | signed verdicts binding bundle_digest; a bare PASS is never conformant |
 
 ### B.4 Trajectory and collision facts
+
+**INTERNAL ONLY — DO NOT QUOTE OR PARAPHRASE EXTERNALLY.** The roadmap and
+cadence observations below describe another author's unlaunched work; using
+them outbound would read as surveilling and pre-empting it. Nothing in this
+subsection may appear in any public or outbound text.
 
 - Roadmap: an explicit HN launch is planned (*"Post 3"* = OpenClaw/Claude
   Code demo *"published to HN"*, drafted against *"the failure mode that gets
@@ -343,7 +353,8 @@ reference toolset; the org owns the `agent-receipts` handle and
   traceability for high-risk AI systems. The regulation exists. The standard
   for how to comply doesn't."* and the gap table row *"| **Action receipts**
   | **Nothing** | **This specification** |"* (spec.md:31) — written as if
-  AAR, the mih cohort, and cMCP do not exist. That is a survey gap on their
+  AAR, the mih cohort, and cMCP (the TEE policy-gateway
+  project from the 2026-08-19 competitive board) do not exist. That is a survey gap on their
   side, not malice; AAR's public materials must not mirror it.
 - Names/domains held: `agent-receipts` org, agentreceipts.ai, obsigna.dev,
   npm `@obsigna/sdk-ts`, PyPI `obsigna`, Go `obsigna.dev/sdk/go`, and an
