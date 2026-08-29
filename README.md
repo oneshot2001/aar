@@ -17,6 +17,7 @@
 
 <a href="spec/aar-core.cddl">Normative CDDL</a> ·
 <a href="docs/threat-model-v0.1.md">Threat model</a> ·
+<a href="docs/related-work-addendum-2026-08-28.md">Related work</a> ·
 <a href="pyref/">Offline verifier</a> ·
 <a href="docs/rfp-language-v0.2.md">RFP language</a> ·
 <a href="https://github.com/oneshot2001/onvif-mcp">Reference producer</a> ·
@@ -55,6 +56,10 @@ census/reconciliation-conditional). It does **not** stop a compromised signer
 lying before emission, prove any inference correct, or establish legal
 compliance — see the threat model's residual-risk register for the complete
 honest list.
+
+“Receipt” is the field term—[Notarized Agents](https://arxiv.org/abs/2606.04193),
+[PCAA](https://arxiv.org/abs/2606.04104), and
+[AgentBound](https://arxiv.org/abs/2606.30970) all use it—so AAR keeps its name.
 
 ## Layout
 

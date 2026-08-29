@@ -637,3 +637,62 @@ supported, with required opaque bytes committed; they do not claim deep
 cryptographic validation of attestation content. A conformant verdict is not a
 statement of sensor truth, inference correctness, lawfulness, complete discovery,
 custody, or admissibility.
+
+## Appendix A. Informative RATS EAR/AR4SI verdict cross-map
+
+This appendix is informative. It does not add fields, validation steps, reason
+codes, or claims to the v0.2 signed verdict. It follows the two-axis vocabulary
+in [Hardware-rooted attestation for AI-agent evidence](https://arxiv.org/abs/2608.00801):
+authorisation is `Authorised`, `Unauthorised`, or `Indeterminate`, while the
+platform appraisal is `Attested`, `Contested`, or `Expired`. It uses
+[EAR](https://datatracker.ietf.org/doc/draft-ietf-rats-ear/) as the carrier and
+the [AR4SI trustworthiness vector](https://datatracker.ietf.org/doc/draft-ietf-rats-ar4si/)
+as the platform-appraisal vocabulary. EAR and AR4SI are Internet-Drafts at this
+pin, so their field names and tiers may change.
+
+The cross-map applies only to an action-bearing AAR-2A or AAR-3 scope. An AAR
+`conformant` result establishes that the carried artifacts satisfy AAR’s
+declared profile under the bound verifier policy; it does not itself appraise a
+TPM, measured boot, model artifact, or runtime. For `nonconformant`, only an
+authorization-specific reason such as `delegation/expired`, `delegation/scope`,
+or `graph/dominator-missing` supports `Unauthorised`; other failures leave that
+axis `Indeterminate`. `maximum_outcome_level` is likewise not a platform
+appraisal. In the table, “Attested” means that a fresh EAR binds the exact AAR
+outcome commitment and has all relying-party-required AR4SI facets in the
+Affirming range with no disqualifying facet Contraindicated; “Contested” means
+a relevant facet is Contraindicated; “Expired” means the nonce, timestamp,
+epoch, or EAR expiry fails the relying party’s freshness policy. Missing AR4SI
+facets make no claim about those facets.
+
+The two-axis column is the result after the EAR condition in the last column
+has been met. Without that separate appraisal, the platform axis is unmapped;
+the AAR result and outcome label alone do not produce `Attested`, `Contested`,
+or `Expired`.
+
+| AAR signed result | `maximum_outcome_level` | Two-axis result after appraisal | EAR/AR4SI trust vector | What the opaquely carried attestation would need to say to move the cell |
+|---|---|---|---|---|
+| `conformant` | `accepted` | Authorised × Attested | required facets Affirming; none disqualifying Contraindicated | A fresh EAR would need to bind the accepted action’s exact outcome commitment and appraise the required platform facets as Affirming. |
+| `conformant` | `dispatched` | Authorised × Attested | required facets Affirming; none disqualifying Contraindicated | A fresh EAR would need to bind the exact dispatch/outcome commitment, not merely the earlier authorization or request. |
+| `conformant` | `device_acknowledged` | Authorised × Attested | required facets Affirming; none disqualifying Contraindicated | A fresh EAR would need to bind the acknowledged outcome hash and identify the appraised platform that produced that acknowledgment. |
+| `conformant` | `independently_sensed` | Authorised × Attested | required facets Affirming for each relied-on attester; none disqualifying Contraindicated | A composite or otherwise scoped EAR would need to appraise the runtime and the distinct outcome observer while preserving AAR’s failure-domain separation. |
+| `conformant` | `contradicted` | **★ Authorised × Contested** | at least one relevant facet Contraindicated | The cell could move to Attested only through a fresh appraisal that resolves the contradiction under relying-party policy; another opaque success assertion cannot erase the AAR contradiction. |
+| `conformant` | `unknown` | Authorised × Expired only when freshness explains `unknown`; otherwise platform axis unmapped | vector not current when freshness fails | The cell could move to Attested only if a fresh nonce-bound EAR binds the outcome commitment and the AAR evidence separately resolves `unknown`. |
+| `nonconformant` | `accepted` | (Unauthorised for an authorization-specific reason, otherwise Indeterminate) × Attested | required facets may be Affirming independently of the AAR failure | An EAR could establish platform state, but it would also need distinct valid authorization evidence to move the authorization axis and cannot change the AAR result. |
+| `nonconformant` | `dispatched` | (Unauthorised for an authorization-specific reason, otherwise Indeterminate) × Attested | required facets may be Affirming independently of the AAR failure | An EAR could bind the dispatch to an appraised platform, but only repaired AAR authorization evidence could move the first axis. |
+| `nonconformant` | `device_acknowledged` | (Unauthorised for an authorization-specific reason, otherwise Indeterminate) × Attested | required facets may be Affirming independently of the AAR failure | An EAR could bind the acknowledgment and appraise its platform, but it cannot convert malformed or unauthorized AAR evidence into a conformant verdict. |
+| `nonconformant` | `independently_sensed` | (Unauthorised for an authorization-specific reason, otherwise Indeterminate) × Attested | required facets may be Affirming for each attester independently of the AAR failure | An EAR could appraise both attesters, but the authorization defect and AAR observer-qualification checks would still need independent repair. |
+| `nonconformant` | `contradicted` | (Unauthorised for an authorization-specific reason, otherwise Indeterminate) × Contested | at least one relevant facet Contraindicated | A fresh EAR could move only the platform axis by resolving the contradiction; authorization remains Unauthorised or Indeterminate from the AAR reason. |
+| `nonconformant` | `unknown` | (Unauthorised for an authorization-specific reason, otherwise Indeterminate) × Expired only when freshness explains `unknown` | vector not current when freshness fails | A fresh EAR could replace an expired platform appraisal, but separate AAR evidence must resolve both `unknown` and the nonconformance. |
+| `indeterminate` | `accepted` | Indeterminate × Attested | required facets may be Affirming despite missing AAR trust input | An EAR could establish platform state, but the missing AAR key, head, replay state, or policy input must be supplied before the authorization axis can move. |
+| `indeterminate` | `dispatched` | Indeterminate × Attested | required facets may be Affirming despite missing AAR trust input | A fresh EAR would need to bind the exact dispatch, while the missing AAR trust input would still have to be supplied separately. |
+| `indeterminate` | `device_acknowledged` | Indeterminate × Attested | required facets may be Affirming despite missing AAR trust input | A fresh EAR would need to bind the device acknowledgment, while AAR’s unresolved external input continues to hold the first axis Indeterminate. |
+| `indeterminate` | `independently_sensed` | Indeterminate × Attested | required facets may be Affirming for each attester despite missing AAR trust input | A scoped appraisal of both runtime and observer could move the platform axis, but it cannot supply AAR’s missing trust-policy input by implication. |
+| `indeterminate` | `contradicted` | Indeterminate × Contested | at least one relevant facet Contraindicated | The cell could move to Attested only if a fresh appraisal resolves the platform contradiction and the missing AAR trust input is evaluated separately. |
+| `indeterminate` | `unknown` | Indeterminate × Expired only when freshness explains `unknown`; otherwise platform axis unmapped | vector not current when freshness fails | A fresh nonce-bound EAR could replace the expired appraisal, but AAR must still resolve `unknown` and the input that made the verdict indeterminate. |
+
+The marked `(Authorised, Contested)` cell is deliberate: valid authority and
+a disputed platform or outcome are compatible facts. An implementation must
+not collapse that cell into either “authorized, therefore trusted” or
+“contested, therefore unauthorized.” Because v0.2 carries attestation bytes
+opaquely under D-49, reaching any platform term in this appendix requires a
+separate RATS appraisal; the core AAR verifier does not emit it.

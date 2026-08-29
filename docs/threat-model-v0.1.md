@@ -72,6 +72,18 @@ sensitive content receipts commit to (privacy asset).
   committed ingress census exists or cross-stream reconciliation (R-15) is
   performed. An anchored manifest proves a manifest existed by a time; it
   cannot prove the manifest was complete. *(Erratum E-1 against spec §1.)*
+
+  **Residual.** Set completeness is a field-wide open problem, not a property
+  supplied by a signed chain alone: [Notarized Agents §6](https://arxiv.org/abs/2606.04193)
+  limits itself to per-receipt guarantees, [Auditable Agents](https://arxiv.org/abs/2604.05485)
+  leaves the LPC distinction between “did not occur” and “occurred but was not
+  recorded” unresolved, [Bounded Agents](https://arxiv.org/abs/2608.15888)
+  leaves tail truncation detectable only with evidence outside the chain, and
+  [Governing Dynamic Capabilities](https://arxiv.org/abs/2603.14332) assumes
+  the operator does not omit records. Two partial mechanisms are useful inputs
+  to AAR’s ingress-census design without closing the residual: Notarized
+  Agents’ heartbeat anchor set, and Dynamic Capabilities’ CVD/CAD depth metric
+  for locating the first missing hop.
 - **G4 (demoted from guarantee to verifier rule, gate finding 3)** — the
   Verifier confirms that **artifacts satisfy the declared evidence class**
   (time §5.1, outcome §5.2, provenance §5.3) and never reports more:
