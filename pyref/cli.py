@@ -45,13 +45,16 @@ def _read_json(path: Path, label: str) -> dict[str, Any]:
     return value
 
 
-def _closed(value: Any, keys: set[str], label: str) -> dict[str, Any]:
+def _closed(
+    value: Any, keys: set[str], label: str, optional: set[str] | None = None
+) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise UsageError(f"{label} must be a JSON object")
+    optional = optional or set()
     actual = set(value)
-    if actual != keys:
+    if not keys <= actual or not actual <= keys | optional:
         missing = sorted(keys - actual)
-        extra = sorted(actual - keys)
+        extra = sorted(actual - keys - optional)
         details = []
         if missing:
             details.append(f"missing {', '.join(missing)}")
@@ -90,6 +93,7 @@ def _trust_policy(path: Path) -> dict[str, Any]:
         _read_json(path, "trust-policy"),
         {"trust_store", "expected_anchor_heads", "verifier_policy_digest"},
         "trust-policy",
+        {"life_safety_action_names"},
     )
     store_source = _closed(
         source["trust_store"], {"digest", "snapshot_id", "created_at", "roots"},
@@ -141,6 +145,16 @@ def _trust_policy(path: Path) -> dict[str, Any]:
         if not 1 <= heads[-1]["tree_size"] <= 4_294_967_295:
             raise UsageError(f"{label}.tree_size must be between 1 and 4294967295")
 
+    life_safety_action_names = source.get("life_safety_action_names")
+    if life_safety_action_names is not None:
+        if not isinstance(life_safety_action_names, list) or len(life_safety_action_names) > 64:
+            raise UsageError("trust-policy.life_safety_action_names must contain 0 to 64 strings")
+        for index, name in enumerate(life_safety_action_names):
+            if not isinstance(name, str) or not 1 <= len(name.encode("utf-8")) <= 128:
+                raise UsageError(
+                    f"trust-policy.life_safety_action_names[{index}] must be 1 to 128 UTF-8 bytes"
+                )
+
     return {
         "trust_store": {
             "digest": _hex_bytes(store_source["digest"], 32, "trust-policy.trust_store.digest"),
@@ -154,6 +168,8 @@ def _trust_policy(path: Path) -> dict[str, Any]:
         "verifier_policy_digest": _hex_bytes(
             source["verifier_policy_digest"], 32, "trust-policy.verifier_policy_digest"
         ),
+        **({"life_safety_action_names": life_safety_action_names}
+           if life_safety_action_names is not None else {}),
     }
 
 

@@ -159,6 +159,13 @@ describe("VAPIX adapter", () => {
     expect(result.dispatchResult?.effect.outcome_level).toBe("unknown");
     expect(result.wire.receipts.map((receipt) => receipt.kind)).toContain("dispatch");
     expect(backend.counters().presetDispatches).toBe(1);
+    const attempt = result.wire.receipts.find((receipt) => receipt.kind === "action_attempt")!;
+    const records = await journal.records(toHex(invocationId));
+    const commitIndex = records.findIndex((record) => record.event === "action_attempt_committed");
+    const intentIndex = records.findIndex((record) => record.event === "dispatch_intent_persisted");
+    expect(commitIndex).toBeGreaterThanOrEqual(0);
+    expect(intentIndex).toBeGreaterThan(commitIndex);
+    expect(records[commitIndex]!.data.receipt_envelope_cbor).toBe(toHex(attempt.signed.envelopeBytes));
   });
 
   test("repairs stale authentication for an action without redispatching it", async () => {

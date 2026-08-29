@@ -20,6 +20,7 @@ KAT_DIRECTORIES = (
     ROOT / "kats" / "positive",
     ROOT / "kats" / "class-boundary",
     ROOT / "kats" / "terminal-state",
+    ROOT / "kats" / "evidence-commit",
 )
 RESULTS_PATH = Path(__file__).resolve().parent / "results-c1.json"
 C2_RESULTS_PATH = Path(__file__).resolve().parent / "results-c2.json"
@@ -646,6 +647,7 @@ def _c2_fixture_paths() -> list[Path]:
     paths = list((ROOT / "kats" / "positive").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "class-boundary").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "terminal-state").glob("*.cbor"))
+    paths.extend((ROOT / "kats" / "evidence-commit").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "negative").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "negative" / "stateful").glob("*.bundle.cbor"))
     return sorted(paths)
@@ -717,6 +719,7 @@ STEP_SPEC = {
     "anchor": "Step 17 validates target planning, proofs, manifest binding, deadlines, heads, and independence.",
     "bundle": "Steps 3, 7, and 18 validate selector commitments, dependencies, ranges, coverage, and scope.",
     "evidence": "Step 19 recomputes the maximum declared and structurally supported evidence classes.",
+    "journal": "Step 13 requires an AAR-3 action-attempt journal commitment before dispatch, except for the marked life-safety path.",
     "request": "Step 7 binds an agent_request root to SHA-256 of the exact request claims bstr.",
 }
 
@@ -836,6 +839,7 @@ def run_c2() -> dict[str, Any]:
             context = _context_for_standalone(raw, sidecar, base_raw)
         expected_code = sidecar.get("expected_code")
         expected_result = _expected_result(expected_code)
+        expected_observations = sidecar.get("expected_observations", [])
         try:
             first = evaluate(
                 raw, evaluated_at=KAT_EVALUATION_TIME, prior_state=prior,
@@ -848,15 +852,24 @@ def run_c2() -> dict[str, Any]:
             deterministic = first.verdict_bytes == second.verdict_bytes
             produced_code = first.reason
             expected_class, produced_class = _boundary_class(sidecar, first)
+            produced_observations = first.verdict["observations"]
+            observations_matched = all(
+                observation in produced_observations for observation in expected_observations
+            )
             matched = (
                 first.result == expected_result and produced_code == expected_code
                 and deterministic and (expected_class is None or expected_class == produced_class)
+                and observations_matched
             )
             fixture = {
                 "fixture": str(path.relative_to(ROOT)),
                 "expected_result": expected_result, "produced_result": first.result,
                 "expected_code": expected_code, "produced_code": produced_code,
                 "expected_class": expected_class, "produced_class": produced_class,
+                **({
+                    "expected_observations": expected_observations,
+                    "produced_observations": produced_observations,
+                } if expected_observations else {}),
                 "matched": matched, "deterministic": deterministic,
                 "verdict_sha256": hashes.sha256(first.verdict_bytes).hex(),
                 "first_failure_step": first.report["first_failure_step"],

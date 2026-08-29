@@ -454,6 +454,11 @@ action-attempt-body = {
   decision_commitment: digest32,
   disposition: "eligible_for_dispatch" / "not_dispatched",
   ? refusal_reason: bounded-text,
+  ? degraded: degraded-marker,
+}
+
+degraded-marker = {
+  reason: "journal/unavailable",
 }
 
 normalized-action = {
@@ -463,7 +468,12 @@ normalized-action = {
   parameters_digest: digest32,
   informational_reversibility: "reversible" / "irreversible",
   operational_reversibility: "reversible" / "lossy" / "irreversible",
+  ? hazard_class: "life_safety",
 }
+
+; hazard_class is absent for ordinary fail-closed actions.  It is present only
+; when the site's hazard matrix marks this action class life-safety and therefore
+; fail-operational under D-66.  degraded is permitted only on that exception path.
 
 ; parameters_digest = SHA-256(parameters_cbor).
 
@@ -1104,6 +1114,7 @@ trust-policy-inputs = {
   trust_store: trust-store-snapshot,
   expected_anchor_heads: expected-anchor-heads,
   verifier_policy_digest: digest32,
+  ? life_safety_action_names: [ 0*64 bounded-text ],
 }
 
 trust-store-snapshot = {

@@ -54,9 +54,15 @@ canonical order. The closed format is:
       "root": "32-byte hex"
     }
   ],
-  "verifier_policy_digest": "32-byte hex"
+  "verifier_policy_digest": "32-byte hex",
+  "life_safety_action_names": ["camera.ptz.preset"]
 }
 ```
+
+`life_safety_action_names` is optional and contains at most 64 strings of 1 to
+128 UTF-8 bytes. A `hazard_class="life_safety"` action marker is valid only when
+its action name occurs in this bound list; if the field is absent, no marker is
+accepted.
 
 The verifier recomputes the carried trust-store digest and validates root
 tenant/site/key-usage scopes, expected heads, policy digest shape, and the

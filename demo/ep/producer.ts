@@ -8,7 +8,15 @@ import type { DemoKey, DemoKeyRole } from "../keys/keys";
 import { buildCommandManifest } from "./command-manifest";
 import { evaluateAuthorization, type DemoTrustPolicy } from "./authorization";
 import { DurableInvocationJournal } from "./journal";
-import { buildDemoBundle, buildSignedAgentRequest, type DelegationWindow, type WireBuildResult } from "./wire-builder";
+import {
+  buildDemoBundle,
+  buildSignedAgentRequest,
+  type DelegationWindow,
+  type PreDispatchResult,
+  type ReceiptBuild,
+  type WireBuildResult,
+  type WireDispatch,
+} from "./wire-builder";
 
 export interface ProducerInput {
   readonly scenarioId: ScenarioId;
@@ -89,6 +97,15 @@ export async function produce(input: ProducerInput): Promise<ProducerResult> {
   let dispatchCount = 0;
   let dispatchResult: DispatchResult | undefined;
   let resumedWithoutRedispatch = false;
+  let beforeDispatch: ((attempt: ReceiptBuild) => Promise<PreDispatchResult>) | undefined;
+
+  const wireDispatch = (result: DispatchResult): WireDispatch => ({
+    status: result.status,
+    responseBodyDigest: result.responseBodyDigest,
+    outcomeLevel: result.effect.outcome_level,
+    outcomeState: result.effect.state,
+    observationDigest: fromHex(result.effect.observation_digest),
+  });
 
   if (!authorization.authorized) {
     await input.journal.append({ invocation_id: invocationIdHex, at: input.evaluatedAt, event: "refusal_persisted", data: { reason: "delegation-expired" } });
@@ -111,26 +128,54 @@ export async function produce(input: ProducerInput): Promise<ProducerResult> {
       };
     }
   } else {
-    await input.journal.append({
-      invocation_id: invocationIdHex, at: input.evaluatedAt, event: "dispatch_intent_persisted",
-      data: { command_digest: toHex(command.command_digest), adapter_id: input.adapter.id },
-    });
-    dispatchResult = await input.adapter.dispatch(command, {
-      invocationIdHex, commandDigestHex: toHex(command.command_digest), witnessLogPath: input.witnessLogPath,
-      observedAt: input.evaluatedAt, afterActionDispatched: input.afterDispatchCut,
-    });
-    if (dispatchResult.dispatched) {
-      dispatchCount = 1;
+    beforeDispatch = async (attempt): Promise<PreDispatchResult> => {
+      try {
+        await input.journal.append({
+          invocation_id: invocationIdHex, at: input.evaluatedAt, event: "action_attempt_committed",
+          data: {
+            command_digest: toHex(command.command_digest),
+            receipt_id: toHex(attempt.id),
+            receipt_envelope_digest: toHex(hash(attempt.signed.envelopeBytes)),
+            receipt_envelope_cbor: toHex(attempt.signed.envelopeBytes),
+          },
+        });
+      } catch {
+        // The failed durable append is itself the dispatch gate. Recording the
+        // refusal in the same journal is best-effort because that sink may still
+        // be unavailable; the signed not_dispatched receipt below is mandatory.
+        try {
+          await input.journal.append({
+            invocation_id: invocationIdHex, at: input.evaluatedAt, event: "refusal_persisted",
+            data: { reason: "journal/unavailable", command_digest: toHex(command.command_digest) },
+          });
+        } catch {
+          // Deliberate fail-closed: every append failure maps to journal/unavailable.
+        }
+        return { refusalReason: "journal/unavailable" };
+      }
       await input.journal.append({
-        invocation_id: invocationIdHex, at: input.evaluatedAt, event: "dispatch_observed",
-        data: { status: dispatchResult.status, outcome_level: dispatchResult.effect.outcome_level, observation_digest: dispatchResult.effect.observation_digest },
+        invocation_id: invocationIdHex, at: input.evaluatedAt, event: "dispatch_intent_persisted",
+        data: { command_digest: toHex(command.command_digest), adapter_id: input.adapter.id },
       });
-    } else {
+      dispatchResult = await input.adapter.dispatch(command, {
+        invocationIdHex, commandDigestHex: toHex(command.command_digest), witnessLogPath: input.witnessLogPath,
+        observedAt: input.evaluatedAt, afterActionDispatched: input.afterDispatchCut,
+      });
+      if (dispatchResult.dispatched) {
+        dispatchCount = 1;
+        await input.journal.append({
+          invocation_id: invocationIdHex, at: input.evaluatedAt, event: "dispatch_observed",
+          data: { status: dispatchResult.status, outcome_level: dispatchResult.effect.outcome_level, observation_digest: dispatchResult.effect.observation_digest },
+        });
+        return { dispatch: wireDispatch(dispatchResult) };
+      }
+      const reason = String(dispatchResult.effect.backend_evidence.application_status ?? "adapter-refused-before-transport");
       await input.journal.append({
         invocation_id: invocationIdHex, at: input.evaluatedAt, event: "pre_transport_refusal_observed",
-        data: { reason: String(dispatchResult.effect.backend_evidence.application_status ?? "adapter-refused-before-transport") },
+        data: { reason },
       });
-    }
+      return { refusalReason: reason };
+    };
   }
 
   const wire = await buildDemoBundle({
@@ -139,12 +184,9 @@ export async function produce(input: ProducerInput): Promise<ProducerResult> {
     targetLogicalName: input.targetLogicalName, actionName: input.actionName, parameters: input.parameters,
     sourceDeviceMetadata: input.sourceDeviceMetadata ?? { manufacturer: "AXIS", model: "Gate5 synthetic", firmware: "D1-stub" },
     adapterId: input.adapter.id, command, delegationWindows: input.delegationWindows, keys: input.keys, anchorLog: input.anchorLog, anchorObservedAt: input.anchorObservedAt,
-    dispatch: dispatchResult?.dispatched ? {
-      status: dispatchResult.status, responseBodyDigest: dispatchResult.responseBodyDigest,
-      outcomeLevel: dispatchResult.effect.outcome_level, outcomeState: dispatchResult.effect.state,
-      observationDigest: fromHex(dispatchResult.effect.observation_digest),
-    } : undefined,
-    refusalReason: dispatchResult && !dispatchResult.dispatched
+    dispatch: dispatchResult?.dispatched ? wireDispatch(dispatchResult) : undefined,
+    beforeDispatch,
+    refusalReason: beforeDispatch === undefined && dispatchResult && !dispatchResult.dispatched
       ? String(dispatchResult.effect.backend_evidence.application_status ?? "adapter-refused-before-transport")
       : undefined,
   });

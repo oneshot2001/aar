@@ -42,6 +42,18 @@ export interface TerminalOutcomeFixture {
   };
 }
 
+export interface EvidenceCommitFixture {
+  filename: string;
+  bytes: Uint8Array;
+  descriptor: {
+    name: string;
+    object_type: "bundle";
+    expectation: "conformant" | "nonconformant";
+    expected_code?: "journal/uncommitted-dispatch" | "receipt/hazard-class-unbound";
+    expected_observations: string[];
+  };
+}
+
 function object(value: CborValue | undefined): value is Obj {
   return typeof value === "object" && value !== null && !Array.isArray(value) && !(value instanceof Uint8Array) && !(value instanceof Map);
 }
@@ -389,6 +401,55 @@ function updateAttemptFlow(bundle: Obj, mutation: (attempt: Obj, receipts: Obj[]
   (nextDispatch.freshness as Obj).intended_parents = (nextDispatch.parents as Obj[]).map((edge) => edge.parent_id!);
   replaceReceipt(bundle, dispatchEnvelope, nextDispatch);
   keepReceipts(bundle, (value) => value.kind !== "outcome_observation");
+}
+
+function addLaterDominatorDefect(bundle: Obj): void {
+  const refusedEnvelope = receiptBy(bundle, (value) => value.kind === "action_attempt"
+    && (value.body as Obj).disposition === "not_dispatched");
+  const nextAttempt = clone(payload(refusedEnvelope));
+  const body = nextAttempt.body as Obj;
+  const action = body.action as Obj;
+  const command = body.command as Obj;
+  action.action_name = "camera.ptz.preset";
+  command.action_name = "camera.ptz.preset";
+  command.canonical_command = encodeCbor({
+    operation: action.action_name!, target: action.target_id!, parameters_digest: action.parameters_digest!,
+  });
+  command.command_digest = hash(command.canonical_command as Uint8Array);
+  command.command_id = domainHash("AAR-COMMAND-MANIFEST-v1", withoutField(command, "command_id"));
+  body.disposition = "eligible_for_dispatch";
+  delete body.refusal_reason;
+  const replacement = replaceReceipt(bundle, refusedEnvelope, nextAttempt);
+  const attempt = payload(replacement);
+
+  const firstDispatchEnvelope = receiptBy(bundle, (value) => value.kind === "dispatch");
+  const firstDispatch = payload(firstDispatchEnvelope);
+  const firstDispatchId = firstDispatch.receipt_id as Uint8Array;
+  let secondDispatchEnvelope: CborValue[] | undefined;
+  for (let nonce = 0; nonce < 1024; nonce += 1) {
+    const secondDispatch = clone(firstDispatch);
+    (secondDispatch.binding as Obj).epoch_seq = 10;
+    (secondDispatch.emission as Obj).issuer_seq = 110;
+    const edge = (secondDispatch.parents as Obj[]).find((parent) => parent.edge_type === "attempted_as")!;
+    edge.parent_id = attempt.receipt_id!;
+    (secondDispatch.freshness as Obj).intended_parents = (secondDispatch.parents as Obj[]).map((parent) => parent.parent_id!);
+    const secondBody = secondDispatch.body as Obj;
+    secondBody.attempt_id = attempt.receipt_id!;
+    secondBody.command_id = command.command_id!;
+    secondBody.target_response_body_digest = deterministicId(`d66-array-order:${nonce}`);
+    const candidate = resign(firstDispatchEnvelope, secondDispatch, true);
+    if (compare((payload(candidate).receipt_id as Uint8Array), firstDispatchId) > 0) {
+      secondDispatchEnvelope = candidate;
+      break;
+    }
+  }
+  if (secondDispatchEnvelope === undefined) throw new Error("could not order D-66 dispatch fixtures");
+  receiptList(bundle).push(secondDispatchEnvelope);
+  sortArtifacts(bundle, "receipts");
+}
+
+function withoutField(value: Obj, field: string): Obj {
+  return Object.fromEntries(Object.entries(value).filter(([key]) => key !== field));
 }
 
 function mutateEmbeddedDelegation(bundle: Obj, mutation: (value: Obj) => void): void {
@@ -1025,5 +1086,97 @@ export function buildTerminalOutcomeFixtures(): TerminalOutcomeFixture[] {
   }
 
   result.sort((a, b) => a.filename.localeCompare(b.filename));
+  return result;
+}
+
+export function buildEvidenceCommitFixtures(): EvidenceCommitFixture[] {
+  const result: EvidenceCommitFixture[] = [];
+  const add = (
+    filename: string,
+    expectation: EvidenceCommitFixture["descriptor"]["expectation"],
+    expectedObservations: string[],
+    mutation: (bundle: Obj) => void,
+    expectedCode?: EvidenceCommitFixture["descriptor"]["expected_code"],
+  ): void => {
+    const bundle = clone(baseBundle());
+    bundle.claimed_profile = "AAR-3";
+    mutation(bundle);
+    result.push({
+      filename,
+      bytes: encodeCbor(bundle),
+      descriptor: {
+        name: filename,
+        object_type: "bundle",
+        expectation,
+        ...(expectation === "nonconformant" ? { expected_code: expectedCode! } : {}),
+        expected_observations: expectedObservations,
+      },
+    });
+  };
+
+  add("journal-refusal-conformant", "conformant", ["refused_pre_dispatch"], (bundle) => {
+    clearJournal(bundle);
+    keepReceipts(bundle, (receipt) => receipt.kind !== "dispatch"
+      && receipt.kind !== "outcome_observation"
+      && !(receipt.kind === "action_attempt" && (receipt.body as Obj).disposition === "eligible_for_dispatch"));
+    const envelope = receiptBy(bundle, (receipt) => receipt.kind === "action_attempt");
+    const next = clone(payload(envelope));
+    (next.body as Obj).refusal_reason = "journal/unavailable";
+    replaceReceipt(bundle, envelope, next);
+  });
+
+  add("journal-uncommitted-dispatch", "nonconformant", [], (bundle) => {
+    updateAttemptFlow(bundle, (attempt, receipts) => {
+      const dispatch = receipts.find((receipt) => receipt.kind === "dispatch")!;
+      const dispatchedAt = ((dispatch.body as Obj).dispatched_at as number);
+      (attempt.binding as Obj).epoch_seq = ((dispatch.binding as Obj).epoch_seq as number) + 1;
+      (attempt.emission as Obj).committed_at = dispatchedAt + 1;
+      (((attempt.evidence as Obj).time as Obj).wall_time) = dispatchedAt + 1;
+    });
+    clearJournal(bundle);
+    keepReceipts(bundle, (receipt) => !(receipt.kind === "action_attempt" && (receipt.body as Obj).disposition === "not_dispatched")
+      && receipt.kind !== "outcome_observation");
+  }, "journal/uncommitted-dispatch");
+
+  add("journal-array-order-uncommitted-first", "nonconformant", [], (bundle) => {
+    updateAttemptFlow(bundle, (attempt, receipts) => {
+      const dispatch = receipts.find((receipt) => receipt.kind === "dispatch")!;
+      const dispatchedAt = ((dispatch.body as Obj).dispatched_at as number);
+      (attempt.binding as Obj).epoch_seq = ((dispatch.binding as Obj).epoch_seq as number) + 1;
+      (attempt.emission as Obj).committed_at = dispatchedAt + 1;
+      (((attempt.evidence as Obj).time as Obj).wall_time) = dispatchedAt + 1;
+    });
+    addLaterDominatorDefect(bundle);
+    clearJournal(bundle);
+  }, "journal/uncommitted-dispatch");
+
+  add("journal-life-safety-degraded", "conformant", ["degraded_dispatch"], (bundle) => {
+    (bundle.trust_inputs as Obj).life_safety_action_names = ["camera.stream.view"];
+    updateAttemptFlow(bundle, (attempt, receipts) => {
+      const body = attempt.body as Obj;
+      (body.action as Obj).hazard_class = "life_safety";
+      body.degraded = { reason: "journal/unavailable" };
+      const dispatch = receipts.find((receipt) => receipt.kind === "dispatch")!;
+      const dispatchedAt = ((dispatch.body as Obj).dispatched_at as number);
+      (attempt.binding as Obj).epoch_seq = ((dispatch.binding as Obj).epoch_seq as number) + 1;
+      (attempt.emission as Obj).committed_at = dispatchedAt + 1;
+      (((attempt.evidence as Obj).time as Obj).wall_time) = dispatchedAt + 1;
+    });
+    clearJournal(bundle);
+    keepReceipts(bundle, (receipt) => !(receipt.kind === "action_attempt" && (receipt.body as Obj).disposition === "not_dispatched"));
+  });
+
+  add("journal-life-safety-unbound", "nonconformant", [], (bundle) => {
+    (bundle.trust_inputs as Obj).life_safety_action_names = ["camera.ptz.preset"];
+    updateAttemptFlow(bundle, (attempt) => {
+      const body = attempt.body as Obj;
+      (body.action as Obj).hazard_class = "life_safety";
+      body.degraded = { reason: "journal/unavailable" };
+    });
+    clearJournal(bundle);
+    keepReceipts(bundle, (receipt) => !(receipt.kind === "action_attempt" && (receipt.body as Obj).disposition === "not_dispatched"));
+  }, "receipt/hazard-class-unbound");
+
+  result.sort((left, right) => left.filename.localeCompare(right.filename));
   return result;
 }

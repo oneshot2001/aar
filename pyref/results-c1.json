@@ -2,17 +2,17 @@
   "checks": {
     "id_digest_recomputation": {
       "failed": 0,
-      "passed": 46,
+      "passed": 51,
       "skipped": 0
     },
     "round_trip": {
       "failed": 0,
-      "passed": 46,
+      "passed": 51,
       "skipped": 0
     },
     "signature_recomputation": {
       "failed": 0,
-      "passed": 46,
+      "passed": 51,
       "skipped": 0
     }
   },
@@ -178,6 +178,86 @@
         }
       },
       "fixture": "kats/class-boundary/time-externally-anchored-satisfied.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 53,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 27,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/evidence-commit/journal-array-order-uncommitted-first.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 48,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 25,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/evidence-commit/journal-life-safety-degraded.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 48,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 25,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/evidence-commit/journal-life-safety-unbound.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 47,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 24,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/evidence-commit/journal-refusal-conformant.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 48,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 25,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/evidence-commit/journal-uncommitted-dispatch.cbor"
     },
     {
       "checks": {
@@ -756,7 +836,7 @@
       "fixture": "kats/terminal-state/outcome-terminals-unknown-before-contradicted.cbor"
     }
   ],
-  "fixtures_checked": 46,
+  "fixtures_checked": 51,
   "schema_version": 1,
   "slice": "C1"
 }

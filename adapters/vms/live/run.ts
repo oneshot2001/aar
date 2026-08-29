@@ -18,7 +18,7 @@ import { MediatorHttpClient } from "../client";
 import { assertVmsMediationDiscipline, assertVmsPtzRestoreDiscipline } from "../oracle";
 import { CRED_BINARY, LIVE_TARGETS, STREAM_PROFILE_LOGICAL, liveVmsConfig } from "./config";
 
-// D3 live leg — S1–S4 + S6 through EP -> transport witness -> REAL
+// D3 live leg — S1–S4 + S6–S7 through EP -> transport witness -> REAL
 // vigil-control (VigilCore.VAPIXClient in its own process) -> owned cameras.
 // S5 crash-cut ran once on the EP+VAPIX leg (Q5-2); this leg encodes
 // outcome_unknown via S6-after-send-timeout. Operator-plane park moves reuse
@@ -26,7 +26,7 @@ import { CRED_BINARY, LIVE_TARGETS, STREAM_PROFILE_LOGICAL, liveVmsConfig } from
 // part of the mediated claim.
 
 export interface VmsLiveScenarioSummary {
-  readonly scenario: "S1" | "S2" | "S3" | "S4" | "S6-rejection" | "S6-after-send-timeout";
+  readonly scenario: "S1" | "S2" | "S3" | "S4" | "S6-rejection" | "S6-after-send-timeout" | "S7";
   readonly verification: "conformant" | "nonconformant";
   readonly outcome: string;
   readonly applicationStatus: string;
@@ -224,9 +224,9 @@ export async function runVmsLiveSuite(requestedRoot?: string): Promise<VmsLiveSu
     const summaries: VmsLiveScenarioSummary[] = [];
     const execute = async (
       name: VmsLiveScenarioSummary["scenario"],
-      scenarioId: "S1" | "S2" | "S3" | "S4" | "S6",
+      scenarioId: "S1" | "S2" | "S3" | "S4" | "S6" | "S7",
       input: GateInputFile,
-      options: { rejectionVariant?: boolean; fault?: WitnessFaultInjection; tamper?: boolean; parkFirst?: boolean } = {},
+      options: { rejectionVariant?: boolean; fault?: WitnessFaultInjection; tamper?: boolean; parkFirst?: boolean; journalDown?: boolean } = {},
     ): Promise<ScenarioRunResult> => {
       const witnessPath = join(input.output_dir, `${scenarioId}.witness.jsonl`);
       await mkdir(input.output_dir, { recursive: true });
@@ -240,11 +240,9 @@ export async function runVmsLiveSuite(requestedRoot?: string): Promise<VmsLiveSu
           liveVmsConfig(proxy.url, mediator.baseUrl, recoveryDirectory, { rejectionVariant: options.rejectionVariant, exclusiveControl: true }),
           {},
         );
-        const result = await runScenario(scenarioId, input, adapter, root, options.tamper ? {
-          expectedVerification: "nonconformant",
-          expectedFailureReason: "sig/verify-failed",
-          transformBundle: tamperPinnedRequestSignature,
-        } : {});
+        const result = await runScenario(scenarioId, input, adapter, root, options.tamper
+          ? { expectedVerification: "nonconformant", expectedFailureReason: "sig/verify-failed", transformBundle: tamperPinnedRequestSignature }
+          : options.journalDown ? { journalUnavailableBeforeSend: true } : {});
         const evidence = result.producer.dispatchResult?.effect.backend_evidence;
         const applicationStatus = String(evidence?.application_status ?? "not_dispatched");
         if (name === "S1" && applicationStatus !== "position_within_tolerance") throw new Error(`S1 position evidence assertion failed: ${applicationStatus}`);
@@ -287,6 +285,9 @@ export async function runVmsLiveSuite(requestedRoot?: string): Promise<VmsLiveSu
       { not_before: s3Base.evaluated_at - 1, not_after: s3Base.evaluated_at + 600 },
     ] };
     await execute("S3", "S3", s3);
+
+    const s7Dir = join(root, "artifacts", "S7");
+    await execute("S7", "S7", gate("S7", "camera.ptz.preset", "accepted", s7Dir), { parkFirst: true, journalDown: true });
 
     const s4Dir = join(root, "artifacts", "S4");
     await execute("S4", "S4", gate("S4", "camera.ptz.preset", "device_acknowledged", s4Dir), { tamper: true, parkFirst: true });

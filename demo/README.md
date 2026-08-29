@@ -22,8 +22,8 @@ Claim sentence of record: `spec/GATE5-D3-REVIEW.md`.
 Offline (no hardware; separate mock backends, real pyref verification):
 
 ```sh
-bun run adapters/vapix/offline/run.ts   # VAPIX leg, S1–S6
-bun run adapters/vms/offline/run.ts     # VMS leg, S1–S4 + S6 (mock mediator)
+bun run adapters/vapix/offline/run.ts   # VAPIX leg, S1–S7
+bun run adapters/vms/offline/run.ts     # VMS leg, S1–S4 + S6–S7 (mock mediator)
 ```
 
 Live (operator lab only — requires green preflight, `cred get` access, the
@@ -52,6 +52,7 @@ python -m pyref verify BUNDLE.cbor --at UNIX_SECONDS [--trust-policy POLICY.json
 | S4 | Pinned single-byte tamper → `nonconformant` with the expected first-failure code (F21) |
 | S5 | Producer crash-cut after send → resume without redispatch, `outcome_unknown` + verified restore (EP+VAPIX leg once, per Q5-2) |
 | S6 | Backend fault under a valid delegation: application rejection → `contradicted` only on a positively observed off-tolerance readback; after-send timeout → `unknown` |
+| S7 | Journal unavailable before send: `not_dispatched` / `journal/unavailable`, zero attributable dispatch, camera unchanged |
 
 ## What a verdict proves — and does not
 

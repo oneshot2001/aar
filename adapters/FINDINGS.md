@@ -451,3 +451,48 @@ adapters/vms/live/evidence/.
 - noticed_not_fixed: none. residual_uncertainty: whether procurement offices
   accept rc-pinned conformance language at all — untested with a real agency.
 - related_untouched: spec/, harness/, pyref/, adapters code — untouched.
+
+## D-66 Packet A Honesty Ledger (2026-08-28)
+
+- changed: D-66 normative decision, CDDL policy-bound life-safety/degraded
+  markers, conformance reasons/observations/per-dispatch order, five
+  evidence-commit KATs, both verifier implementations, and the shared EP
+  pre-send receipt commit. The review-found self-asserted life-safety hole is
+  closed by requiring `action_name` membership in the bound trust policy's
+  optional `life_safety_action_names`; an absent list binds no exemptions.
+  VAPIX and VMS offline/live runners now include S7, and
+  `demo/run-scenario.ts` supplies the S7 content/online oracle; offline proves
+  zero attributable dispatch and unchanged camera position.
+- packet_deviation: packet section 4 proposed injecting the journal failure
+  through the S6 witness seam. Packet A instead added
+  `JournalFaultOptions.failActionAttemptCommitForCommandDigest` in
+  `demo/ep/journal.ts`, scoped to the exact command digest, because the S6 seam
+  runs after the journal gate and therefore cannot exercise the pre-send
+  commitment failure.
+- related_untouched: anchoring remains asynchronous and does not gate dispatch;
+  S5 post-send crash/reconciliation semantics and S6 after-send response
+  withholding remain unchanged; countersign and multi-step ontology remain out
+  of scope.
+- noticed_not_fixed: the packet names 191 frozen fixtures, while this branch's
+  pre-change C2 corpus contains 192 because D-60 added
+  `request/coordinate-mismatch`; preservation is therefore measured over all
+  192, not silently reported as 191. The supplied base was `4635d88`, while the
+  requested branch was already at `8f8d74c` (two later documentation commits,
+  with `4635d88` still an ancestor); the branch was not rewound.
+- residual_uncertainty: policy binding fixes the EP-self-asserted exemption, but
+  the offline verifier still cannot detect a compromised EP that omits the
+  life-safety marker and lies about `committed_at`, or bypasses the mediated
+  adapter path; those remain inside the trusted-EP/clock boundary.
+- verification_gap: S7 is green offline through pyref for both adapters, but the
+  live VAPIX and VMS S7 legs were not executed in this packet. They remain gated
+  for the next owned-camera exclusive-control window with
+  `AAR_LIVE_WINDOW=1`. On 2026-08-28 the builder's sandboxed `bun test` run
+  reported 86 pass / 1 fail (the live-proxy test could not bind a loopback port
+  in that sandbox, `EADDRINUSE`); the gate's two unsandboxed re-runs the same
+  day reported 87 pass / 0 fail, 1,496 assertions — the failure was
+  environmental, not a property of the branch.
+  `python3 -m pyref.kat --slice all` completed C1 51/51 in every
+  recomputation category and C2 197/197, with zero mismatches or divergences and
+  deterministic verdicts 197/197. All 192 pre-packet C2 verdict digests remain
+  byte-identical; the results diff contains only the five added D-66 rows and
+  aggregate count updates.

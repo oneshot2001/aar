@@ -1,0 +1,8 @@
+{
+  "name": "journal-life-safety-degraded",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_observations": [
+    "degraded_dispatch"
+  ]
+}

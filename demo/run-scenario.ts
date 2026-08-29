@@ -9,6 +9,7 @@ import { LocalRfc6962Log } from "./anchor/log";
 import { createVapixStub, createVmsStub } from "./adapters/stub";
 import { DurableInvocationJournal } from "./ep/journal";
 import { produce, type ProducerResult } from "./ep/producer";
+import { buildCommandManifest } from "./ep/command-manifest";
 import { loadDemoKeys } from "./keys/keys";
 import { AppendOnlyWitnessLog } from "./witness/log";
 
@@ -53,6 +54,7 @@ export interface ScenarioRunOptions {
   readonly expectedFailureReason?: string;
   readonly transformBundle?: (bundle: Uint8Array) => Uint8Array;
   readonly afterDispatchCut?: () => Promise<void>;
+  readonly journalUnavailableBeforeSend?: boolean;
 }
 
 function object(value: CborValue | undefined): value is Obj {
@@ -123,7 +125,8 @@ export function assertBundleContent(
     if (attemptBody.disposition !== "not_dispatched"
       || typeof refusalReason !== "string"
       || !refusalReason
-      || (scenarioId === "S3" && refusalReason !== "delegation-expired")) {
+      || (scenarioId === "S3" && refusalReason !== "delegation-expired")
+      || (scenarioId === "S7" && refusalReason !== "journal/unavailable")) {
       throw new Error("content assertion failed: refusal not receipted");
     }
     if (((attempt.evidence as Obj).outcome as Obj).level !== gate.expected_outcome_level) throw new Error("content assertion failed: refusal outcome level mismatch");
@@ -145,6 +148,9 @@ export function assertContent(
   if (pyrefOutput.includes("stateful_not_evaluated")) throw new Error("content assertion failed: stateful_not_evaluated");
   if (!pyrefOutput.includes("evaluated_profile: AAR-3")) throw new Error("content assertion failed: evaluated profile is not AAR-3");
   if (!pyrefOutput.includes("coverage: complete")) throw new Error("content assertion failed: scope is not complete");
+  if (scenarioId === "S7" && !pyrefOutput.includes("refused_pre_dispatch")) {
+    throw new Error("content assertion failed: S7 missing refused_pre_dispatch observation");
+  }
   assertBundleContent(scenarioId, gate, adapter, bundleBytes);
 }
 
@@ -161,6 +167,16 @@ export async function assertOnlineOracle(
     const valid = producer.wire.allDelegations.filter((token) => (token.not_before as number) <= gate.evaluated_at && gate.evaluated_at < (token.not_after as number));
     if (expired.length !== 1 || valid.length !== 1 || producer.wire.selectedDelegation.delegation_id !== expired[0]!.delegation_id) {
       throw new Error("online oracle failed: S3 token-time/refusal binding");
+    }
+    return;
+  }
+  if (scenarioId === "S7") {
+    if (producer.dispatchCount !== 0 || producer.dispatchResult !== undefined || attributable.length !== 0) {
+      throw new Error("online oracle failed: S7 has attributable dispatch");
+    }
+    const attempt = producer.wire.receipts.find((receipt) => receipt.kind === "action_attempt");
+    if ((attempt?.fields.body as Obj | undefined)?.refusal_reason !== "journal/unavailable") {
+      throw new Error("online oracle failed: S7 refusal reason missing");
     }
     return;
   }
@@ -270,6 +286,18 @@ export async function runScenario(
   const bundlePath = join(outputDirectory, `${scenarioId}.cbor`);
   const trustPolicyPath = join(outputDirectory, `${scenarioId}.trust-policy.json`);
   const witnessLogPath = join(outputDirectory, `${scenarioId}.witness.jsonl`);
+  const journalFaultDigest = options.journalUnavailableBeforeSend
+    ? toHex(buildCommandManifest({
+      actionName: gate.action_name,
+      targetId: fromHex(gate.target_id),
+      targetLogicalName: gate.target_logical_name,
+      parameters: gate.parameters,
+      invocationId: fromHex(gate.invocation_id),
+    }, adapter.id, adapter.version).command_digest)
+    : undefined;
+  const journal = new DurableInvocationJournal(join(outputDirectory, "ep.journal.jsonl"), {
+    failActionAttemptCommitForCommandDigest: journalFaultDigest,
+  });
   const producer = await produce({
     scenarioId, evaluatedAt: gate.evaluated_at, epochId: gate.epoch_id,
     invocationId: fromHex(gate.invocation_id), correlationId: fromHex(gate.correlation_id), tenantId: fromHex(gate.tenant_id), siteId: fromHex(gate.site_id), targetId: fromHex(gate.target_id),
@@ -277,11 +305,18 @@ export async function runScenario(
     sourceDeviceMetadata: gate.source_device,
     delegationWindows: gate.delegation_candidates.map((item) => ({ notBefore: item.not_before, notAfter: item.not_after })),
     bundlePath, trustPolicyPath, witnessLogPath, adapter, keys: await loadDemoKeys(keyDirectory),
-    journal: new DurableInvocationJournal(join(outputDirectory, "ep.journal.jsonl")),
+    journal,
     anchorLog: new LocalRfc6962Log(join(outputDirectory, "anchor.jsonl")),
     anchorObservedAt: gate.anchor_observed_at,
     afterDispatchCut: options.afterDispatchCut,
   });
+  if (options.journalUnavailableBeforeSend) {
+    const records = await journal.records(gate.invocation_id);
+    if (records.some((record) => record.event === "action_attempt_committed")
+      || !records.some((record) => record.event === "refusal_persisted" && record.data.reason === "journal/unavailable")) {
+      throw new Error("S7 journal fault did not fail closed at the command-bound action_attempt commit");
+    }
+  }
   if (options.transformBundle) await writeFile(bundlePath, options.transformBundle(producer.wire.bundle));
   const process = Bun.spawn([
     "python3", "-m", "pyref", "verify", bundlePath, "--at", String(gate.evaluated_at),
@@ -313,7 +348,7 @@ export async function runScenario(
 if (import.meta.main) {
   const scenarioId = process.argv[2] as ScenarioId | undefined;
   const gateInputPath = process.argv[3];
-  if (!scenarioId || !/^S[1-6]$/.test(scenarioId) || !gateInputPath) throw new Error("usage: bun run demo/run-scenario.ts S1..S6 GATE-INPUT.json");
+  if (!scenarioId || !/^S[1-7]$/.test(scenarioId) || !gateInputPath) throw new Error("usage: bun run demo/run-scenario.ts S1..S7 GATE-INPUT.json");
   const absoluteInput = resolve(gateInputPath);
   const gate = JSON.parse(await readFile(absoluteInput, "utf8")) as GateInputFile;
   const adapter = gate.adapter === "vapix" ? createVapixStub() : createVmsStub();

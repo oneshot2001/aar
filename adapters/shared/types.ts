@@ -1,6 +1,6 @@
 import type { CborValue } from "../../harness/cbor";
 
-export type ScenarioId = "S1" | "S2" | "S3" | "S4" | "S5" | "S6";
+export type ScenarioId = "S1" | "S2" | "S3" | "S4" | "S5" | "S6" | "S7";
 export type ActionName = "camera.ptz.preset" | "camera.stream.view";
 export type LogicalTargetName = "ptz-primary" | "fixed-primary";
 export type AdapterId = "vapix" | "vms" | `${string}-stub`;

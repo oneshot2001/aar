@@ -1,0 +1,7 @@
+{
+  "name": "journal-life-safety-unbound",
+  "object_type": "bundle",
+  "expectation": "nonconformant",
+  "expected_code": "receipt/hazard-class-unbound",
+  "expected_observations": []
+}

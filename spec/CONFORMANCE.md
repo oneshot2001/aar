@@ -142,8 +142,19 @@ normative as the step order itself (D-54).
     `canonical-manifest-payload`, rejecting an unresolved reference with
     `receipt/consumption-ref-unresolved`;
     decision/presentation conditional fields and presentation signer mode;
-    action-attempt/refusal conditional fields; normalized action/command
-    agreement; and dispatch/outcome subject agreement.
+    action-attempt/refusal conditional fields; reject an unknown `hazard_class`
+    enum with `schema/enum-unknown`; require every
+    `hazard_class="life_safety"` marker's normalized `action_name` to occur in
+    the bound trust policy's optional `life_safety_action_names` list, otherwise
+    reject with `receipt/hazard-class-unbound`; then degraded-marker constraints;
+    normalized action/command agreement; and dispatch/outcome subject agreement,
+    in that order. If no `life_safety_action_names` list is bound, every
+    life-safety marker is unbound. `refusal_reason="journal/unavailable"` is valid
+    only on a `not_dispatched` attempt. A `degraded` marker is valid only when its
+    reason is `journal/unavailable`, the policy-bound normalized action carries
+    `hazard_class="life_safety"`, and the attempt remains
+    `eligible_for_dispatch`; every other marker combination is
+    `receipt/attempt-disposition` (D-54, D-66).
 11. **Replay and freshness.** Require `issued_at <= committed_at < expires_at`,
     exact intended-parent equality, invocation-ID consistency, unexpired leases,
     and no prior different use of a one-time `(replay_domain, invocation_id)`.
@@ -166,7 +177,23 @@ normative as the step order itself (D-54).
     that fails to resolve, is `graph/dominator-missing`. The top-level
     `delegations` array exists to resolve `parent_delegations` references. A
     verifier MUST NOT skip delegation evaluation when a reference fails to
-    resolve (D-53).
+    resolve (D-53). For each dispatch in array order, after that dispatch's
+    dominance, embedded-delegation, scope, time and parent-delegation checks
+    succeed, apply D-66 before moving to the next dispatch (D-54). On an AAR-3
+    profile, the linked `action_attempt` is committed
+    before the action-bearing send only if (a) its signed binding supplies the
+    same epoch owner and epoch as the dispatch, (b) its `epoch_seq` is lower than
+    the dispatch's, and (c) its `emission.committed_at` is no later than
+    `dispatch.body.dispatched_at`. A dispatch
+    without that prior journal commitment is `nonconformant` with
+    `journal/uncommitted-dispatch`. The only exception is an action carrying
+    policy-bound `hazard_class="life_safety"` and an attempt carrying
+    `degraded.reason="journal/unavailable"`; that dispatch remains conformant and
+    records `degraded_dispatch`. This exemption comes only from the bound trust
+    policy and is never established by an EP assertion alone. Anchoring is
+    asynchronous and MUST NOT enter this check. An AAR-3 `not_dispatched` attempt with
+    `refusal_reason="journal/unavailable"` and no dispatch naming it records
+    `refused_pre_dispatch`.
 14. **Epoch state machine.** Validate owner/event chains, monotonic epoch IDs and
     event sequences, predecessor manifest digest, one open and one close, duration,
     sequence span/count, immutable close, late-arrival routing, anchor deadline,
@@ -297,10 +324,12 @@ an epoch boundary.
 
 ## 3. Closed reason-code table
 
-This table is the complete rejection vocabulary for W-1 through W-10. Every code
+This table is the complete reason-code vocabulary for W-1 through W-10. Every code
 has exactly the trigger written here. Implementations MUST NOT invent synonyms or
-emit a code for a different trigger. Where one input has several defects, section
-2 selects the first code.
+emit a code for a different trigger. All entries are verifier rejection reasons
+except `journal/unavailable`, which is explicitly the closed operational refusal
+reason carried by an `action_attempt` receipt and is never a verdict reason. Where
+one input has several defects, section 2 selects the first verifier code.
 
 | Code | Exact trigger |
 |---|---|
@@ -368,10 +397,13 @@ emit a code for a different trigger. Where one input has several defects, sectio
 | `receipt/manifest-inconsistent` | Consumption, presentation, decision, or command manifest ordinals, counts, or cross-references disagree after direct byte/digest checks. |
 | `receipt/consumption-ref-unresolved` | An inference `consumption_manifest_id` resolves to neither a `derived_from` parent observation's consumption-manifest digest nor a carried canonical-manifest-payload digest. |
 | `receipt/decision-presentation` | Presentation presence or approver fields disagree with the decision enum. |
-| `receipt/attempt-disposition` | `not_dispatched` lacks `refusal_reason`, or `eligible_for_dispatch` carries one. |
+| `receipt/attempt-disposition` | `not_dispatched` lacks `refusal_reason`; `eligible_for_dispatch` carries one; `journal/unavailable` appears outside a `not_dispatched` refusal; or a `degraded` marker is not exactly the life-safety exception described at step 10. |
+| `receipt/hazard-class-unbound` | A normalized action carries `hazard_class="life_safety"`, but its `action_name` does not occur in the bound trust policy's `life_safety_action_names` list, including when that optional list is absent. |
 | `receipt/action-command-mismatch` | Normalized action and command action/target/parameter commitment disagree. |
 | `receipt/dispatch-attempt-mismatch` | Dispatch does not name the command and attempt selected by `attempted_as`. |
 | `receipt/outcome-subject-mismatch` | Outcome subject is not its `observed_outcome` dispatch/attempt parent. |
+| `journal/unavailable` | Operational refusal reason: before an AAR-3 non-life-safety action-bearing send, neither the primary nor emergency journal can durably commit the `action_attempt`; the EP emits a `not_dispatched` attempt carrying this exact `refusal_reason`. This code never appears as a verifier verdict reason. |
+| `journal/uncommitted-dispatch` | On an AAR-3 profile, a dispatch's linked attempt lacks the prior journal commitment defined at step 13 and is not the marked life-safety exception. |
 | `credential/root-not-accepted` | Credential path ends at a root not accepted for the bound tenant/site. |
 | `credential/path-invalid` | Path within its schema length is not a contiguous issuer/subject chain or contains a loop. |
 | `credential/kid-key-mismatch` | SHA-256 of the credential's carried DER SubjectPublicKeyInfo differs from `subject_kid`. |
@@ -466,6 +498,11 @@ first-failure reason:
 - `ingress_completeness_not_established`: no independent census/reconciliation;
 - `membership_only`: a Merkle proof establishes no completeness;
 - `anchor_existence_order_only`: anchor establishes neither truth nor completeness;
+- `refused_pre_dispatch`: an AAR-3 attempt was refused with
+  `journal/unavailable` and no dispatch names it;
+- `degraded_dispatch`: an AAR-3 action marked `life_safety` proceeded without the
+  normal prior journal commitment, was allowed by the bound trust policy, and
+  carried the required `degraded` marker;
 - `empty_scope` (GATE3 F4): the bundle verified `conformant` over zero receipts
   matching the selector — the verdict asserts nothing about any receipt;
 - `stateful_not_evaluated` (GATE3 F6): no prior evaluated state was supplied, so
@@ -529,6 +566,8 @@ verdict-fields = (
     / "ingress_completeness_not_established"
     / "membership_only"
     / "anchor_existence_order_only"
+    / "refused_pre_dispatch"
+    / "degraded_dispatch"
   ) ],
 )
 

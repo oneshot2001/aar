@@ -54,8 +54,10 @@ artifacts for every transform of it.
   mirrored from the D2b VAPIX adapter
 - `vigil-control/` — SwiftPM executable mediator (path-dep on the Vigil repo)
 - `mock/` — in-memory vigil-control double + witness transport
-- `offline/run.ts` — S1–S4 + S6 suite through pyref (S5 crash-cut runs once
+- `offline/run.ts` — S1–S4 + S6–S7 suite through pyref (S5 crash-cut runs once
   on the EP+VAPIX leg per Q5-2; this leg encodes `outcome_unknown` via
-  S6-after-send-timeout)
+  S6-after-send-timeout). S7 fails the exact command-bound pre-send journal
+  commit before the mediator is invoked, producing `journal/unavailable`, zero
+  attributable dispatch, and unchanged camera position.
 
 Run offline: `bun test adapters/vms` or `bun run adapters/vms/offline/run.ts`.

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { decodeCbor, encodeCbor, equalBytes } from "./cbor";
 import { verifySigned } from "./crypto";
 import { buildFixtures } from "./fixtures";
-import { buildClassBoundaryFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
+import { buildClassBoundaryFixtures, buildEvidenceCommitFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
 import { TEST_KEYS } from "./testkeys";
 import { verifyBundle } from "./verifier";
 import { readFileSync } from "node:fs";
@@ -100,6 +100,32 @@ describe("positive KAT harness", () => {
       } else {
         const terminals = levels.filter((level) => level === "contradicted" || level === "unknown");
         expect(`${terminals[0]}_before_${terminals[1]}`, fixture.filename).toBe(fixture.descriptor.terminal_order);
+      }
+    }
+  }, 30_000);
+
+  test("D-66 evidence-commit fixtures match files and exact verdict behavior", () => {
+    const first = buildEvidenceCommitFixtures(); const second = buildEvidenceCommitFixtures();
+    expect(first).toHaveLength(5);
+    for (let index = 0; index < first.length; index += 1) {
+      const fixture = first[index]!;
+      expect(equalBytes(fixture.bytes, second[index]!.bytes), fixture.filename).toBe(true);
+      expect(equalBytes(fixture.bytes, readFileSync(join(root, "kats", "evidence-commit", `${fixture.filename}.cbor`))), fixture.filename).toBe(true);
+      expect(JSON.parse(readFileSync(join(root, "kats", "evidence-commit", `${fixture.filename}.json`), "utf8")), fixture.filename).toEqual(fixture.descriptor);
+      const result = verifyBundle(fixture.bytes, { evaluationTime: AT });
+      if (fixture.descriptor.expectation === "nonconformant") {
+        expect(result.ok, fixture.filename).toBe(false);
+        if (!result.ok) {
+          expect(result.reason, fixture.filename).toBe(fixture.descriptor.expected_code);
+          expect(result.step, fixture.filename).toBe(
+            fixture.descriptor.expected_code === "receipt/hazard-class-unbound" ? 10 : 13,
+          );
+        }
+      } else {
+        expect(result.ok, fixture.filename).toBe(true);
+        if (result.ok) for (const observation of fixture.descriptor.expected_observations) {
+          expect(result.observations.includes(observation), `${fixture.filename}:${observation}`).toBe(true);
+        }
       }
     }
   }, 30_000);

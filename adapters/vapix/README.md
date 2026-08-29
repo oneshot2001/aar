@@ -20,6 +20,13 @@ without recording headers. The adapter itself contains no mock modes; with no
 test transport injected it uses the Node HTTP transport through the configured
 witness proxy.
 
+S7 injects a command-digest-scoped failure at the EP's pre-send action-attempt
+journal commit. It produces a conformant `not_dispatched` receipt with
+`journal/unavailable`, zero invocation-attributable witness entries, unchanged
+mock camera position, and a `refused_pre_dispatch` pyref observation. The same
+scenario is present in the live runner but remains gated by
+`AAR_LIVE_WINDOW=1`.
+
 ## D2b configuration
 
 D2b must supply the named values represented by `VAPIX_FILL_AT_D2`: PTZ and

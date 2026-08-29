@@ -336,12 +336,21 @@ def _schema_bundle(bundle: Any) -> dict[str, Any]:
     trust = _closed_map(
         bundle["trust_inputs"],
         {"evaluation_time", "trust_store", "expected_anchor_heads", "verifier_policy_digest"},
+        {"life_safety_action_names"},
     )
     if not _uint(trust["evaluation_time"]):
         _fail("schema/bad-type", 3)
     _check_fixed(trust["verifier_policy_digest"], 32)
     if not isinstance(trust["expected_anchor_heads"], list):
         _fail("schema/bad-type", 3)
+    if "life_safety_action_names" in trust:
+        names = trust["life_safety_action_names"]
+        if not isinstance(names, list):
+            _fail("schema/bad-type", 3)
+        if len(names) > 64:
+            _fail("schema/out-of-range", 3)
+        for name in names:
+            _check_text(name)
 
     if hashes.selector_commitment(selector) != bundle["selector_commitment"]:
         _fail("bundle/selector-commitment", 3)
@@ -1059,6 +1068,24 @@ def _receipt_semantics(state: State) -> None:
             action, command = body["action"], body["command"]
             if not isinstance(action, dict) or not isinstance(command, dict):
                 _fail("schema/bad-type", 10)
+            hazard_class = action.get("hazard_class")
+            if hazard_class is not None and hazard_class != "life_safety":
+                _fail("schema/enum-unknown", 10)
+            life_safety_action_names = state.bundle["trust_inputs"].get(
+                "life_safety_action_names", []
+            )
+            if hazard_class == "life_safety" \
+                    and action.get("action_name") not in life_safety_action_names:
+                _fail("receipt/hazard-class-unbound", 10)
+            degraded = body.get("degraded")
+            if degraded is not None and (
+                not isinstance(degraded, dict)
+                or set(degraded) != {"reason"}
+                or degraded.get("reason") != "journal/unavailable"
+                or hazard_class != "life_safety"
+                or disposition != "eligible_for_dispatch"
+            ):
+                _fail("receipt/attempt-disposition", 10)
             # A missing field on either side is disagreement (harness `same`
             # returns false when a side is absent), never a KeyError.
             for field in ("action_name", "target_id"):
@@ -1232,6 +1259,7 @@ def _graph_checks(state: State) -> dict[bytes, list[bytes]]:
 
 
 def _authorization_dominance(state: State, graph: dict[bytes, list[bytes]]) -> None:
+    dispatched_attempt_ids: set[bytes] = set()
     for dispatch in (env for env in state.envelopes["receipts"] if env.payload["kind"] == "dispatch"):
         dispatch_receipt = dispatch.payload
         attempted = [parent for parent in dispatch_receipt["parents"] if parent["edge_type"] == "attempted_as"]
@@ -1240,6 +1268,7 @@ def _authorization_dominance(state: State, graph: dict[bytes, list[bytes]]) -> N
         attempt = state.receipts_by_id.get(attempted[0]["parent_id"])
         if attempt is None:
             _fail("graph/dominator-missing", 13)
+        dispatched_attempt_ids.add(attempt.payload["receipt_id"])
         authorizations = [parent for parent in attempt.payload["parents"] if parent["edge_type"] == "authorized_by"]
         if not authorizations:
             _fail("graph/dominator-missing", 13)
@@ -1282,6 +1311,43 @@ def _authorization_dominance(state: State, graph: dict[bytes, list[bytes]]) -> N
             known = {env.payload["delegation_id"] for env in state.envelopes["delegations"]}
             if any(parent not in known for parent in parents):
                 _fail("delegation/chain-invalid", 13)
+
+        assert state.bundle is not None
+        if state.bundle["claimed_profile"] == "AAR-3":
+            attempt_binding = attempt.payload["binding"]
+            dispatch_binding = dispatch_receipt["binding"]
+            attempt_committed_at = attempt.payload["emission"]["committed_at"]
+            committed_before_dispatch = (
+                attempt_binding["epoch_owner_kid"] == dispatch_binding["epoch_owner_kid"]
+                and attempt_binding["epoch_id"] == dispatch_binding["epoch_id"]
+                and attempt_binding["epoch_seq"] < dispatch_binding["epoch_seq"]
+                and attempt_committed_at <= dispatch_receipt["body"]["dispatched_at"]
+            )
+            degraded = attempt_body.get("degraded")
+            life_safety_exception = (
+                action.get("hazard_class") == "life_safety"
+                and isinstance(degraded, dict)
+                and degraded.get("reason") == "journal/unavailable"
+            )
+            if not committed_before_dispatch and not life_safety_exception:
+                _fail("journal/uncommitted-dispatch", 13)
+            if not committed_before_dispatch and "degraded_dispatch" not in state.observations:
+                state.observations.append("degraded_dispatch")
+
+    assert state.bundle is not None
+    if state.bundle["claimed_profile"] == "AAR-3":
+        for attempt in (
+            env for env in state.envelopes["receipts"]
+            if env.payload["kind"] == "action_attempt"
+        ):
+            body = attempt.payload["body"]
+            if (
+                body.get("disposition") == "not_dispatched"
+                and body.get("refusal_reason") == "journal/unavailable"
+                and attempt.payload["receipt_id"] not in dispatched_attempt_ids
+                and "refused_pre_dispatch" not in state.observations
+            ):
+                state.observations.append("refused_pre_dispatch")
 
 
 def _epoch_state_machine(state: State) -> None:

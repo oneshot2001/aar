@@ -1,0 +1,7 @@
+{
+  "name": "journal-uncommitted-dispatch",
+  "object_type": "bundle",
+  "expectation": "nonconformant",
+  "expected_code": "journal/uncommitted-dispatch",
+  "expected_observations": []
+}

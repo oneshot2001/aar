@@ -102,19 +102,27 @@ export interface WireBuildInput {
   readonly adapterId: AdapterId;
   readonly command: BuiltCommandManifest;
   readonly delegationWindows: readonly DelegationWindow[];
-  readonly dispatch?: {
-    readonly status: number;
-    readonly responseBodyDigest: Uint8Array;
-    readonly outcomeLevel: "device_acknowledged" | "contradicted" | "unknown";
-    readonly outcomeState: "consistent" | "contradicted" | "unknown";
-    readonly observationDigest: Uint8Array;
-  };
+  readonly dispatch?: WireDispatch;
+  /** Called after the exact eligible action_attempt envelope exists and before any action-bearing send. */
+  readonly beforeDispatch?: (attempt: ReceiptBuild) => Promise<PreDispatchResult>;
   readonly refusalReason?: string;
   readonly narrative?: RealNarrative;
   readonly keys: Readonly<Record<DemoKeyRole, DemoKey>>;
   readonly anchorLog: LocalRfc6962Log;
   readonly anchorObservedAt?: number;
 }
+
+export interface WireDispatch {
+    readonly status: number;
+    readonly responseBodyDigest: Uint8Array;
+    readonly outcomeLevel: "device_acknowledged" | "contradicted" | "unknown";
+    readonly outcomeState: "consistent" | "contradicted" | "unknown";
+    readonly observationDigest: Uint8Array;
+}
+
+export type PreDispatchResult =
+  | { readonly dispatch: WireDispatch; readonly refusalReason?: never }
+  | { readonly dispatch?: never; readonly refusalReason: string };
 
 export interface ReceiptBuild {
   readonly id: Uint8Array;
@@ -147,6 +155,7 @@ export interface TrustPolicyJson {
     readonly root: string;
   }[];
   readonly verifier_policy_digest: string;
+  readonly life_safety_action_names?: readonly string[];
 }
 
 export interface WireBuildResult {
@@ -320,6 +329,9 @@ function trustPolicyJson(trust: Obj): TrustPolicyJson {
       tree_size: head.tree_size as number, root: toHex(head.root as Uint8Array),
     })),
     verifier_policy_digest: toHex(trust.verifier_policy_digest as Uint8Array),
+    ...(Array.isArray(trust.life_safety_action_names)
+      ? { life_safety_action_names: trust.life_safety_action_names as string[] }
+      : {}),
   };
 }
 
@@ -401,26 +413,44 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
     informational_reversibility: "reversible", operational_reversibility: "reversible",
   };
   const command = input.command as unknown as Obj;
-  const refused = input.scenarioId === "S3" || input.refusalReason !== undefined || input.narrative?.decision === "deny";
+  let refused = input.scenarioId === "S3" || input.refusalReason !== undefined || input.narrative?.decision === "deny";
+  let refusalReason = input.refusalReason;
+  let dispatchResult = input.dispatch;
   const attemptBody: Obj = {
     action, command, authorization_id: authorization.id, decision_commitment: decisionCommitment,
     disposition: refused ? "not_dispatched" : "eligible_for_dispatch",
   };
-  if (refused) attemptBody.refusal_reason = input.refusalReason ?? "delegation-expired";
-  const attempt = makeReceipt(input, "action_attempt", "ep", 3, [parent(authorization, "authorized_by", input)], attemptBody);
+  if (refused) attemptBody.refusal_reason = refusalReason ?? "delegation-expired";
+  let attempt = makeReceipt(input, "action_attempt", "ep", 3, [parent(authorization, "authorized_by", input)], attemptBody);
+
+  if (!refused && dispatchResult === undefined && input.beforeDispatch !== undefined) {
+    const result = await input.beforeDispatch(attempt);
+    if (result.refusalReason !== undefined) {
+      refused = true;
+      refusalReason = result.refusalReason;
+      attempt = makeReceipt(input, "action_attempt", "ep", 3, [parent(authorization, "authorized_by", input)], {
+        ...attemptBody,
+        disposition: "not_dispatched",
+        refusal_reason: refusalReason,
+      });
+    } else {
+      dispatchResult = result.dispatch;
+    }
+  }
   const receipts: ReceiptBuild[] = [observation, inference, authorization, attempt];
 
   if (!refused) {
-    if (!input.dispatch) throw new Error("authorized scenario requires dispatch result");
-    const dispatch = makeReceipt(input, "dispatch", "ep", 4, [parent(attempt, "attempted_as", input)], {
+    if (!dispatchResult) throw new Error("authorized scenario requires dispatch result");
+    const effectiveInput: WireBuildInput = { ...input, dispatch: dispatchResult };
+    const dispatch = makeReceipt(effectiveInput, "dispatch", "ep", 4, [parent(attempt, "attempted_as", input)], {
       attempt_id: attempt.id, command_id: input.command.command_id, dispatched_at: input.narrative?.dispatchedAt ?? input.evaluatedAt - 46,
-      target_status: input.dispatch.status, target_response_body_digest: input.dispatch.responseBodyDigest, adapter_invocation_id: input.invocationId,
+      target_status: dispatchResult.status, target_response_body_digest: dispatchResult.responseBodyDigest, adapter_invocation_id: input.invocationId,
     });
     receipts.push(dispatch);
     const observer: Obj = { ...sourceDevice, failure_domain_id: sourceDevice.failure_domain_id! };
-    receipts.push(makeReceipt(input, "outcome_observation", "outcome", 5, [parent(dispatch, "observed_outcome", input)], {
+    receipts.push(makeReceipt(effectiveInput, "outcome_observation", "outcome", 5, [parent(dispatch, "observed_outcome", input)], {
       subject_id: dispatch.id, observer, observed_at: input.narrative?.outcomeObservedAt ?? input.evaluatedAt - 45,
-      state: input.dispatch.outcomeState, observation_commitment: input.dispatch.observationDigest,
+      state: dispatchResult.outcomeState, observation_commitment: dispatchResult.observationDigest,
     }));
   }
 

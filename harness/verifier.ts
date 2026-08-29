@@ -11,7 +11,7 @@ export type B1ReasonCode =
   | `identity/${string}` | `receipt/${string}` | `credential/${string}`
   | `replay/${string}` | `delegation/${string}` | `bundle/${string}`
   | `graph/${string}` | `epoch/${string}` | `merkle/${string}`
-  | `anchor/${string}` | `evidence/${string}`;
+  | `anchor/${string}` | `evidence/${string}` | `journal/${string}`;
 
 export type B1Failure = {
   ok: false;
@@ -316,12 +316,17 @@ function validateBundleSchema(bundle: CborValue): B1Failure | undefined {
 
   if (!object(bundle.trust_inputs)) return failure(3, "schema/bad-type", "bundle.trust_inputs");
   const trust = bundle.trust_inputs;
-  issue = closed(trust, ["evaluation_time", "trust_store", "expected_anchor_heads", "verifier_policy_digest"], ["evaluation_time", "trust_store", "expected_anchor_heads", "verifier_policy_digest"], 3, "bundle.trust_inputs");
+  issue = closed(trust, ["evaluation_time", "trust_store", "expected_anchor_heads", "verifier_policy_digest", "life_safety_action_names"], ["evaluation_time", "trust_store", "expected_anchor_heads", "verifier_policy_digest"], 3, "bundle.trust_inputs");
   if (issue) return issue;
   if (!uint(trust.evaluation_time)) return failure(3, "schema/bad-type", "bundle.trust_inputs.evaluation_time");
   if ((issue = fixed(trust.verifier_policy_digest, 32, 3, "bundle.trust_inputs.verifier_policy_digest"))) return issue;
   if (!Array.isArray(trust.expected_anchor_heads)) return failure(3, "schema/bad-type", "bundle.trust_inputs.expected_anchor_heads");
   if (trust.expected_anchor_heads.length < 1 || trust.expected_anchor_heads.length > 32) return failure(3, "schema/out-of-range", "bundle.trust_inputs.expected_anchor_heads");
+  if (trust.life_safety_action_names !== undefined) {
+    if (!Array.isArray(trust.life_safety_action_names)) return failure(3, "schema/bad-type", "bundle.trust_inputs.life_safety_action_names");
+    if (trust.life_safety_action_names.length > 64) return failure(3, "schema/out-of-range", "bundle.trust_inputs.life_safety_action_names");
+    for (const name of trust.life_safety_action_names) if ((issue = textSize(name, 128, 3, "bundle.trust_inputs.life_safety_action_names"))) return issue;
+  }
   if (!object(trust.trust_store)) return failure(3, "schema/bad-type", "bundle.trust_inputs.trust_store");
   const store = trust.trust_store;
   issue = closed(store, ["digest", "snapshot_id", "created_at", "roots"], ["digest", "snapshot_id", "created_at", "roots"], 3, "bundle.trust_inputs.trust_store");
@@ -891,6 +896,7 @@ function bodyKind(body: Obj): string | undefined {
 }
 
 function validateReceiptSemantics(bundle: Obj, parsed: Parsed): B1Failure | undefined {
+  const lifeSafetyActionNames = (bundle.trust_inputs as Obj).life_safety_action_names;
   const byId = new Map(parsed.receipt.map((entry) => [toHex(entry.payload.receipt_id as Uint8Array), entry]));
   const manifestDigests = new Set(((bundle.artifacts as Obj).manifest_payloads as Obj[]).map((value) => toHex(value.digest as Uint8Array)));
   for (const receipt of parsed.receipt) {
@@ -937,6 +943,18 @@ function validateReceiptSemantics(bundle: Obj, parsed: Parsed): B1Failure | unde
       if ((body.disposition === "not_dispatched") !== (body.refusal_reason !== undefined)) return failure(10, "receipt/attempt-disposition", "receipt.body.disposition");
       if (!object(body.action) || !object(body.command)) return failure(10, "schema/bad-type", "receipt.body");
       const action = body.action; const command = body.command;
+      if (action.hazard_class !== undefined && action.hazard_class !== "life_safety") return failure(10, "schema/enum-unknown", "receipt.body.action.hazard_class");
+      if (action.hazard_class === "life_safety" && (!Array.isArray(lifeSafetyActionNames)
+        || !lifeSafetyActionNames.some((name) => same(name, action.action_name)))) {
+        return failure(10, "receipt/hazard-class-unbound", "receipt.body.action.hazard_class");
+      }
+      if (body.degraded !== undefined && (!object(body.degraded)
+        || Object.keys(body.degraded).length !== 1
+        || body.degraded.reason !== "journal/unavailable"
+        || action.hazard_class !== "life_safety"
+        || body.disposition !== "eligible_for_dispatch")) {
+        return failure(10, "receipt/attempt-disposition", "receipt.body.degraded");
+      }
       let decodedCommand: CborValue | undefined;
       try { decodedCommand = decodeCbor(command.canonical_command as Uint8Array, { strict: true }); } catch { /* hash checks already ran */ }
       if (!same(action.action_name, command.action_name) || !same(action.target_id, command.target_id) || !object(decodedCommand) || !same(decodedCommand.operation, action.action_name) || !same(decodedCommand.target, action.target_id) || !same(decodedCommand.parameters_digest, action.parameters_digest)) return failure(10, "receipt/action-command-mismatch", "receipt.body.command");
@@ -1097,14 +1115,16 @@ function validateGraph(parsed: Parsed): B1Failure | undefined {
   return undefined;
 }
 
-function validateDominance(parsed: Parsed): B1Failure | undefined {
+function validateDominance(bundle: Obj, parsed: Parsed, observations: string[]): B1Failure | undefined {
   const byId = receiptsById(parsed);
   const parentDelegations = new Map(parsed.delegation.map((entry) => [toHex(entry.payload.delegation_id as Uint8Array), entry]));
   const embeddedDelegations = new Map(parsed.embeddedDelegations.map((entry) => [toHex(entry.authorization.payload.receipt_id as Uint8Array), entry.delegation]));
+  const dispatchedAttemptIds = new Set<string>();
   for (const dispatch of parsed.receipt.filter((entry) => entry.payload.kind === "dispatch")) {
     const attemptEdges = (dispatch.payload.parents as Obj[]).filter((edge) => edge.edge_type === "attempted_as");
     const attempt = attemptEdges.length === 1 ? byId.get(toHex(attemptEdges[0]!.parent_id as Uint8Array)) : undefined;
     if (attempt === undefined || attempt.payload.kind !== "action_attempt") return failure(13, "graph/dominator-missing", "dispatch.parents");
+    dispatchedAttemptIds.add(toHex(attempt.payload.receipt_id as Uint8Array));
     const authorizationEdges = (attempt.payload.parents as Obj[]).filter((edge) => edge.edge_type === "authorized_by");
     if (authorizationEdges.length === 0) return failure(13, "graph/dominator-missing", "attempt.parents");
     if (authorizationEdges.length > 1) return failure(13, "graph/dominator-ambiguous", "attempt.parents");
@@ -1124,6 +1144,31 @@ function validateDominance(parsed: Parsed): B1Failure | undefined {
     for (const parentId of delegation.payload.parent_delegations as CborValue[]) {
       const parent = bytes(parentId, 32) ? parentDelegations.get(toHex(parentId)) : undefined;
       if (parent === undefined || (parent.payload.not_before as number) > (delegation.payload.not_before as number) || (parent.payload.not_after as number) < (delegation.payload.not_after as number)) return failure(13, "delegation/chain-invalid", "authorization.body.delegation.parent_delegations");
+    }
+    if (bundle.claimed_profile === "AAR-3") {
+      const attemptBinding = attempt.payload.binding as Obj;
+      const dispatchBinding = dispatch.payload.binding as Obj;
+      const attemptEmission = attempt.payload.emission as Obj;
+      const dispatchBody = dispatch.payload.body as Obj;
+      const committedBeforeDispatch = same(attemptBinding.epoch_owner_kid, dispatchBinding.epoch_owner_kid)
+        && attemptBinding.epoch_id === dispatchBinding.epoch_id
+        && (attemptBinding.epoch_seq as number) < (dispatchBinding.epoch_seq as number)
+        && (attemptEmission.committed_at as number) <= (dispatchBody.dispatched_at as number);
+      const degraded = attemptBody.degraded;
+      const action = attemptBody.action as Obj;
+      const lifeSafetyException = action.hazard_class === "life_safety"
+        && object(degraded) && degraded.reason === "journal/unavailable";
+      if (!committedBeforeDispatch && !lifeSafetyException) {
+        return failure(13, "journal/uncommitted-dispatch", "dispatch.parents.attempted_as");
+      }
+      if (!committedBeforeDispatch) observe(observations, "degraded_dispatch");
+    }
+  }
+  if (bundle.claimed_profile === "AAR-3") for (const attempt of parsed.receipt.filter((entry) => entry.payload.kind === "action_attempt")) {
+    const body = attempt.payload.body as Obj;
+    if (body.disposition === "not_dispatched" && body.refusal_reason === "journal/unavailable"
+      && !dispatchedAttemptIds.has(toHex(attempt.payload.receipt_id as Uint8Array))) {
+      observe(observations, "refused_pre_dispatch");
     }
   }
   return undefined;
@@ -1570,7 +1615,7 @@ function validateBundle(input: Uint8Array, options: VerifyB1Options): B1Verifica
   if (replayIssue) return replayIssue;
   const graphIssue = validateGraph(parsed);
   if (graphIssue) return graphIssue;
-  const dominanceIssue = validateDominance(parsed);
+  const dominanceIssue = validateDominance(bundle, parsed, observations);
   if (dominanceIssue) return dominanceIssue;
   const epochIssue = validateEpochs(parsed);
   if (epochIssue) return epochIssue;

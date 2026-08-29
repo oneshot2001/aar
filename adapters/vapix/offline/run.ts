@@ -20,7 +20,7 @@ import { InMemoryWitnessTransport } from "../mock/transport";
 type Obj = Record<string, CborValue>;
 
 export interface OfflineScenarioSummary {
-  readonly scenario: "S1" | "S2" | "S3" | "S4" | "S5" | "S6-rejection" | "S6-after-send-timeout";
+  readonly scenario: "S1" | "S2" | "S3" | "S4" | "S5" | "S6-rejection" | "S6-after-send-timeout" | "S7";
   readonly verification: "conformant" | "nonconformant";
   readonly outcome: string;
   readonly oracle: "PASS";
@@ -190,21 +190,20 @@ export async function runOfflineSuite(requestedRoot?: string): Promise<OfflineSu
   const summaries: OfflineScenarioSummary[] = [];
   const execute = async (
     name: OfflineScenarioSummary["scenario"],
-    scenarioId: "S1" | "S2" | "S3" | "S4" | "S6",
+    scenarioId: "S1" | "S2" | "S3" | "S4" | "S6" | "S7",
     input: GateInputFile,
     mode: MockFaultMode = "normal",
     tamper = false,
+    journalDown = false,
   ): Promise<ScenarioRunResult> => {
     backend.setFaultMode(mode);
     const witnessPath = join(input.output_dir, `${scenarioId}.witness.jsonl`);
     const httpTransport = new InMemoryWitnessTransport(backend, witnessPath);
     {
       const adapter = new VapixAdapter(adapterConfig("http://witness.invalid"), { credentials, httpTransport });
-      const result = await runScenario(scenarioId, input, adapter, root, tamper ? {
-        expectedVerification: "nonconformant",
-        expectedFailureReason: "sig/verify-failed",
-        transformBundle: tamperPinnedRequestSignature,
-      } : {});
+      const result = await runScenario(scenarioId, input, adapter, root, tamper
+        ? { expectedVerification: "nonconformant", expectedFailureReason: "sig/verify-failed", transformBundle: tamperPinnedRequestSignature }
+        : journalDown ? { journalUnavailableBeforeSend: true } : {});
       const applicationStatus = result.producer.dispatchResult?.effect.backend_evidence.application_status;
       if (name === "S1" && applicationStatus !== "position_within_tolerance") throw new Error("S1 position evidence assertion failed");
       if (name === "S2" && applicationStatus !== "media_payload_valid") throw new Error("S2 media evidence assertion failed");
@@ -238,6 +237,17 @@ export async function runOfflineSuite(requestedRoot?: string): Promise<OfflineSu
       { not_before: s3Base.evaluated_at - 1, not_after: s3Base.evaluated_at + 600 },
     ] };
     await execute("S3", "S3", s3);
+
+    const s7Dir = join(root, "artifacts", "S7");
+    const s7CountersBefore = backend.counters();
+    const s7PositionBefore = backend.currentPosition();
+    await execute("S7", "S7", gate("S7", "camera.ptz.preset", "accepted", s7Dir), "normal", false, true);
+    const s7CountersAfter = backend.counters();
+    if (s7CountersAfter.presetDispatches !== s7CountersBefore.presetDispatches
+      || s7CountersAfter.restoreDispatches !== s7CountersBefore.restoreDispatches
+      || JSON.stringify(backend.currentPosition()) !== JSON.stringify(s7PositionBefore)) {
+      throw new Error("S7 journal failure moved the camera or dispatched an attributable command");
+    }
 
     const s4Dir = join(root, "artifacts", "S4");
     await execute("S4", "S4", gate("S4", "camera.ptz.preset", "device_acknowledged", s4Dir), "normal", true);

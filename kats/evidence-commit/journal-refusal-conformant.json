@@ -1,0 +1,8 @@
+{
+  "name": "journal-refusal-conformant",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_observations": [
+    "refused_pre_dispatch"
+  ]
+}

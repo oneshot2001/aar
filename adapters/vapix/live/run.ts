@@ -26,7 +26,7 @@ import {
 } from "./config";
 
 export interface LiveScenarioSummary {
-  readonly scenario: "S1" | "S2" | "S3" | "S4" | "S5" | "S6-rejection" | "S6-after-send-timeout";
+  readonly scenario: "S1" | "S2" | "S3" | "S4" | "S5" | "S6-rejection" | "S6-after-send-timeout" | "S7";
   readonly verification: "conformant" | "nonconformant";
   readonly outcome: string;
   readonly applicationStatus: string;
@@ -271,9 +271,9 @@ export async function runLiveSuite(requestedRoot?: string): Promise<LiveSuiteRes
 
   const execute = async (
     name: LiveScenarioSummary["scenario"],
-    scenarioId: "S1" | "S2" | "S3" | "S4" | "S6",
+    scenarioId: "S1" | "S2" | "S3" | "S4" | "S6" | "S7",
     input: GateInputFile,
-    options: { rejectionVariant?: boolean; fault?: WitnessFaultInjection; tamper?: boolean; parkFirst?: boolean } = {},
+    options: { rejectionVariant?: boolean; fault?: WitnessFaultInjection; tamper?: boolean; parkFirst?: boolean; journalDown?: boolean } = {},
   ): Promise<ScenarioRunResult> => {
     const witnessPath = join(input.output_dir, `${scenarioId}.witness.jsonl`);
     await mkdir(input.output_dir, { recursive: true });
@@ -287,11 +287,9 @@ export async function runLiveSuite(requestedRoot?: string): Promise<LiveSuiteRes
         liveVapixConfig(proxy.url, recoveryDirectory, { rejectionVariant: options.rejectionVariant, exclusiveControl: true }),
         { credentials },
       );
-      const result = await runScenario(scenarioId, input, adapter, root, options.tamper ? {
-        expectedVerification: "nonconformant",
-        expectedFailureReason: "sig/verify-failed",
-        transformBundle: tamperPinnedRequestSignature,
-      } : {});
+      const result = await runScenario(scenarioId, input, adapter, root, options.tamper
+        ? { expectedVerification: "nonconformant", expectedFailureReason: "sig/verify-failed", transformBundle: tamperPinnedRequestSignature }
+        : options.journalDown ? { journalUnavailableBeforeSend: true } : {});
       const evidence = result.producer.dispatchResult?.effect.backend_evidence;
       const applicationStatus = String(evidence?.application_status ?? "not_dispatched");
       if (name === "S1" && applicationStatus !== "position_within_tolerance") throw new Error(`S1 position evidence assertion failed: ${applicationStatus}`);
@@ -332,6 +330,9 @@ export async function runLiveSuite(requestedRoot?: string): Promise<LiveSuiteRes
     { not_before: s3Base.evaluated_at - 1, not_after: s3Base.evaluated_at + 600 },
   ] };
   await execute("S3", "S3", s3);
+
+  const s7Dir = join(root, "artifacts", "S7");
+  await execute("S7", "S7", gate("S7", "camera.ptz.preset", "accepted", s7Dir), { parkFirst: true, journalDown: true });
 
   const s4Dir = join(root, "artifacts", "S4");
   await execute("S4", "S4", gate("S4", "camera.ptz.preset", "device_acknowledged", s4Dir), { tamper: true, parkFirst: true });

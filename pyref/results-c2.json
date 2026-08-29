@@ -1,6 +1,6 @@
 {
   "deterministic": true,
-  "deterministic_fixtures": 192,
+  "deterministic_fixtures": 197,
   "divergence_count": 0,
   "divergences": [],
   "entry_point_findings": 1,
@@ -145,6 +145,88 @@
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
       "verdict_sha256": "982be60848098a93555ca7cbca73bdc6cfc5d50191fc26e076d3b6fc8f48c707"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "journal/uncommitted-dispatch",
+      "expected_result": "nonconformant",
+      "first_failure_step": 13,
+      "fixture": "kats/evidence-commit/journal-array-order-uncommitted-first.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "journal/uncommitted-dispatch",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "6da4180e5e4b073d61c567c0ec30a0800a9c81254d0bfc660554f0589dbf622e"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": null,
+      "expected_observations": [
+        "degraded_dispatch"
+      ],
+      "expected_result": "conformant",
+      "first_failure_step": null,
+      "fixture": "kats/evidence-commit/journal-life-safety-degraded.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": null,
+      "produced_observations": [
+        "degraded_dispatch"
+      ],
+      "produced_result": "conformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "7a9d84d346802548c08f4ac061f24c0601767ddeb95f5383f04fe00a32b7446d"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "receipt/hazard-class-unbound",
+      "expected_result": "nonconformant",
+      "first_failure_step": 10,
+      "fixture": "kats/evidence-commit/journal-life-safety-unbound.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "receipt/hazard-class-unbound",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "0803ade3d678d6e4ec46dbf32012a3dfc24de48103b02691a75d044a64ddbea7"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": null,
+      "expected_observations": [
+        "refused_pre_dispatch"
+      ],
+      "expected_result": "conformant",
+      "first_failure_step": null,
+      "fixture": "kats/evidence-commit/journal-refusal-conformant.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": null,
+      "produced_observations": [
+        "refused_pre_dispatch"
+      ],
+      "produced_result": "conformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "94ff8c4c759fdfc7331f27367c3807325d5f902c1f3ee7a73acdf052c9998ace"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "journal/uncommitted-dispatch",
+      "expected_result": "nonconformant",
+      "first_failure_step": 13,
+      "fixture": "kats/evidence-commit/journal-uncommitted-dispatch.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "journal/uncommitted-dispatch",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "549d751bdc5bff42831a0c911a61ed67372728415801442c2496cd05965c1301"
     },
     {
       "deterministic": true,
@@ -2695,8 +2777,8 @@
       "verdict_sha256": "8e9e12867bb1cfcd22f26bba9d879a8ec0b2b5a7dee05955692fc065a6db9db6"
     }
   ],
-  "fixtures_evaluated": 192,
-  "matches": 192,
+  "fixtures_evaluated": 197,
+  "matches": 197,
   "mismatches": 0,
   "schema_version": 1,
   "slice": "C2"

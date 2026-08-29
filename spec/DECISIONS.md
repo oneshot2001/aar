@@ -1031,3 +1031,47 @@ would attest to a verifier defect rather than a bundle property, and KAT
 coverage is inherently impossible — the trigger is by definition an unknown
 bug). Both implementations already implement this decision; ratified
 2026-08-15.
+
+## D-66 — AAR-3 commits action-attempt evidence before dispatch and fails closed when no journal is available
+
+**Decision.** For every AAR-3 action, the enforcement point MUST durably commit
+the signed `action_attempt` receipt to its primary or pre-allocated emergency
+journal before the action-bearing send. If neither journal can accept that
+commitment, the EP MUST refuse dispatch and emit a `not_dispatched`
+`action_attempt` with `refusal_reason="journal/unavailable"`. The verifier treats
+an AAR-3 dispatch whose linked attempt has no prior epoch commitment as
+`nonconformant` with `journal/uncommitted-dispatch`. The prior-commitment test is
+the exact step-13 order rule in CONFORMANCE: same epoch owner/id, lower attempt
+`epoch_seq`, and attempt `committed_at <= dispatched_at`.
+It runs only after the existing dominance, delegation, scope, and delegation-time
+checks (D-54).
+
+The exception is an action class that the site's hazard matrix marks
+`life_safety` and the verifier's bound trust policy lists in
+`life_safety_action_names`. AAR MUST NOT override that design: the EP proceeds,
+signs `degraded.reason="journal/unavailable"` on the attempt, and the verifier
+records `degraded_dispatch`. The normalized action carries the explicit
+`hazard_class="life_safety"` marker, but that EP assertion never establishes the
+exemption by itself; absence from the bound list, or absence of the list, is
+`receipt/hazard-class-unbound`. Absence of the marker means the ordinary
+fail-closed path. Anchoring remains asynchronous and never gates dispatch
+(R-16).
+
+**Claimed property.** Under AAR-3's trusted EP, key, clock, and complete-mediation
+assumptions, no AAR-3 executed action lacks a committed `action_attempt` receipt,
+except an explicitly marked life-safety fail-operational dispatch. This is a
+profile-bounded claim, not a claim that an offline verifier can detect a lying or
+compromised EP, an unmediated side channel, or later journal tail truncation.
+In particular, the verifier cannot detect a compromised EP that omits the
+life-safety marker and lies about the attempt's commit time; that remains
+residual risk under the trusted-EP and clock assumptions.
+
+**Why.** R-16 named the degraded-mode matrix, emergency journal, and life-safety
+override boundary but left the pre-send journal-unreachable case undefined.
+D2a's dispatch latch closes the post-send honesty window; it does not decide
+whether to send when evidence cannot first be committed. D-66 adopts the C5
+control in Muruaga et al., *Bounded Agents: Delegation Security for Multi-Agent
+AI Systems*, [arXiv:2608.15888 §C5](https://arxiv.org/abs/2608.15888), scoped to
+AAR-3 and the R-16 hazard exception. The optional wire markers and additive
+step-13 rule leave all pre-existing verdict preimages and fixture bytes unchanged
+(D-51).

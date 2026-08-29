@@ -13,14 +13,14 @@ import { MockVigilControl, type MockVigilControlConfig, type MockVmsFaultMode } 
 import { InMemoryMediatorWitnessTransport } from "../mock/transport";
 import { assertVmsMediationDiscipline, assertVmsPtzRestoreDiscipline } from "../oracle";
 
-// D3 offline suite — the VMS-mediated leg (S1–S4 + S6; S5 crash-cut runs once
+// D3 offline suite — the VMS-mediated leg (S1–S4 + S6–S7; S5 crash-cut runs once
 // on the EP+VAPIX leg per Q5-2, the VMS leg encodes outcome_unknown via
 // S6-after-send-timeout). Everything runs through EP -> witness transport ->
 // VmsAdapter -> mock vigil-control mediator -> pyref, with the same content
 // assertions and hygiene discipline as the D2a VAPIX offline suite.
 
 export interface VmsOfflineScenarioSummary {
-  readonly scenario: "S1" | "S2" | "S3" | "S4" | "S6-rejection" | "S6-after-send-timeout";
+  readonly scenario: "S1" | "S2" | "S3" | "S4" | "S6-rejection" | "S6-after-send-timeout" | "S7";
   readonly verification: "conformant" | "nonconformant";
   readonly outcome: string;
   readonly oracle: "PASS";
@@ -162,20 +162,19 @@ export async function runVmsOfflineSuite(requestedRoot?: string): Promise<VmsOff
   const summaries: VmsOfflineScenarioSummary[] = [];
   const execute = async (
     name: VmsOfflineScenarioSummary["scenario"],
-    scenarioId: "S1" | "S2" | "S3" | "S4" | "S6",
+    scenarioId: "S1" | "S2" | "S3" | "S4" | "S6" | "S7",
     input: GateInputFile,
     mode: MockVmsFaultMode = "normal",
     tamper = false,
+    journalDown = false,
   ): Promise<ScenarioRunResult> => {
     mediator.setFaultMode(mode);
     const witnessPath = join(input.output_dir, `${scenarioId}.witness.jsonl`);
     const httpTransport = new InMemoryMediatorWitnessTransport(mediator, witnessPath);
     const adapter = new VmsAdapter(adapterConfig, { httpTransport });
-    const result = await runScenario(scenarioId, input, adapter, root, tamper ? {
-      expectedVerification: "nonconformant",
-      expectedFailureReason: "sig/verify-failed",
-      transformBundle: tamperPinnedRequestSignature,
-    } : {});
+    const result = await runScenario(scenarioId, input, adapter, root, tamper
+      ? { expectedVerification: "nonconformant", expectedFailureReason: "sig/verify-failed", transformBundle: tamperPinnedRequestSignature }
+      : journalDown ? { journalUnavailableBeforeSend: true } : {});
     const evidence = result.producer.dispatchResult?.effect.backend_evidence ?? {};
     const applicationStatus = evidence.application_status;
     if (name === "S1" && applicationStatus !== "position_within_tolerance") throw new Error("S1 position evidence assertion failed");
@@ -209,6 +208,17 @@ export async function runVmsOfflineSuite(requestedRoot?: string): Promise<VmsOff
     { not_before: s3Base.evaluated_at - 1, not_after: s3Base.evaluated_at + 600 },
   ] };
   await execute("S3", "S3", s3);
+
+  const s7Dir = join(root, "artifacts", "S7");
+  const s7CountersBefore = mediator.counters();
+  const s7PositionBefore = mediator.currentPosition();
+  await execute("S7", "S7", gate("S7", "camera.ptz.preset", "accepted", s7Dir), "normal", false, true);
+  const s7CountersAfter = mediator.counters();
+  if (s7CountersAfter.presetDispatches !== s7CountersBefore.presetDispatches
+    || s7CountersAfter.restoreDispatches !== s7CountersBefore.restoreDispatches
+    || JSON.stringify(mediator.currentPosition()) !== JSON.stringify(s7PositionBefore)) {
+    throw new Error("S7 journal failure moved the camera or dispatched an attributable command");
+  }
 
   const s4Dir = join(root, "artifacts", "S4");
   await execute("S4", "S4", gate("S4", "camera.ptz.preset", "device_acknowledged", s4Dir), "normal", true);

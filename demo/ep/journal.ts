@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 export type JournalEvent =
   | "request_signed"
   | "authorization_evaluated"
+  | "action_attempt_committed"
   | "dispatch_intent_persisted"
   | "dispatch_observed"
   | "pre_transport_refusal_observed"
@@ -18,10 +19,28 @@ export interface JournalRecord {
   readonly data: Readonly<Record<string, string | number | boolean | null>>;
 }
 
+export interface JournalFaultOptions {
+  /** S7: fail only the pre-send attempt whose command digest exactly matches. */
+  readonly failActionAttemptCommitForCommandDigest?: string;
+}
+
+export class JournalUnavailableError extends Error {
+  constructor(readonly commandDigest: string) {
+    super(`journal unavailable for command digest ${commandDigest}`);
+    this.name = "JournalUnavailableError";
+  }
+}
+
 export class DurableInvocationJournal {
-  constructor(readonly path: string) {}
+  constructor(readonly path: string, private readonly faults: JournalFaultOptions = {}) {}
 
   async append(record: Omit<JournalRecord, "version">): Promise<void> {
+    const commandDigest = record.data.command_digest;
+    if (record.event === "action_attempt_committed"
+      && typeof commandDigest === "string"
+      && commandDigest === this.faults.failActionAttemptCommitForCommandDigest) {
+      throw new JournalUnavailableError(commandDigest);
+    }
     await mkdir(dirname(this.path), { recursive: true });
     const handle = await open(this.path, "a", 0o600);
     try {
