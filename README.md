@@ -79,6 +79,11 @@ edgeproof-sdr v1.1 (deterministic CBOR, closed schemas, COSE_Sign1 ES256,
 strict first-failure, externally generated KATs). The gate records are
 published in `spec/` deliberately — scrutiny is the hardening.
 
+On the name: by mid-2026 the same object is called a receipt in at least three
+independent papers (Notarized Agents, Proof-Carrying Agent Actions, AgentBound;
+see `docs/related-work-addendum-2026-08-28.md`), so the after-action-report
+collision is no longer a reason to rename. AAR stays.
+
 ## License
 
 - **Code** (`pyref/`, `harness/`, `kats/`, `adapters/`, `demo/`): Apache License 2.0 — see `LICENSE`.
