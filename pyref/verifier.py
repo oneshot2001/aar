@@ -108,6 +108,7 @@ CONTENT_TYPES = {
     "epoch_manifests": "application/aar-epoch-manifest+cbor;v=0.2",
     "anchors": "application/aar-anchor-record+cbor;v=0.2",
     "merkle_batches": "application/aar-merkle-batch+cbor;v=0.2",
+    "mediator_countersignatures": "application/aar-mediator-countersignature+cbor;v=0.2",
     "receipts": "application/aar-receipt+cbor;v=0.2",
     "presentations": "application/aar-presentation+cbor;v=0.2",
 }
@@ -122,6 +123,7 @@ ARTIFACT_ORDER = (
     "epoch_manifests",
     "anchors",
     "merkle_batches",
+    "mediator_countersignatures",
     "receipts",
 )
 
@@ -135,6 +137,7 @@ PRIMARY_IDS = {
     "epoch_manifests": "manifest_id",
     "anchors": "anchor_id",
     "merkle_batches": "batch_id",
+    "mediator_countersignatures": "countersignature_id",
     "receipts": "receipt_id",
 }
 
@@ -152,6 +155,7 @@ PAYLOAD_FIXED_FIELDS: dict[str, tuple[tuple[str, int], ...]] = {
     CONTENT_TYPES["epoch_manifests"]: (("manifest_id", 32),),
     CONTENT_TYPES["anchors"]: (("anchor_id", 32),),
     CONTENT_TYPES["merkle_batches"]: (("batch_id", 32),),
+    CONTENT_TYPES["mediator_countersignatures"]: (("countersignature_id", 32), ("action_attempt_receipt_digest", 32), ("command_digest", 32)),
     CONTENT_TYPES["receipts"]: (("receipt_id", 32),),
     CONTENT_TYPES["presentations"]: (("presentation_id", 32),),
 }
@@ -311,18 +315,21 @@ def _schema_bundle(bundle: Any) -> dict[str, Any]:
         {"receipts", "requests", "delegations", "credentials", "status_snapshots",
          "rotations", "epoch_events", "epoch_manifests", "anchors", "merkle_batches",
          "merkle_proofs", "manifest_payloads"},
+        {"mediator_countersignatures"},
     )
     ceilings = {
         "receipts": 10_000, "requests": 10_000, "delegations": 1_000,
         "credentials": 1_000, "status_snapshots": 4_000, "rotations": 1_000,
         "epoch_events": 2_000, "epoch_manifests": 256, "anchors": 2_048,
         "merkle_batches": 1_000, "merkle_proofs": 10_000, "manifest_payloads": 4_096,
+        "mediator_countersignatures": 10_000,
     }
     for name, ceiling in ceilings.items():
-        if not isinstance(artifacts[name], list):
+        values = artifacts.get(name, [])
+        if not isinstance(values, list):
             _fail("schema/bad-type", 3)
         # Section 2 explicitly defers section-1 resource ceilings to step 4.
-        if name not in {"receipts", "merkle_proofs"} and len(artifacts[name]) > ceiling:
+        if name not in {"receipts", "merkle_proofs", "mediator_countersignatures"} and len(values) > ceiling:
             _fail("schema/out-of-range", 3)
     for payload in artifacts["manifest_payloads"]:
         payload = _closed_map(payload, {"digest", "media_type", "canonical_bytes"})
@@ -332,6 +339,16 @@ def _schema_bundle(bundle: Any) -> dict[str, Any]:
             _fail("schema/bad-type", 3)
         if not (1 <= len(payload["canonical_bytes"]) <= 1_048_576):
             _fail("schema/out-of-range", 3)
+
+    mediator_ids = []
+    for value in artifacts.get("mediator_countersignatures", []):
+        payload = _loose_payload(value)
+        if payload is not None and _bstr(payload.get("countersignature_id"), 32):
+            mediator_ids.append(payload["countersignature_id"])
+    if len(set(mediator_ids)) != len(mediator_ids):
+        _fail("schema/duplicate-entry", 3)
+    if mediator_ids != sorted(mediator_ids):
+        _fail("schema/unsorted-set", 3)
 
     trust = _closed_map(
         bundle["trust_inputs"],
@@ -371,6 +388,8 @@ def _resource_checks(bundle: dict[str, Any]) -> None:
     artifacts = bundle["artifacts"]
     receipts = artifacts["receipts"]
     if len(receipts) > LIMITS["receipt_nodes"]:
+        _fail("resource/node-count", 4)
+    if len(artifacts.get("mediator_countersignatures", [])) > LIMITS["receipt_nodes"]:
         _fail("resource/node-count", 4)
     edge_count = 0
     for value in receipts:
@@ -449,7 +468,7 @@ def _preparse_payloads(state: State) -> None:
     """Decode payload bstrs for key indexing; this does not accept/reject COSE."""
     assert state.bundle is not None
     for category in ARTIFACT_ORDER:
-        for index, value in enumerate(state.bundle["artifacts"][category]):
+        for index, value in enumerate(state.bundle["artifacts"].get(category, [])):
             payload = _loose_payload(value)
             if payload is None:
                 continue
@@ -461,6 +480,26 @@ def _preparse_payloads(state: State) -> None:
                     state.credentials_by_kid[kid] = placeholder
                 if isinstance(credential_id, bytes):
                     state.credentials_by_id[credential_id] = placeholder
+
+
+def _raw_mediator_kids(state: State) -> set[bytes]:
+    """Classify a carried credential as countersign-related without accepting it."""
+    assert state.bundle is not None
+    kids: set[bytes] = set()
+    for value in state.bundle["artifacts"].get("mediator_countersignatures", []):
+        try:
+            if not isinstance(value, list) or len(value) != 2 or not isinstance(value[1], bytes):
+                continue
+            cose = loads(value[1])
+            if not isinstance(cose, list) or len(cose) != 4 or not isinstance(cose[0], bytes):
+                continue
+            protected = loads(cose[0])
+            kid = protected.get(4) if isinstance(protected, dict) else None
+            if _bstr(kid, 32):
+                kids.add(kid)
+        except CBORError:
+            continue
+    return kids
 
 
 def _schema_payload(content_type: str, payload: Any) -> dict[str, Any]:
@@ -476,6 +515,7 @@ def _schema_payload(content_type: str, payload: Any) -> dict[str, Any]:
         CONTENT_TYPES["epoch_manifests"]: ({"manifest_id", "v", "tenant_id", "site_id", "epoch_owner_kid", "epoch_id", "opened_at", "closed_at", "sequence_span", "item_count", "close_reason", "max_duration_s", "late_arrival_policy", "anchor_deadline", "fork_policy", "receipt_index", "anchor_plan"}, {"predecessor_manifest_digest"}),
         CONTENT_TYPES["anchors"]: ({"v", "anchor_id", "target", "tenant_id", "site_id", "epoch_id", "manifest_id", "manifest_digest", "submitted_at", "accepted_at", "anchor_tree_size", "anchor_leaf_index", "anchor_root", "inclusion", "head", "claim"}, {"consistency"}),
         CONTENT_TYPES["merkle_batches"]: ({"v", "batch_id", "tenant_id", "site_id", "epoch_owner_kid", "epoch_id", "signer_kid", "tree_size", "root", "created_at", "claim"}, set()),
+        CONTENT_TYPES["mediator_countersignatures"]: ({"v", "countersignature_id", "action_attempt_receipt_digest", "command_digest", "mediator_observed_at"}, set()),
         CONTENT_TYPES["receipts"]: ({"receipt_id", "v", "kind", "issuer_principal_type", "issuer_role", "binding", "emission", "freshness", "legal", "evidence", "parents", "body"}, {"root", "correlation"}),
         CONTENT_TYPES["presentations"]: ({"presentation_id", "presenter_credential_id", "signer_mode", "artifacts", "transforms", "ui_implementation", "ui_version", "delivered_at", "session_id", "approval_scope_digest", "state"}, set()),
     }
@@ -508,6 +548,8 @@ def _schema_payload(content_type: str, payload: Any) -> dict[str, Any]:
                 and isinstance(payload.get("parents"), list)
                 and isinstance(payload.get("body"), dict)):
             _fail("schema/bad-type", 6)
+    if content_type == CONTENT_TYPES["mediator_countersignatures"] and not _uint(payload.get("mediator_observed_at")):
+        _fail("countersign/invalid", 6)
     return payload
 
 
@@ -524,6 +566,8 @@ def _required_usage(category: str, payload: dict[str, Any]) -> str:
         return "ep_signing"
     if category == "anchors":
         return "anchor_signing"
+    if category == "mediator_countersignatures":
+        return "outcome_signing"
     if category == "presentations":
         return "approver_signing" if payload.get("signer_mode") == "approver_originated" else "ep_signing"
     roles = {
@@ -614,7 +658,7 @@ def _validate_envelope(state: State, category: str, index: int, value: Any) -> E
     except ValueError:
         _fail("key/not-p256", 6)
     usage = _required_usage(category, payload)
-    if claims.get("key_usage") != usage:
+    if claims.get("key_usage") != usage or (category == "mediator_countersignatures" and claims.get("principal_role") != "outcome_observer"):
         if category == "receipts":
             _fail("receipt/signer-role-mismatch", 10)
         _fail("credential/usage-mismatch", 6)
@@ -638,9 +682,21 @@ def _validate_envelope(state: State, category: str, index: int, value: Any) -> E
 def _envelope_checks(state: State) -> None:
     assert state.bundle is not None
     _preparse_payloads(state)
+    mediator_kids = _raw_mediator_kids(state)
     for category in ARTIFACT_ORDER:
-        for index, value in enumerate(state.bundle["artifacts"][category]):
-            envelope = _validate_envelope(state, category, index, value)
+        for index, value in enumerate(state.bundle["artifacts"].get(category, [])):
+            try:
+                envelope = _validate_envelope(state, category, index, value)
+            except ValidationError as exc:
+                if category == "mediator_countersignatures":
+                    credential_error = exc.code.startswith("credential/") or exc.code.startswith("key/")
+                    _fail("countersign/credential-invalid" if credential_error else "countersign/invalid", 6)
+                if category == "credentials":
+                    payload = _loose_payload(value)
+                    subject_kid = payload.get("subject_kid") if isinstance(payload, dict) else None
+                    if isinstance(subject_kid, bytes) and subject_kid in mediator_kids:
+                        _fail("countersign/credential-invalid", 6)
+                raise
             state.envelopes[category].append(envelope)
             if category == "credentials":
                 state.credentials_by_kid[envelope.payload["subject_kid"]] = envelope
@@ -683,6 +739,7 @@ def _content_commitments(state: State) -> None:
         "status_snapshots": "snapshot_id", "delegations": "delegation_id",
         "epoch_events": "event_id", "epoch_manifests": "manifest_id",
         "anchors": "anchor_id", "merkle_batches": "batch_id",
+        "mediator_countersignatures": "countersignature_id",
         "presentations": "presentation_id",
     }
     for category in ARTIFACT_ORDER + ("presentations",):
@@ -694,7 +751,7 @@ def _content_commitments(state: State) -> None:
             elif category in artifact_fields:
                 field = artifact_fields[category]
                 if hashes.artifact_id(payload, field) != payload[field]:
-                    _fail("identity/artifact-id-mismatch", 7)
+                    _fail("countersign/digest-mismatch" if category == "mediator_countersignatures" else "identity/artifact-id-mismatch", 7)
 
             for item in _walk_maps(payload):
                 keys = set(item)
@@ -797,6 +854,7 @@ def _credential_lifecycle(state: State) -> None:
     used_kids = {envelope.protected[4] for category in ARTIFACT_ORDER
                  for envelope in state.envelopes[category]}
     used_kids.update(envelope.protected[4] for envelope in state.envelopes["presentations"])
+    mediator_kids = {envelope.protected[4] for envelope in state.envelopes["mediator_countersignatures"]}
 
     role_kids: dict[str, set[bytes]] = defaultdict(set)
     for envelope in credentials:
@@ -812,25 +870,27 @@ def _credential_lifecycle(state: State) -> None:
     terminals: dict[bytes, dict[str, Any]] = {}
     for envelope in credentials:
         credential = envelope.payload
+        mediator_credential = credential["subject_kid"] in mediator_kids
         path = credential["path"]
         if not isinstance(path, list):
-            _fail("schema/bad-type", 6)
+            _fail("countersign/credential-invalid" if mediator_credential else "schema/bad-type", 8 if mediator_credential else 6)
         if len(path) > LIMITS["credential_path_length"]:
-            _fail("schema/out-of-range", 6)
+            _fail("countersign/credential-invalid" if mediator_credential else "schema/out-of-range", 8 if mediator_credential else 6)
         seen = {credential["credential_id"]}
         expected_issuer = credential["issuer_kid"]
         for credential_id in path:
             parent = by_id.get(credential_id)
             if parent is None or credential_id in seen:
-                _fail("credential/path-invalid", 8)
+                _fail("countersign/credential-invalid" if mediator_credential else "credential/path-invalid", 8)
             seen.add(credential_id)
             if parent.payload["subject_kid"] != expected_issuer:
-                _fail("credential/path-invalid", 8)
+                _fail("countersign/credential-invalid" if mediator_credential else "credential/path-invalid", 8)
             expected_issuer = parent.payload["issuer_kid"]
         terminals[credential["credential_id"]] = by_id[path[-1]].payload if path else credential
 
     for envelope in credentials:
         credential = envelope.payload
+        mediator_credential = credential["subject_kid"] in mediator_kids
         terminal = terminals[credential["credential_id"]]
         # The wire carries both a credential trust_anchor_id and a trust-store
         # root_id, but the normative path rule says acceptance terminates by
@@ -840,7 +900,7 @@ def _credential_lifecycle(state: State) -> None:
                 or credential["site_id"] not in root["allowed_sites"] \
                 or (credential["subject_kid"] in used_kids
                     and credential["key_usage"] not in root["allowed_key_usages"]):
-            _fail("credential/root-not-accepted", 8)
+            _fail("countersign/credential-invalid" if mediator_credential else "credential/root-not-accepted", 8)
 
     rotations = [envelope.payload for envelope in state.envelopes["rotations"]]
     by_pair: dict[tuple[bytes, bytes], list[dict[str, Any]]] = defaultdict(list)
@@ -1115,6 +1175,25 @@ def _receipt_semantics(state: State) -> None:
             if len(outcome_parents) != 1 or body.get("subject_id") is None \
                     or body.get("subject_id") != outcome_parents[0].get("parent_id"):
                 _fail("receipt/outcome-subject-mismatch", 10)
+
+
+def _mediator_countersignature_checks(state: State) -> None:
+    countersignatures = state.envelopes["mediator_countersignatures"]
+    if not countersignatures:
+        return
+    attempts = [envelope for envelope in state.envelopes["receipts"]
+                if envelope.payload["kind"] == "action_attempt"]
+    for countersignature in countersignatures:
+        claims = countersignature.payload
+        matches = [attempt for attempt in attempts
+                   if hashes.sha256(attempt.envelope_bytes) == claims["action_attempt_receipt_digest"]]
+        if len(matches) != 1:
+            _fail("countersign/digest-mismatch", 10)
+        command = matches[0].payload.get("body", {}).get("command")
+        if not isinstance(command, dict) or command.get("command_digest") != claims["command_digest"]:
+            _fail("countersign/digest-mismatch", 10)
+    if "mediator_countersigned" not in state.observations:
+        state.observations.append("mediator_countersigned")
 
 
 def _replay_freshness(state: State) -> None:
@@ -2001,6 +2080,7 @@ def evaluate(
         _credential_lifecycle(state)
         _emission_identity(state)
         _receipt_semantics(state)
+        _mediator_countersignature_checks(state)
         _replay_freshness(state)
         graph = _graph_checks(state)
         _authorization_dominance(state, graph)

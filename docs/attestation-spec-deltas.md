@@ -9,6 +9,10 @@ wire**; nothing changes v0.2-rc7 bytes. The D-51 verdict preimages, the frozen
 fixture corpus, and D-01..D-61 stand untouched. Each delta is filed as a
 decision candidate (D-62..D-65) for ratification in the usual way.
 
+D-67 below is the explicit exception: it is a ratified, optional v0.2
+standalone artifact and does not land, depend on, or imply ratification of
+D-62, D-63, D-64, or D-65.
+
 Framing rule carried over from the threat model: the vantage point (who signs,
 from where) is the architectural decision. These deltas make the vantage point
 **declarable and rankable on the wire**, so that a verifier can say not just
@@ -273,6 +277,73 @@ boundary): not observability/tracing; not a transcript format; occurrence at
 a boundary, never intent; no compromised-signer immunity — guarantee remains
 attribution + post-emission tamper evidence + census-conditional
 completeness.
+
+## D-67 — optional mediator countersignature (ratified standalone)
+
+The VMS mediator MAY return and the bundle MAY carry a detached COSE_Sign1
+artifact proving that the mediator observed one exact dispatch input. D-67 is
+independent of the candidate attestation lane: it reuses the existing
+`outcome_observer` principal role and `outcome_signing` key usage, already
+gated by `trust-root.allowed_key_usages`. No new role or usage is introduced.
+
+```cddl
+mediator-countersignature-envelope = [
+  payload: bstr .cbor mediator-countersignature,
+  signature: bstr .cbor artifact-cose-sign1,
+]
+
+mediator-countersignature = {
+  v: 2,
+  countersignature_id: digest32,
+  action_attempt_receipt_digest: digest32,
+  command_digest: digest32,
+  mediator_observed_at: unix-time,
+}
+
+; optional member of bundle-artifacts
+? mediator_countersignatures: [ 0*10000 mediator-countersignature-envelope ]
+```
+
+`action_attempt_receipt_digest` is SHA-256 of the exact deterministic-CBOR
+`action_attempt` receipt-envelope bytes committed before the action-bearing
+send. `command_digest` is SHA-256 of the canonical command body that the
+mediator independently recomputed and compared on `POST /dispatch`.
+`mediator_observed_at` is the mediator's whole-second observation time.
+`countersignature_id` is:
+
+```text
+SHA-256(deterministic-CBOR([
+  "AAR-MEDIATOR-COUNTERSIGNATURE-ID-v1",
+  mediator-countersignature with countersignature_id absent
+]))
+```
+
+The protected content type is
+`application/aar-mediator-countersignature+cbor;v=0.2`. Under D-54, the
+verifier checks the optional closed, ID-sorted array at step 3; COSE mechanics,
+signature, carried SPKI, `outcome_observer` role, and `outcome_signing` usage at
+step 6; the ID at step 7; credential-chain acceptance at step 8; and the exact
+receipt-envelope plus command-digest bindings after receipt semantics at step
+10. Only after every carried artifact passes does the signed verdict include
+`mediator_countersigned`.
+
+The closed reason table adds `countersign/invalid`,
+`countersign/digest-mismatch`, and `countersign/credential-invalid`. The
+artifact is never required in v0.2: absence leaves every existing bundle and
+verdict preimage unchanged. A VAPIX/direct-device leg carries none.
+
+Claim boundary: the artifact proves that an accepted in-tenant credential with
+the `outcome_observer` role and `outcome_signing` usage signed the bound
+action-attempt receipt digest, canonical-command digest, and a carried
+observation time. The v0.2 verifier does not bind that credential's `kid` to
+"the mediator"; any such accepted credential validates. Mediator-`kid` pinning
+in trust policy is a v0.3 question. `mediator_observed_at` is carried and signed
+but is not validated against any other time in v0.2. Multiple
+countersignatures for one attempt are accepted when distinct observation times
+produce distinct IDs. In the demo the mediator and EP use distinct credentials
+but are operated by the same party (F22). The artifact narrows T-H2 at the
+AAR-to-mediator boundary; it does not prove device actuation, outcome truth,
+operator independence, or ingress completeness.
 
 ## Sequencing / compatibility
 

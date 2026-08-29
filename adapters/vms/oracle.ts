@@ -8,8 +8,14 @@ import type { GateInputFile, ScenarioRunResult } from "../../demo/run-scenario";
 export const MEDIATOR_PATHS = new Set(["/dispatch", "/ptz/position", "/device/info", "/healthz"]);
 
 export const DISPATCH_REQUEST_LINES = {
-  "camera.ptz.preset": "POST /dispatch?cred=<sanitized>&digest=<sanitized>&host=<sanitized>&op=<sanitized>&port=<sanitized>&preset=<sanitized>&username=<sanitized> HTTP/1.1",
-  "camera.stream.view": "POST /dispatch?cred=<sanitized>&digest=<sanitized>&host=<sanitized>&op=<sanitized>&port=<sanitized>&profile=<sanitized>&username=<sanitized> HTTP/1.1",
+  "camera.ptz.preset": [
+    "POST /dispatch?cred=<sanitized>&digest=<sanitized>&host=<sanitized>&op=<sanitized>&port=<sanitized>&preset=<sanitized>&username=<sanitized> HTTP/1.1",
+    "POST /dispatch?attempt_digest=<sanitized>&cred=<sanitized>&digest=<sanitized>&host=<sanitized>&op=<sanitized>&port=<sanitized>&preset=<sanitized>&username=<sanitized> HTTP/1.1",
+  ],
+  "camera.stream.view": [
+    "POST /dispatch?cred=<sanitized>&digest=<sanitized>&host=<sanitized>&op=<sanitized>&port=<sanitized>&profile=<sanitized>&username=<sanitized> HTTP/1.1",
+    "POST /dispatch?attempt_digest=<sanitized>&cred=<sanitized>&digest=<sanitized>&host=<sanitized>&op=<sanitized>&port=<sanitized>&profile=<sanitized>&username=<sanitized> HTTP/1.1",
+  ],
 } as const;
 
 // Full-mediation proof + dispatch shape + mediation marker. Every witnessed
@@ -22,7 +28,7 @@ export function assertVmsMediationDiscipline(result: ScenarioRunResult, input: G
   }
   const attributable = result.witness.filter((entry) => entry.invocation_id === input.invocation_id && entry.action_bearing);
   const bound = attributable.filter((entry) => entry.command_digest !== null);
-  if (bound.length && bound.some((entry) => entry.request_line !== DISPATCH_REQUEST_LINES[input.action_name])) {
+  if (bound.length && bound.some((entry) => !DISPATCH_REQUEST_LINES[input.action_name].some((line) => line === entry.request_line))) {
     throw new Error("VMS dispatch request-line shape assertion failed");
   }
   const dispatchResult = result.producer.dispatchResult;

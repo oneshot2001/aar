@@ -17,6 +17,8 @@ import { VmsAdapter } from "../adapter";
 import { MediatorHttpClient } from "../client";
 import { assertVmsMediationDiscipline, assertVmsPtzRestoreDiscipline } from "../oracle";
 import { CRED_BINARY, LIVE_TARGETS, STREAM_PROFILE_LOGICAL, liveVmsConfig } from "./config";
+import { mintMediatorCredential } from "../../../demo/keys/mediator";
+import { fromHex } from "../../../harness/cbor";
 
 // D3 live leg — S1–S4 + S6–S7 through EP -> transport witness -> REAL
 // vigil-control (VigilCore.VAPIXClient in its own process) -> owned cameras.
@@ -75,12 +77,12 @@ async function startWitnessProxy(logPath: string, fault?: WitnessFaultInjection)
   };
 }
 
-async function startMediator(repoRoot: string): Promise<MediatorHandle> {
+async function startMediator(repoRoot: string, identityDirectory: string): Promise<MediatorHandle> {
   const binary = join(repoRoot, "adapters", "vms", "vigil-control", ".build", "debug", "vigil-control");
   if (!existsSync(binary)) {
     throw new Error(`vigil-control binary missing — run: swift build --package-path adapters/vms/vigil-control`);
   }
-  const child = Bun.spawn([binary, "0"], { stdout: "pipe", stderr: "pipe" });
+  const child = Bun.spawn([binary, "0", "--identity-dir", identityDirectory], { stdout: "pipe", stderr: "pipe" });
   void new Response(child.stderr).text();
   const reader = child.stdout.getReader();
   const deadline = Date.now() + 15_000;
@@ -108,12 +110,24 @@ export async function runVmsLiveSuite(requestedRoot?: string): Promise<VmsLiveSu
   const root = resolve(requestedRoot ?? join(homedir(), ".aar-demo", `d3-${Date.now()}`));
   await mkdir(root, { recursive: true });
   const keyDirectory = join(root, "keys");
+  const mediatorIdentityDirectory = join(root, "vigil-control");
   const priorState = join(root, "prior-state.json");
   const recoveryDirectory = join(root, "recovery");
-  await generateDemoKeys(keyDirectory, join(root, "public-keys.json"));
+  const tenantId = hex16();
+  const siteId = hex16();
+  const keys = await generateDemoKeys(keyDirectory, join(root, "public-keys.json"));
+  const mediatorBinary = join(repoRoot, "adapters", "vms", "vigil-control", ".build", "debug", "vigil-control");
+  await mintMediatorCredential({
+    binary: mediatorBinary,
+    identityDirectory: mediatorIdentityDirectory,
+    issuer: keys["verifier-trust"],
+    tenantId: fromHex(tenantId),
+    siteId: fromHex(siteId),
+    evaluatedAt: Math.floor(Date.now() / 1000),
+  });
 
   const operatorSuite = new LiveSuite();
-  const mediator = await startMediator(repoRoot);
+  const mediator = await startMediator(repoRoot, mediatorIdentityDirectory);
   try {
     // Operator park before anything else (D2b discipline: runs start off-safe).
     {
@@ -179,8 +193,8 @@ export async function runVmsLiveSuite(requestedRoot?: string): Promise<VmsLiveSu
 
     const shared = {
       version: 1 as const,
-      tenant_id: hex16(),
-      site_id: hex16(),
+      tenant_id: tenantId,
+      site_id: siteId,
       target_id: hex16(),
       adapter: "vms" as const,
       key_dir: keyDirectory,
@@ -230,6 +244,14 @@ export async function runVmsLiveSuite(requestedRoot?: string): Promise<VmsLiveSu
     ): Promise<ScenarioRunResult> => {
       const witnessPath = join(input.output_dir, `${scenarioId}.witness.jsonl`);
       await mkdir(input.output_dir, { recursive: true });
+      await mintMediatorCredential({
+        binary: mediatorBinary,
+        identityDirectory: mediatorIdentityDirectory,
+        issuer: keys["verifier-trust"],
+        tenantId: fromHex(input.tenant_id),
+        siteId: fromHex(input.site_id),
+        evaluatedAt: input.evaluated_at,
+      });
       if (options.parkFirst) {
         const parkProxy = await startWitnessProxy(join(input.output_dir, "park.witness.jsonl"));
         try { await operatorSuite.park(parkProxy.url); } finally { await parkProxy.close(); }
@@ -245,6 +267,14 @@ export async function runVmsLiveSuite(requestedRoot?: string): Promise<VmsLiveSu
           : options.journalDown ? { journalUnavailableBeforeSend: true } : {});
         const evidence = result.producer.dispatchResult?.effect.backend_evidence;
         const applicationStatus = String(evidence?.application_status ?? "not_dispatched");
+        if (["S1", "S2", "S4", "S6-rejection"].includes(name)
+          && result.producer.dispatchResult?.mediatorCountersignature === undefined) {
+          throw new Error(`${name} VMS dispatch response lacked the D-67 mediator countersignature`);
+        }
+        if (result.verificationResult === "conformant" && result.producer.dispatchResult?.mediatorCountersignature !== undefined
+          && !result.pyrefOutput.includes("mediator_countersigned")) {
+          throw new Error(`${name} pyref verdict omitted mediator_countersigned`);
+        }
         if (name === "S1" && applicationStatus !== "position_within_tolerance") throw new Error(`S1 position evidence assertion failed: ${applicationStatus}`);
         if (name === "S2" && applicationStatus !== "media_payload_valid") throw new Error(`S2 media evidence assertion failed: ${applicationStatus}`);
         // Live S6-rejection: an absent backend preset is an error-in-200 the

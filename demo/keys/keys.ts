@@ -17,6 +17,20 @@ export interface DemoKey {
   readonly kid: Uint8Array;
 }
 
+export type DemoSigningKey = Omit<DemoKey, "role">;
+
+function signingKeyFromPrivate(privateKey: Uint8Array): DemoSigningKey {
+  const publicKey = p256.getPublicKey(privateKey, false);
+  const spki = new Uint8Array(P256_SPKI_PREFIX.length + publicKey.length);
+  spki.set(P256_SPKI_PREFIX);
+  spki.set(publicKey, P256_SPKI_PREFIX.length);
+  return { privateKey, publicKey, spki, kid: hash(spki) };
+}
+
+export function generateDemoSigningKey(): DemoSigningKey {
+  return signingKeyFromPrivate(p256.keygen().secretKey);
+}
+
 interface StoredPrivateKey {
   version: 1;
   role: DemoKeyRole;
@@ -34,11 +48,7 @@ export interface StoredPublicKey {
 }
 
 function keyFromPrivate(role: DemoKeyRole, privateKey: Uint8Array): DemoKey {
-  const publicKey = p256.getPublicKey(privateKey, false);
-  const spki = new Uint8Array(P256_SPKI_PREFIX.length + publicKey.length);
-  spki.set(P256_SPKI_PREFIX);
-  spki.set(publicKey, P256_SPKI_PREFIX.length);
-  return { role, privateKey, publicKey, spki, kid: hash(spki) };
+  return { role, ...signingKeyFromPrivate(privateKey) };
 }
 
 export async function generateDemoKeys(privateDirectory: string, publicOutput?: string): Promise<Readonly<Record<DemoKeyRole, DemoKey>>> {

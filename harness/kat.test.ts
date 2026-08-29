@@ -3,6 +3,7 @@ import { decodeCbor, encodeCbor, equalBytes } from "./cbor";
 import { verifySigned } from "./crypto";
 import { buildFixtures } from "./fixtures";
 import { buildClassBoundaryFixtures, buildEvidenceCommitFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
+import { buildCountersignFixtures } from "./countersign-fixtures";
 import { TEST_KEYS } from "./testkeys";
 import { verifyBundle } from "./verifier";
 import { readFileSync } from "node:fs";
@@ -126,6 +127,29 @@ describe("positive KAT harness", () => {
         if (result.ok) for (const observation of fixture.descriptor.expected_observations) {
           expect(result.observations.includes(observation), `${fixture.filename}:${observation}`).toBe(true);
         }
+      }
+    }
+  }, 30_000);
+
+  test("D-67 fixtures are deterministic and have exact countersign behavior", () => {
+    const first = buildCountersignFixtures(); const second = buildCountersignFixtures();
+    expect(first).toHaveLength(4);
+    for (let index = 0; index < first.length; index += 1) {
+      const fixture = first[index]!;
+      expect(equalBytes(fixture.bytes, second[index]!.bytes), fixture.filename).toBe(true);
+      expect(equalBytes(fixture.bytes, readFileSync(join(root, "kats", "countersign", `${fixture.filename}.cbor`))), fixture.filename).toBe(true);
+      expect(JSON.parse(readFileSync(join(root, "kats", "countersign", `${fixture.filename}.json`), "utf8")), fixture.filename).toEqual(fixture.descriptor);
+      const result = verifyBundle(fixture.bytes, { evaluationTime: AT });
+      expect(result.result, fixture.filename).toBe(fixture.descriptor.expectation);
+      if (!result.ok) {
+        expect(result.reason, fixture.filename).toBe(fixture.descriptor.expected_code);
+        expect(result.step, fixture.filename).toBe(
+          fixture.descriptor.expected_code === "countersign/credential-invalid" ? 6 : 10,
+        );
+      } else if (fixture.filename.endsWith("valid")) {
+        expect(result.observations.includes("mediator_countersigned"), fixture.filename).toBe(true);
+      } else {
+        expect(result.observations.includes("mediator_countersigned"), fixture.filename).toBe(false);
       }
     }
   }, 30_000);

@@ -30,6 +30,7 @@ ARTIFACT_DOMAINS = {
     "manifest_id": "AAR-EPOCH-MANIFEST-ID-v1",
     "anchor_id": "AAR-ANCHOR-ID-v1",
     "batch_id": "AAR-BATCH-ID-v1",
+    "countersignature_id": "AAR-MEDIATOR-COUNTERSIGNATURE-ID-v1",
     "presentation_id": "AAR-PRESENTATION-MANIFEST-v1",
 }
 
@@ -142,4 +143,3 @@ def rfc6962_leaf(data: bytes) -> bytes:
 
 def rfc6962_node(left: bytes, right: bytes) -> bytes:
     return sha256(b"\x01" + left + right)
-

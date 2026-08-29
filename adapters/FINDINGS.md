@@ -496,3 +496,53 @@ adapters/vms/live/evidence/.
   deterministic verdicts 197/197. All 192 pre-packet C2 verdict digests remain
   byte-identical; the results diff contains only the five added D-66 rows and
   aggregate count updates.
+
+## D-67 Packet B Honesty Ledger (2026-08-28)
+
+- changed: ratified D-67 alone as an optional v0.2 standalone artifact using
+  the existing `outcome_observer` role and `outcome_signing` usage; added the
+  signed receipt-envelope digest, mediator-verified canonical-command digest,
+  and mediator observation time; added step-3/6/7/8/10 validation, the three
+  closed countersign reasons, and signed `mediator_countersigned` observation
+  in both independent verifiers. `vigil-control` now owns a P-256 key, returns
+  the COSE countersignature plus carried credential, and fails closed before
+  backend dispatch if an offered `attempt_digest` cannot be countersigned. The
+  original offline runner and countersign KATs incorrectly reused the EP's
+  outcome key; both now use a distinct mediator credential and `kid`. The TS
+  VMS adapter transports the artifact; four KATs cover valid, signed digest
+  mismatch, expired mediator credential, and absence. Contract v3 keeps
+  `attempt_digest` additive: absence dispatches with the pre-D-67 status and no
+  artifact, while presence countersigns or fails closed; the oracle accepts
+  both witnessed line shapes. The production release binary does not expose
+  `--sign-test`: that end-to-end Swift/TypeScript interoperability hook is
+  compiled only under Swift's `DEBUG` build flag. `adapter.test.ts` now covers
+  malformed offered artifacts and the absent/present contract-v3 behavior.
+- related_untouched: D-62, D-63, D-64, and D-65 remain candidate text only;
+  no direct VAPIX file changed and absent artifacts preserve its wire path.
+  `/Users/matthewvisher/Projects/vigil` is unmodified: `git status --short`
+  returned empty and `git diff --quiet` returned 0. No commit was created.
+- noticed_not_fixed: the packet names base `4635d88`, but the supplied checkout
+  was already at `25fd549` with the five D-66 fixtures present; it was not
+  rewound. Compatibility was therefore checked over all 197 pre-D-67 C2
+  verdicts, a strict superset of the requested 192, and all 197 remained
+  byte-identical.
+- residual_uncertainty: v0.2 checks only that an in-tenant
+  `outcome_observer`/`outcome_signing` credential signed the two bound digests
+  and a carried time. It does not pin the signer's `kid` to "the mediator";
+  mediator-`kid` trust-policy pinning is a v0.3 question. It does not compare
+  `mediator_observed_at` with another time, and accepts multiple artifacts for
+  one attempt when distinct observation times yield distinct IDs. It proves
+  neither device actuation nor outcome truth. The demo EP and mediator use
+  distinct credentials but remain same-operator (F22), so this narrows T-H2
+  without establishing an independent vantage point.
+- verification_gap: the live owned-camera leg was not run outside its next
+  exclusive-control window. Offline VMS S1, S2, S4, and S6-rejection carried
+  countersignatures and verified; no artifact is available to the caller when
+  S6-after-send-timeout deliberately withholds the response, while S3/S7 never
+  dispatch. The D-67 plus adapter-focused run was 20/20 (351 assertions), and
+  the complete VMS adapter slice was 10/10 (39 assertions). Pyref was C1 55/55
+  in all three categories and C2 201/201, with zero mismatches/divergences and
+  determinism 201/201. Builder's sandbox run 89/90 (loopback bind), gate's
+  unsandboxed runs 90/90 — environmental. This fix pass adds
+  one adapter test; its current sandbox run was 90/91 (1,518 assertions), with
+  the same sole loopback-bind failure.

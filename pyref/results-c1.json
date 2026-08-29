@@ -2,17 +2,17 @@
   "checks": {
     "id_digest_recomputation": {
       "failed": 0,
-      "passed": 51,
+      "passed": 55,
       "skipped": 0
     },
     "round_trip": {
       "failed": 0,
-      "passed": 51,
+      "passed": 55,
       "skipped": 0
     },
     "signature_recomputation": {
       "failed": 0,
-      "passed": 51,
+      "passed": 55,
       "skipped": 0
     }
   },
@@ -178,6 +178,70 @@
         }
       },
       "fixture": "kats/class-boundary/time-externally-anchored-satisfied.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 67,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 33,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/countersign/mediator-countersign-absent.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 70,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 35,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/countersign/mediator-countersign-command-digest-tampered.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 70,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 35,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/countersign/mediator-countersign-credential-expired.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 70,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 35,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/countersign/mediator-countersign-valid.cbor"
     },
     {
       "checks": {
@@ -836,7 +900,7 @@
       "fixture": "kats/terminal-state/outcome-terminals-unknown-before-contradicted.cbor"
     }
   ],
-  "fixtures_checked": 51,
+  "fixtures_checked": 55,
   "schema_version": 1,
   "slice": "C1"
 }

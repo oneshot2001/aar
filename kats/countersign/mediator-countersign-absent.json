@@ -1,0 +1,7 @@
+{
+  "name": "absent optional mediator countersignature remains conformant",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_code": null,
+  "expected_observations": []
+}

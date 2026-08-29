@@ -25,6 +25,7 @@ aar-wire-object =
   / epoch-manifest-envelope
   / anchor-record-envelope
   / merkle-batch-envelope
+  / mediator-countersignature-envelope
   / bundle
 
 ; ---------------------------------------------------------------------------
@@ -553,6 +554,30 @@ artifact-content-type =
   / "application/aar-epoch-manifest+cbor;v=0.2"
   / "application/aar-anchor-record+cbor;v=0.2"
   / "application/aar-merkle-batch+cbor;v=0.2"
+  / "application/aar-mediator-countersignature+cbor;v=0.2"
+
+; D-67 -- optional VMS-mediator countersignature.  This is a standalone
+; artifact and does not depend on the candidate D-62..D-65 attestation wire.
+mediator-countersignature-envelope = [
+  payload: bstr .cbor mediator-countersignature,
+  signature: bstr .cbor artifact-cose-sign1,
+]
+
+mediator-countersignature = {
+  v: 2,
+  countersignature_id: digest32,
+  action_attempt_receipt_digest: digest32,
+  command_digest: digest32,
+  mediator_observed_at: unix-time,
+}
+
+; action_attempt_receipt_digest is SHA-256 of the exact deterministic-CBOR
+; action_attempt receipt-envelope bytes. command_digest is the SHA-256 of the
+; canonical command body that the mediator verified before dispatch.
+; countersignature_id = SHA-256(deterministic-CBOR([
+;   "AAR-MEDIATOR-COUNTERSIGNATURE-ID-v1",
+;   mediator-countersignature with countersignature_id absent
+; ])).
 
 request-envelope = [
   claims: bstr .cbor request-claims,
@@ -1165,12 +1190,14 @@ bundle-artifacts = {
   merkle_batches: [ 0*1000 merkle-batch-envelope ],
   merkle_proofs: [ 0*10000 merkle-membership-proof ],
   manifest_payloads: [ 0*4096 canonical-manifest-payload ],
+  ? mediator_countersignatures: [ 0*10000 mediator-countersignature-envelope ],
 }
 
 ; Each artifact array is strictly sorted and unique by its declared primary ID:
 ; receipt_id, request_id, delegation_id, credential_id, snapshot_id, rotation_id,
 ; event_id, manifest_id, anchor_id, batch_id; Merkle proofs sort by
-; (batch_id, leaf_index), and manifest payloads by digest.
+; (batch_id, leaf_index), manifest payloads by digest, and mediator
+; countersignatures by countersignature_id.
 
 canonical-manifest-payload = {
   digest: digest32,

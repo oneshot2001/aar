@@ -105,6 +105,7 @@ export async function produce(input: ProducerInput): Promise<ProducerResult> {
     outcomeLevel: result.effect.outcome_level,
     outcomeState: result.effect.state,
     observationDigest: fromHex(result.effect.observation_digest),
+    mediatorCountersignature: result.mediatorCountersignature,
   });
 
   if (!authorization.authorized) {
@@ -159,7 +160,8 @@ export async function produce(input: ProducerInput): Promise<ProducerResult> {
       });
       dispatchResult = await input.adapter.dispatch(command, {
         invocationIdHex, commandDigestHex: toHex(command.command_digest), witnessLogPath: input.witnessLogPath,
-        observedAt: input.evaluatedAt, afterActionDispatched: input.afterDispatchCut,
+        observedAt: input.evaluatedAt, actionAttemptReceiptDigestHex: toHex(hash(attempt.signed.envelopeBytes)),
+        afterActionDispatched: input.afterDispatchCut,
       });
       if (dispatchResult.dispatched) {
         dispatchCount = 1;

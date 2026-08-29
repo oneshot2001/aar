@@ -12,6 +12,7 @@ import { MediatorHttpClient } from "../client";
 import { MockVigilControl, type MockVigilControlConfig, type MockVmsFaultMode } from "../mock/vigil-control";
 import { InMemoryMediatorWitnessTransport } from "../mock/transport";
 import { assertVmsMediationDiscipline, assertVmsPtzRestoreDiscipline } from "../oracle";
+import { buildMediatorCredential } from "../../../demo/keys/mediator";
 
 // D3 offline suite — the VMS-mediated leg (S1–S4 + S6–S7; S5 crash-cut runs once
 // on the EP+VAPIX leg per Q5-2, the VMS leg encodes outcome_unknown via
@@ -44,8 +45,13 @@ export async function runVmsOfflineSuite(requestedRoot?: string): Promise<VmsOff
   const keyDirectory = join(root, "keys");
   const priorState = join(root, "prior-state.json");
   const recoveryDirectory = join(root, "recovery");
-  const { generateDemoKeys } = await import("../../../demo/keys/keys");
-  await generateDemoKeys(keyDirectory, join(root, "public-keys.json"));
+  const { generateDemoKeys, generateDemoSigningKey } = await import("../../../demo/keys/keys");
+  const keys = await generateDemoKeys(keyDirectory, join(root, "public-keys.json"));
+  const mediatorKey = generateDemoSigningKey();
+  const tenantId = hex16();
+  const siteId = hex16();
+  const fixedAt = 1_800_000_000;
+  let mediatorEvaluationTime = fixedAt;
 
   // The canary secret lives INSIDE the mock mediator, exactly as the real
   // secret lives inside vigil-control's process. The TS run never receives
@@ -67,6 +73,14 @@ export async function runVmsOfflineSuite(requestedRoot?: string): Promise<VmsOff
     baseline: { pan: 0, tilt: 0, zoom: 1 },
     safePreset: { pan: 12, tilt: -4, zoom: 2 },
     settlingReads: 2,
+    mediatorSigner: mediatorKey,
+    mediatorCredential: () => buildMediatorCredential({
+      identity: mediatorKey, issuer: keys["verifier-trust"],
+      tenantId: Uint8Array.from(Buffer.from(tenantId, "hex")),
+      siteId: Uint8Array.from(Buffer.from(siteId, "hex")),
+      evaluatedAt: mediatorEvaluationTime,
+    }),
+    now: () => mediatorEvaluationTime * 1000,
   };
   const mediator = new MockVigilControl(mediatorConfig);
 
@@ -125,15 +139,14 @@ export async function runVmsOfflineSuite(requestedRoot?: string): Promise<VmsOff
 
   const shared = {
     version: 1 as const,
-    tenant_id: hex16(),
-    site_id: hex16(),
+    tenant_id: tenantId,
+    site_id: siteId,
     target_id: hex16(),
     adapter: "vms" as const,
     source_device: { manufacturer: "AXIS", model: "VMS-Mediated Offline Test Double", firmware: "D3-offline" },
     key_dir: keyDirectory,
     prior_state_file: priorState,
   };
-  const fixedAt = 1_800_000_000;
   let epoch = 30_000;
   const gate = (
     label: string,
@@ -168,6 +181,7 @@ export async function runVmsOfflineSuite(requestedRoot?: string): Promise<VmsOff
     tamper = false,
     journalDown = false,
   ): Promise<ScenarioRunResult> => {
+    mediatorEvaluationTime = input.evaluated_at;
     mediator.setFaultMode(mode);
     const witnessPath = join(input.output_dir, `${scenarioId}.witness.jsonl`);
     const httpTransport = new InMemoryMediatorWitnessTransport(mediator, witnessPath);
@@ -177,6 +191,14 @@ export async function runVmsOfflineSuite(requestedRoot?: string): Promise<VmsOff
       : journalDown ? { journalUnavailableBeforeSend: true } : {});
     const evidence = result.producer.dispatchResult?.effect.backend_evidence ?? {};
     const applicationStatus = evidence.application_status;
+    if (["S1", "S2", "S4", "S6-rejection"].includes(name)
+      && result.producer.dispatchResult?.mediatorCountersignature === undefined) {
+      throw new Error(`${name} VMS dispatch response lacked the D-67 mediator countersignature`);
+    }
+    if (result.verificationResult === "conformant" && result.producer.dispatchResult?.mediatorCountersignature !== undefined
+      && !result.pyrefOutput.includes("mediator_countersigned")) {
+      throw new Error(`${name} pyref verdict omitted mediator_countersigned`);
+    }
     if (name === "S1" && applicationStatus !== "position_within_tolerance") throw new Error("S1 position evidence assertion failed");
     if (name === "S2" && applicationStatus !== "media_payload_valid") throw new Error("S2 media evidence assertion failed");
     if (name === "S6-rejection" && applicationStatus !== "http_rejected_503") throw new Error("S6 rejection evidence assertion failed");

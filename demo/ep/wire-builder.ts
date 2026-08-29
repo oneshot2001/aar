@@ -1,10 +1,10 @@
 import type { AdapterId, ActionName, LogicalTargetName, ScenarioId } from "../../adapters/shared/types";
 import type { CborValue } from "../../harness/cbor";
-import { encodeCbor, toHex } from "../../harness/cbor";
+import { decodeCbor, encodeCbor, toHex } from "../../harness/cbor";
 import { domainHash, hash } from "../../harness/crypto";
 import { promotedProofWithDomain, promotedRoot } from "../../harness/merkle";
 import type { LocalRfc6962Log } from "../anchor/log";
-import type { DemoKey, DemoKeyRole } from "../keys/keys";
+import type { DemoKey, DemoKeyRole, DemoSigningKey } from "../keys/keys";
 import type { BuiltCommandManifest } from "./command-manifest";
 import { signDemoDetached, type DemoSignedEnvelope } from "./signing";
 import { policyFields, type DemoTrustPolicy } from "./authorization";
@@ -118,6 +118,10 @@ export interface WireDispatch {
     readonly outcomeLevel: "device_acknowledged" | "contradicted" | "unknown";
     readonly outcomeState: "consistent" | "contradicted" | "unknown";
     readonly observationDigest: Uint8Array;
+    readonly mediatorCountersignature?: {
+      readonly envelope: readonly CborValue[];
+      readonly credentialEnvelope?: readonly CborValue[];
+    };
 }
 
 export type PreDispatchResult =
@@ -196,6 +200,43 @@ function profileLimits(): Obj {
   return { profile: "AAR-3", status_max_age_s: 300, lease_max_s: 3600, anchor_max_cadence_s: 86400 };
 }
 
+export interface DemoCredentialFieldsInput {
+  readonly subject: Pick<DemoSigningKey, "kid" | "spki">;
+  readonly issuerKid: Uint8Array;
+  readonly principalType: string;
+  readonly principalRole: string;
+  readonly keyUsage: string;
+  readonly tenantId: Uint8Array;
+  readonly siteId: Uint8Array;
+  readonly evaluatedAt: number;
+  readonly trustAnchorId: Uint8Array;
+  readonly path: readonly Uint8Array[];
+}
+
+// Shared wire construction for demo-issued credentials. Keeping the mediator
+// credential on this path prevents its root/path/profile fields drifting from
+// the credentials embedded by the EP.
+export function buildDemoCredentialFields(input: DemoCredentialFieldsInput): Obj {
+  return {
+    v: 2,
+    subject_kid: input.subject.kid,
+    public_key: input.subject.spki,
+    issuer_kid: input.issuerKid,
+    principal_type: input.principalType,
+    principal_role: input.principalRole,
+    tenant_id: input.tenantId,
+    site_id: input.siteId,
+    valid_from: input.evaluatedAt - 3600,
+    valid_until: input.evaluatedAt + 86400,
+    cose_alg: -7,
+    curve: "P-256",
+    key_usage: input.keyUsage,
+    trust_anchor_id: input.trustAnchorId,
+    path: [...input.path],
+    profile_limits: profileLimits(),
+  };
+}
+
 function credentialSpec(role: DemoKeyRole): { principalType: string; principalRole: string; usage: string } {
   switch (role) {
     case "agent": return { principalType: "model_endpoint", principalRole: "agent", usage: "agent_signing" };
@@ -211,27 +252,24 @@ function buildCredentials(input: WireBuildInput): { envelopes: DemoSignedEnvelop
   const rootKey = input.keys["verifier-trust"];
   const ids = {} as Record<DemoKeyRole, Uint8Array>;
   const fieldsByRole = {} as Record<DemoKeyRole, Obj>;
-  const rootFields: Obj = {
-    v: 2, subject_kid: rootKey.kid, public_key: rootKey.spki, issuer_kid: rootKey.kid,
-    principal_type: "authority_source", principal_role: "authority_source",
-    tenant_id: input.tenantId, site_id: input.siteId,
-    valid_from: input.evaluatedAt - 3600, valid_until: input.evaluatedAt + 86400,
-    cose_alg: -7, curve: "P-256", key_usage: "credential_issuing",
-    trust_anchor_id: opaque(`trust-anchor:${toHex(rootKey.kid)}`), path: [], profile_limits: profileLimits(),
-  };
+  const trustAnchorId = opaque(`trust-anchor:${toHex(rootKey.kid)}`);
+  const rootFields = buildDemoCredentialFields({
+    subject: rootKey, issuerKid: rootKey.kid,
+    principalType: "authority_source", principalRole: "authority_source", keyUsage: "credential_issuing",
+    tenantId: input.tenantId, siteId: input.siteId, evaluatedAt: input.evaluatedAt,
+    trustAnchorId, path: [],
+  });
   ids["verifier-trust"] = domainHash("AAR-CREDENTIAL-ID-v1", rootFields);
   fieldsByRole["verifier-trust"] = rootFields;
   for (const role of ["agent", "ep", "authority", "outcome", "anchor"] as DemoKeyRole[]) {
     const key = input.keys[role];
     const spec = credentialSpec(role);
-    const fields: Obj = {
-      v: 2, subject_kid: key.kid, public_key: key.spki, issuer_kid: rootKey.kid,
-      principal_type: spec.principalType, principal_role: spec.principalRole,
-      tenant_id: input.tenantId, site_id: input.siteId,
-      valid_from: input.evaluatedAt - 3600, valid_until: input.evaluatedAt + 86400,
-      cose_alg: -7, curve: "P-256", key_usage: spec.usage,
-      trust_anchor_id: opaque(`trust-anchor:${toHex(rootKey.kid)}`), path: [ids["verifier-trust"]], profile_limits: profileLimits(),
-    };
+    const fields = buildDemoCredentialFields({
+      subject: key, issuerKid: rootKey.kid,
+      principalType: spec.principalType, principalRole: spec.principalRole, keyUsage: spec.usage,
+      tenantId: input.tenantId, siteId: input.siteId, evaluatedAt: input.evaluatedAt,
+      trustAnchorId, path: [ids["verifier-trust"]],
+    });
     ids[role] = domainHash("AAR-CREDENTIAL-ID-v1", fields);
     fieldsByRole[role] = fields;
   }
@@ -482,6 +520,7 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
   // default keeps corpus determinism (fixed offset inside the epoch window).
   const logHead = await input.anchorLog.append(manifest.payloadBytes, input.anchorObservedAt ?? input.evaluatedAt - 39);
 
+  const extraCredential = dispatchResult?.mediatorCountersignature?.credentialEnvelope;
   const rootRecord: Obj = {
     root_id: opaque(`trust-root:${toHex(input.keys["verifier-trust"].kid)}`), root_kid: input.keys["verifier-trust"].kid,
     tenant_id: input.tenantId, allowed_sites: [input.siteId],
@@ -510,16 +549,25 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
     { digest: retrievalDigest, media_type: "application/cbor", canonical_bytes: retrievalBytes },
     { digest: toolsDigest, media_type: "application/cbor", canonical_bytes: toolsBytes },
   ].sort((left, right) => Buffer.compare(Buffer.from(left.digest as Uint8Array), Buffer.from(right.digest as Uint8Array)));
+  const allCredentials = extraCredential === undefined
+    ? credentials.envelopes.map((item) => item.envelope)
+    : [...credentials.envelopes.map((item) => item.envelope), [...extraCredential]].sort((left, right) => {
+      const leftPayload = decodeCbor(left[0] as Uint8Array, { strict: true }) as Obj;
+      const rightPayload = decodeCbor(right[0] as Uint8Array, { strict: true }) as Obj;
+      return Buffer.compare(Buffer.from(leftPayload.credential_id as Uint8Array), Buffer.from(rightPayload.credential_id as Uint8Array));
+    });
+  const artifacts: Obj = {
+    receipts: sortById(receipts, (item) => item.id).map((item) => item.signed.envelope), requests: [request.envelope],
+    delegations: sortById(delegations, (item) => item.payload.delegation_id as Uint8Array).map((item) => item.signed.envelope),
+    credentials: allCredentials, status_snapshots: [], rotations: [], epoch_events: [],
+    epoch_manifests: [manifest.envelope], anchors: [], merkle_batches: [], merkle_proofs: [], manifest_payloads: manifestPayloads,
+  };
+  if (dispatchResult?.mediatorCountersignature !== undefined) artifacts.mediator_countersignatures = [[...dispatchResult.mediatorCountersignature.envelope]];
   const bundle: Obj = {
     v: 2, created_at: input.evaluatedAt, bundle_nonce: id16(`bundle:${toHex(input.invocationId)}`), claimed_profile: "AAR-3",
     selector, selector_commitment: selectorCommitment, coverage: "complete", trust_inputs: trust,
     ranges: [{ manifest_id: manifestId, selector_commitment: selectorCommitment, first_leaf_index: 0, entries: rangeEntries }],
-    artifacts: {
-      receipts: sortById(receipts, (item) => item.id).map((item) => item.signed.envelope), requests: [request.envelope],
-      delegations: sortById(delegations, (item) => item.payload.delegation_id as Uint8Array).map((item) => item.signed.envelope),
-      credentials: credentials.envelopes.map((item) => item.envelope), status_snapshots: [], rotations: [], epoch_events: [],
-      epoch_manifests: [manifest.envelope], anchors: [], merkle_batches: [], merkle_proofs: [], manifest_payloads: manifestPayloads,
-    },
+    artifacts,
   };
   return {
     bundle: encodeCbor(bundle), trustPolicy: trustPolicyJson(trust), receipts, request,

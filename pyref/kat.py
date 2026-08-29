@@ -21,6 +21,7 @@ KAT_DIRECTORIES = (
     ROOT / "kats" / "class-boundary",
     ROOT / "kats" / "terminal-state",
     ROOT / "kats" / "evidence-commit",
+    ROOT / "kats" / "countersign",
 )
 RESULTS_PATH = Path(__file__).resolve().parent / "results-c1.json"
 C2_RESULTS_PATH = Path(__file__).resolve().parent / "results-c2.json"
@@ -277,6 +278,7 @@ def _audit_envelope(envelope: SignedEnvelope, audit: Audit, context: CorpusConte
         "application/aar-epoch-manifest+cbor;v=0.2": "manifest_id",
         "application/aar-anchor-record+cbor;v=0.2": "anchor_id",
         "application/aar-merkle-batch+cbor;v=0.2": "batch_id",
+        "application/aar-mediator-countersignature+cbor;v=0.2": "countersignature_id",
         "application/aar-presentation+cbor;v=0.2": "presentation_id",
     }
     if content_type == "application/aar-receipt+cbor;v=0.2" and "receipt_id" in payload:
@@ -648,6 +650,7 @@ def _c2_fixture_paths() -> list[Path]:
     paths.extend((ROOT / "kats" / "class-boundary").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "terminal-state").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "evidence-commit").glob("*.cbor"))
+    paths.extend((ROOT / "kats" / "countersign").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "negative").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "negative" / "stateful").glob("*.bundle.cbor"))
     return sorted(paths)
@@ -721,6 +724,7 @@ STEP_SPEC = {
     "evidence": "Step 19 recomputes the maximum declared and structurally supported evidence classes.",
     "journal": "Step 13 requires an AAR-3 action-attempt journal commitment before dispatch, except for the marked life-safety path.",
     "request": "Step 7 binds an agent_request root to SHA-256 of the exact request claims bstr.",
+    "countersign": "Steps 6-10 verify the mediator signature and credential, then bind the exact action-attempt envelope and command digests.",
 }
 
 

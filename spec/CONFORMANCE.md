@@ -56,7 +56,9 @@ normative as the step order itself (D-54).
 3. **Bundle schema.** Check the closed top-level map, `v`, required fields, field
    types, fixed-size values, enums/ranges, and sorted/unique
    arrays, in that order. Occurrence ceilings listed as section 1 resource limits
-   are deferred to step 4 so their `resource/*` code is reachable. Check
+   are deferred to step 4 so their `resource/*` code is reachable. The optional
+   `artifacts.mediator_countersignatures` array is closed and sorted by primary
+   ID like the other artifact arrays; absence is the pre-D-67 encoding. Check
    `selector_commitment` last within this step.
 4. **Static resource counts.** Check artifact counts, parent counts, total edge
    count, individual proof byte lengths, and aggregate proof bytes in that order.
@@ -65,7 +67,8 @@ normative as the step order itself (D-54).
 6. **Envelope mechanics.** For each signed object, in this artifact order —
    credentials, rotation records, status snapshots, request envelopes,
    delegations, epoch events, epoch manifests, anchor records, Merkle batches,
-   then receipts (including any nested signed presentation manifest) — perform:
+   mediator countersignatures, then receipts (including any nested signed
+   presentation manifest) — perform:
 
    1. decode the untagged four-element COSE array and require deterministic CBOR;
    2. require protected to be a bstr containing a closed deterministic map;
@@ -83,6 +86,17 @@ normative as the step order itself (D-54).
    8. compare protected receipt coordinates to payload coordinates;
    9. reconstruct COSE `Sig_structure` from the received protected and payload
       bytes and verify ES256.
+
+   A mediator countersignature uses content type
+   `application/aar-mediator-countersignature+cbor;v=0.2`, requires an
+   `outcome_signing` credential whose `principal_role` is `outcome_observer`,
+   and verifies with the carried SPKI. A countersignature COSE/profile or
+   signature failure is `countersign/invalid`; failure to resolve or accept its
+   credential, chain, usage, role, scope, validity, status, or SPKI is
+   `countersign/credential-invalid`. More generally, any validation failure of
+   a credential that is the subject of a carried countersignature reports
+   `countersign/credential-invalid`, including a failure while validating that
+   credential's own envelope.
 
 7. **Content commitments and IDs.** Note (GATE3 F3): artifact IDs bind
    content, not signer — reference-by-ID resolves to the carried artifact,
@@ -109,7 +123,10 @@ normative as the step order itself (D-54).
    tenant, this site, or this enforcement point. A missing or non-conforming
    coordinate — on either side of any comparison — is treated as disagreement and
    MUST yield the same code, never an implementation error. `human_request` and
-   `standing_condition_trigger` roots remain commitment-only.
+   `standing_condition_trigger` roots remain commitment-only. For each mediator
+   countersignature, recompute `countersignature_id` from the domain
+   `AAR-MEDIATOR-COUNTERSIGNATURE-ID-v1` and its claims with that field absent;
+   disagreement is `countersign/digest-mismatch`.
 8. **Credential lifecycle.** Enforce role-key separation; path construction;
    tenant-scoped roots; and rotation predecessor/successor continuity and monotonic
    sequence. Then, for EVERY carried status snapshot — whether or not any decision
@@ -148,7 +165,21 @@ normative as the step order itself (D-54).
     the bound trust policy's optional `life_safety_action_names` list, otherwise
     reject with `receipt/hazard-class-unbound`; then degraded-marker constraints;
     normalized action/command agreement; and dispatch/outcome subject agreement,
-    in that order. If no `life_safety_action_names` list is bound, every
+    in that order. Then evaluate mediator countersignatures in artifact-array
+    order: `action_attempt_receipt_digest` MUST equal SHA-256 of exactly one
+    carried `action_attempt` receipt-envelope's received deterministic-CBOR
+    bytes, and `command_digest` MUST equal that attempt's already-verified
+    command digest. Either disagreement, including no or multiple matching
+    attempts, is `countersign/digest-mismatch`. Only after every carried
+    countersignature passes does the verifier add the signed observation
+    `mediator_countersigned`. `mediator_observed_at` is carried and signed but
+    is not validated against any other time in v0.2. Duplicate
+    countersignatures for one attempt are accepted when distinct
+    `mediator_observed_at` values yield distinct `countersignature_id` values.
+    The signer check establishes only an accepted in-tenant
+    `outcome_observer`/`outcome_signing` credential; v0.2 does not pin its `kid`
+    to "the mediator", and mediator-`kid` trust-policy pinning is a v0.3
+    question. If no `life_safety_action_names` list is bound, every
     life-safety marker is unbound. `refusal_reason="journal/unavailable"` is valid
     only on a `not_dispatched` attempt. A `degraded` marker is valid only when its
     reason is `journal/unavailable`, the policy-bound normalized action carries
@@ -335,7 +366,7 @@ one input has several defects, section 2 selects the first verifier code.
 |---|---|
 | `resource/bundle-too-large` | Exact input exceeds 16,777,216 bytes. |
 | `resource/cbor-depth` | A syntactically open container would exceed nesting depth 32. |
-| `resource/node-count` | Receipt count exceeds 10,000. |
+| `resource/node-count` | Receipt or mediator-countersignature count exceeds 10,000. |
 | `resource/edge-count` | Total parent edges exceeds 50,000. |
 | `resource/parent-count` | One receipt has more than 64 parents. |
 | `resource/dag-depth` | Acyclic graph longest path exceeds 128 nodes. |
@@ -481,6 +512,9 @@ one input has several defects, section 2 selects the first verifier code.
 | `evidence/provenance-class-unsatisfied` | Inference lacks provenance evidence, a different kind carries it, or the declared class omits a required capture/provider attestation ID. |
 | `evidence/outcome-class-unsatisfied` | Outcome evidence is absent/present on the wrong kind, its label is invalid for that kind, or it omits required dispatch/ack/independent predicate fields. |
 | `evidence/observer-not-independent` | `independently_sensed` observer is not in a distinct accepted failure domain. |
+| `countersign/invalid` | A carried mediator countersignature has an invalid COSE/profile encoding or signature. |
+| `countersign/digest-mismatch` | Its ID, action-attempt receipt-envelope digest, or canonical-command digest does not match the carried bundle. |
+| `countersign/credential-invalid` | Its signer credential, chain, SPKI, role, usage, scope, validity, or status is not accepted. |
 
 An unavailable external key, replay database, expected anchor head, or trust-policy
 input is not evidence that the bundle is bad. The verdict is `indeterminate` and
@@ -503,6 +537,10 @@ first-failure reason:
 - `degraded_dispatch`: an AAR-3 action marked `life_safety` proceeded without the
   normal prior journal commitment, was allowed by the bound trust policy, and
   carried the required `degraded` marker;
+- `mediator_countersigned`: every carried D-67 artifact verified and bound an
+  exact action-attempt receipt envelope to the canonical-command digest observed
+  by an accepted in-tenant `outcome_observer`/`outcome_signing` signer; v0.2
+  does not establish that the signer's `kid` is "the mediator";
 - `empty_scope` (GATE3 F4): the bundle verified `conformant` over zero receipts
   matching the selector — the verdict asserts nothing about any receipt;
 - `stateful_not_evaluated` (GATE3 F6): no prior evaluated state was supplied, so
@@ -568,6 +606,7 @@ verdict-fields = (
     / "anchor_existence_order_only"
     / "refused_pre_dispatch"
     / "degraded_dispatch"
+    / "mediator_countersigned"
   ) ],
 )
 

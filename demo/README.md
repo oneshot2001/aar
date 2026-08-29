@@ -17,6 +17,18 @@ against real, operator-owned AXIS cameras.
 second-protocol or cross-vendor claim — Vigil speaks VAPIX under the hood.
 Claim sentence of record: `spec/GATE5-D3-REVIEW.md`.
 
+When present, the D-67 mediator countersignature proves that an accepted
+in-tenant `outcome_observer`/`outcome_signing` credential signed the exact
+pre-dispatch action-attempt receipt digest, the canonical-command digest that
+`vigil-control` checked on `POST /dispatch`, and a carried observation time.
+The demo uses a mediator credential with a `kid` distinct from the EP outcome
+key. The v0.2 verifier does not bind that `kid` to "the mediator"; any accepted
+credential with that role and usage validates. Mediator-`kid` trust-policy
+pinning is a v0.3 question. The artifact narrows T-H2 at the AAR-to-mediator
+boundary. It does **not** prove device actuation or outcome truth, and it is not
+an independence claim: the demo EP and mediator are same-operator (F22).
+Direct VAPIX bundles carry no mediator countersignature.
+
 ## One-command scenario runs
 
 Offline (no hardware; separate mock backends, real pyref verification):
@@ -34,6 +46,11 @@ protocol; refuses to run otherwise):
 bun run adapters/vapix/live/run.ts      # D2b leg
 bun run adapters/vms/live/run.ts        # D3 leg (starts/uses vigil-control)
 ```
+
+`bun run demo/keys/generate.ts` also mints the mediator's own P-256 identity
+under `~/.aar-demo/vigil-control`. Its raw private key is created and retained
+by `vigil-control`; only `public.json` and a carried demo credential leave that
+service boundary.
 
 Every scenario emits a deterministic bundle that is verified by the public
 offline CLI:

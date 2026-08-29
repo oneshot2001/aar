@@ -5,7 +5,7 @@ import NIOCore
 import NIOHTTP1
 import NIOPosix
 
-// vigil-control — AAR D3 VMS-leg mediator (contract v2).
+// vigil-control — AAR D3 VMS-leg mediator (contract v3).
 //
 // A loopback HTTP service that wraps VigilCore.AxisEngine.VAPIXClient. The AAR
 // TS VmsAdapter calls this service THROUGH the transport witness, so the wire
@@ -46,6 +46,9 @@ struct DispatchEffect: Encodable {
   var serial: String?
   var firmware: String?
   var error: String?
+  var countersignature: String?
+  var countersignature_payload: String?
+  var mediator_credential: String?
 }
 
 enum CredError: Error { case failed(String) }
@@ -148,7 +151,7 @@ func deviceInfo(_ route: Route) async -> DispatchEffect {
   return effect
 }
 
-func dispatch(_ route: Route, body: Data) async -> DispatchEffect {
+func dispatch(_ route: Route, body: Data, signer: MediatorSigner) async -> DispatchEffect {
   let op = route.value("op") ?? "unknown"
   var effect = DispatchEffect(op: op, http_ok: false, application_status: "not_executed")
   // Digest-bound ops must carry the canonical command as the body.
@@ -156,6 +159,21 @@ func dispatch(_ route: Route, body: Data) async -> DispatchEffect {
     guard sha256Hex(body) == digest.lowercased() else {
       effect.application_status = "body_digest_mismatch"
       return effect
+    }
+    if let attemptDigest = route.value("attempt_digest") {
+      do {
+        let countersignature = try signer.sign(
+          actionAttemptDigestHex: attemptDigest,
+          commandDigestHex: digest.lowercased(),
+          observedAt: UInt64(Date().timeIntervalSince1970.rounded(.down))
+        )
+        effect.countersignature = countersignature.coseBase64
+        effect.countersignature_payload = countersignature.payloadBase64
+        effect.mediator_credential = countersignature.credentialBase64
+      } catch {
+        effect.application_status = "countersignature_failed"
+        return effect
+      }
     }
   }
   do {
@@ -229,7 +247,7 @@ final class DispatchHandler: ChannelInboundHandler, @unchecked Sendable {
       let path = URLComponents(string: head.uri)?.path ?? head.uri
       if head.method == .POST && path == "/dispatch" {
         Task {
-          let effect = await dispatch(route, body: bytes)
+          let effect = await dispatch(route, body: bytes, signer: mediatorSigner)
           let payload = (try? JSONEncoder().encode(effect)) ?? Data("{}".utf8)
           loop.execute { Self.respond(channel: channel, status: .ok, body: payload) }
         }
@@ -268,7 +286,34 @@ final class DispatchHandler: ChannelInboundHandler, @unchecked Sendable {
   }
 }
 
+if CommandLine.arguments.count > 2 && CommandLine.arguments[1] == "--mint-key" {
+  try MediatorSigner.mintKey(in: CommandLine.arguments[2])
+  FileHandle.standardOutput.write(Data("vigil-control mediator key ready\n".utf8))
+  exit(0)
+}
+#if DEBUG
+if CommandLine.arguments.count == 6 && CommandLine.arguments[1] == "--sign-test" {
+  let signer = try MediatorSigner(directory: CommandLine.arguments[2])
+  let signed = try signer.sign(
+    actionAttemptDigestHex: CommandLine.arguments[3],
+    commandDigestHex: CommandLine.arguments[4],
+    observedAt: UInt64(CommandLine.arguments[5])!
+  )
+  let payload = try JSONSerialization.data(withJSONObject: [
+    "payload": signed.payloadBase64,
+    "cose": signed.coseBase64,
+  ], options: [.sortedKeys])
+  FileHandle.standardOutput.write(payload + Data("\n".utf8))
+  exit(0)
+}
+#endif
 let requestedPort = CommandLine.arguments.count > 1 ? Int(CommandLine.arguments[1]) ?? 0 : 0
+let identityFlag = CommandLine.arguments.firstIndex(of: "--identity-dir")
+let defaultIdentityDirectory = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".aar-demo/vigil-control").path
+let identityDirectory = identityFlag.flatMap { index in
+  CommandLine.arguments.indices.contains(index + 1) ? CommandLine.arguments[index + 1] : nil
+} ?? defaultIdentityDirectory
+let mediatorSigner = try MediatorSigner(directory: identityDirectory)
 let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
 let bootstrap = ServerBootstrap(group: group)
   .serverChannelOption(ChannelOptions.backlog, value: 16)

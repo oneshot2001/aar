@@ -1,0 +1,7 @@
+{
+  "name": "signed mediator command digest differs from the action attempt",
+  "object_type": "bundle",
+  "expectation": "nonconformant",
+  "expected_code": "countersign/digest-mismatch",
+  "expected_observations": []
+}

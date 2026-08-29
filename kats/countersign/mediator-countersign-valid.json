@@ -1,0 +1,9 @@
+{
+  "name": "valid mediator countersignature adds the signed observation",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_code": null,
+  "expected_observations": [
+    "mediator_countersigned"
+  ]
+}

@@ -11,7 +11,8 @@ export type B1ReasonCode =
   | `identity/${string}` | `receipt/${string}` | `credential/${string}`
   | `replay/${string}` | `delegation/${string}` | `bundle/${string}`
   | `graph/${string}` | `epoch/${string}` | `merkle/${string}`
-  | `anchor/${string}` | `evidence/${string}` | `journal/${string}`;
+  | `anchor/${string}` | `evidence/${string}` | `journal/${string}`
+  | `countersign/${string}`;
 
 export type B1Failure = {
   ok: false;
@@ -243,7 +244,8 @@ function profileDecode(input: Uint8Array, step: number, path: string, allowTopTa
 }
 
 const TOP_FIELDS = ["v", "created_at", "bundle_nonce", "claimed_profile", "selector", "selector_commitment", "coverage", "trust_inputs", "ranges", "artifacts"] as const;
-const ARTIFACT_FIELDS = ["receipts", "requests", "delegations", "credentials", "status_snapshots", "rotations", "epoch_events", "epoch_manifests", "anchors", "merkle_batches", "merkle_proofs", "manifest_payloads"] as const;
+const REQUIRED_ARTIFACT_FIELDS = ["receipts", "requests", "delegations", "credentials", "status_snapshots", "rotations", "epoch_events", "epoch_manifests", "anchors", "merkle_batches", "merkle_proofs", "manifest_payloads"] as const;
+const ARTIFACT_FIELDS = [...REQUIRED_ARTIFACT_FIELDS, "mediator_countersignatures"] as const;
 const PROFILES = ["AAR-1", "AAR-2", "AAR-2A", "AAR-3"];
 const KINDS = ["observation", "inference", "authorization", "action_attempt", "dispatch", "outcome_observation"];
 const KEY_USAGES = ["agent_signing", "ep_signing", "authority_signing", "approver_signing", "outcome_signing", "anchor_signing", "verifier_signing", "credential_issuing", "status_signing"];
@@ -358,9 +360,10 @@ function validateBundleSchema(bundle: CborValue): B1Failure | undefined {
   }
 
   if (!object(bundle.artifacts)) return failure(3, "schema/bad-type", "bundle.artifacts");
-  issue = closed(bundle.artifacts, ARTIFACT_FIELDS, ARTIFACT_FIELDS, 3, "bundle.artifacts");
+  issue = closed(bundle.artifacts, ARTIFACT_FIELDS, REQUIRED_ARTIFACT_FIELDS, 3, "bundle.artifacts");
   if (issue) return issue;
-  for (const field of ARTIFACT_FIELDS) if (!Array.isArray(bundle.artifacts[field])) return failure(3, "schema/bad-type", `bundle.artifacts.${field}`);
+  for (const field of REQUIRED_ARTIFACT_FIELDS) if (!Array.isArray(bundle.artifacts[field])) return failure(3, "schema/bad-type", `bundle.artifacts.${field}`);
+  if (bundle.artifacts.mediator_countersignatures !== undefined && !Array.isArray(bundle.artifacts.mediator_countersignatures)) return failure(3, "schema/bad-type", "bundle.artifacts.mediator_countersignatures");
   for (const [index, value] of (bundle.artifacts.manifest_payloads as CborValue[]).entries()) {
     if (!object(value)) return failure(3, "schema/bad-type", `bundle.artifacts.manifest_payloads[${index}]`);
     issue = closed(value, ["digest", "media_type", "canonical_bytes"], ["digest", "media_type", "canonical_bytes"], 3, `bundle.artifacts.manifest_payloads[${index}]`);
@@ -374,7 +377,7 @@ function validateBundleSchema(bundle: CborValue): B1Failure | undefined {
   // Artifact primary-ID sorting can only be checked when the envelope payload is
   // itself decodable; malformed embedded payloads remain step-6 failures.
   for (const field of ARTIFACT_FIELDS) {
-    const array = bundle.artifacts[field] as CborValue[];
+    const array = (bundle.artifacts[field] ?? []) as CborValue[];
     const keys: CborValue[] = [];
     for (const entry of array) {
       const key = artifactSortKey(field, entry);
@@ -401,7 +404,7 @@ function artifactSortKey(field: typeof ARTIFACT_FIELDS[number], entry: CborValue
     const fieldName: Partial<Record<typeof ARTIFACT_FIELDS[number], string>> = {
       receipts: "receipt_id", requests: "request_id", delegations: "delegation_id", credentials: "credential_id",
       status_snapshots: "snapshot_id", rotations: "rotation_id", epoch_events: "event_id", epoch_manifests: "manifest_id",
-      anchors: "anchor_id", merkle_batches: "batch_id",
+      anchors: "anchor_id", merkle_batches: "batch_id", mediator_countersignatures: "countersignature_id",
     };
     return payload[fieldName[field]!];
   } catch { return undefined; }
@@ -411,6 +414,9 @@ function validateResourceCounts(bundle: Obj): B1Failure | undefined {
   const artifacts = bundle.artifacts as Obj;
   const receipts = artifacts.receipts as CborValue[];
   if (receipts.length > LIMITS.nodes) return failure(4, "resource/node-count", "bundle.artifacts.receipts");
+  if (((artifacts.mediator_countersignatures ?? []) as CborValue[]).length > LIMITS.nodes) {
+    return failure(4, "resource/node-count", "bundle.artifacts.mediator_countersignatures");
+  }
   let edges = 0;
   for (let index = 0; index < receipts.length; index += 1) {
     const payload = envelopePayload(receipts[index]);
@@ -439,7 +445,19 @@ function envelopePayload(value: CborValue | undefined): CborValue | undefined {
   try { return decodeCbor(value[0], { strict: true }); } catch { return undefined; }
 }
 
-type ArtifactKind = "credential" | "rotation" | "status" | "request" | "delegation" | "epoch_event" | "epoch_manifest" | "anchor" | "merkle_batch" | "receipt" | "presentation";
+function envelopeKid(value: CborValue | undefined): Uint8Array | undefined {
+  if (!Array.isArray(value) || !(value[1] instanceof Uint8Array)) return undefined;
+  try {
+    const cose = decodeCbor(value[1], { strict: true });
+    if (!Array.isArray(cose) || !(cose[0] instanceof Uint8Array)) return undefined;
+    const protectedMap = decodeCbor(cose[0], { strict: true });
+    if (!(protectedMap instanceof Map)) return undefined;
+    const kid = protectedMap.get(4);
+    return bytes(kid, 32) ? kid : undefined;
+  } catch { return undefined; }
+}
+
+type ArtifactKind = "credential" | "rotation" | "status" | "request" | "delegation" | "epoch_event" | "epoch_manifest" | "anchor" | "merkle_batch" | "mediator_countersignature" | "receipt" | "presentation";
 type ParsedEnvelope = {
   kind: ArtifactKind;
   envelope: CborValue[];
@@ -459,6 +477,7 @@ const CONTENT_TYPE: Record<ArtifactKind, string> = {
   delegation: "application/aar-delegation+cbor;v=0.2", epoch_event: "application/aar-epoch-event+cbor;v=0.2",
   epoch_manifest: "application/aar-epoch-manifest+cbor;v=0.2", anchor: "application/aar-anchor-record+cbor;v=0.2",
   merkle_batch: "application/aar-merkle-batch+cbor;v=0.2", receipt: "application/aar-receipt+cbor;v=0.2",
+  mediator_countersignature: "application/aar-mediator-countersignature+cbor;v=0.2",
   presentation: "application/aar-presentation+cbor;v=0.2",
 };
 
@@ -472,6 +491,7 @@ const REQUIRED_PAYLOAD_FIELDS: Record<ArtifactKind, readonly string[]> = {
   epoch_manifest: ["v", "manifest_id", "tenant_id", "site_id", "epoch_owner_kid", "epoch_id", "opened_at", "closed_at", "sequence_span", "item_count", "close_reason", "max_duration_s", "late_arrival_policy", "anchor_deadline", "fork_policy", "receipt_index", "anchor_plan"],
   anchor: ["v", "anchor_id", "target", "tenant_id", "site_id", "epoch_id", "manifest_id", "manifest_digest", "submitted_at", "accepted_at", "anchor_tree_size", "anchor_leaf_index", "anchor_root", "inclusion", "head", "claim"],
   merkle_batch: ["v", "batch_id", "tenant_id", "site_id", "epoch_owner_kid", "epoch_id", "signer_kid", "tree_size", "root", "created_at", "claim"],
+  mediator_countersignature: ["v", "countersignature_id", "action_attempt_receipt_digest", "command_digest", "mediator_observed_at"],
   receipt: ["v", "receipt_id", "kind", "issuer_principal_type", "issuer_role", "binding", "emission", "freshness", "legal", "evidence", "parents", "body"],
   presentation: ["presentation_id", "presenter_credential_id", "signer_mode", "artifacts", "transforms", "ui_implementation", "ui_version", "delivered_at", "session_id", "approval_scope_digest", "state"],
 };
@@ -542,15 +562,17 @@ function parseEnvelope(entry: CborValue, kind: ArtifactKind, path: string): Pars
     if (typeof payloadValue.kind !== "string" || !KINDS.includes(payloadValue.kind)) return failure(6, "schema/enum-unknown", `${path}.payload.kind`);
     if (!object(payloadValue.binding) || !object(payloadValue.emission) || !object(payloadValue.freshness) || !Array.isArray(payloadValue.parents) || !object(payloadValue.body)) return failure(6, "schema/bad-type", `${path}.payload`);
   }
+  if (kind === "mediator_countersignature" && !uint(payloadValue.mediator_observed_at)) return failure(6, "countersign/invalid", `${path}.payload.mediator_observed_at`);
   return { kind, envelope: entry, envelopeBytes: encodeCbor(entry), payloadBytes, payload: payloadValue, coseBytes, protectedBytes, protectedMap, signature, kid };
 }
 
 function payloadFixedFields(kind: ArtifactKind): readonly (readonly [string, number])[] {
-  const primary: Partial<Record<ArtifactKind, string>> = { credential: "credential_id", rotation: "rotation_id", status: "snapshot_id", request: "request_id", delegation: "delegation_id", epoch_event: "event_id", epoch_manifest: "manifest_id", anchor: "anchor_id", merkle_batch: "batch_id", receipt: "receipt_id", presentation: "presentation_id" };
+  const primary: Partial<Record<ArtifactKind, string>> = { credential: "credential_id", rotation: "rotation_id", status: "snapshot_id", request: "request_id", delegation: "delegation_id", epoch_event: "event_id", epoch_manifest: "manifest_id", anchor: "anchor_id", merkle_batch: "batch_id", mediator_countersignature: "countersignature_id", receipt: "receipt_id", presentation: "presentation_id" };
   // subject_kid is included for credentials: it is indexed as a map key and
   // compared against sha256(public_key), where a plain array of the same
   // integers would satisfy equalBytes (pyref _schema_payload parity).
   if (kind === "credential") return [["credential_id", 32], ["subject_kid", 32]];
+  if (kind === "mediator_countersignature") return [["countersignature_id", 32], ["action_attempt_receipt_digest", 32], ["command_digest", 32]];
   return [[primary[kind]!, kind === "request" ? 16 : 32]];
 }
 
@@ -571,21 +593,31 @@ type Parsed = Record<ArtifactKind, ParsedEnvelope[]> & {
 };
 
 function emptyParsed(): Parsed {
-  return { credential: [], rotation: [], status: [], request: [], delegation: [], epoch_event: [], epoch_manifest: [], anchor: [], merkle_batch: [], receipt: [], presentation: [], embeddedDelegations: [] };
+  return { credential: [], rotation: [], status: [], request: [], delegation: [], epoch_event: [], epoch_manifest: [], anchor: [], merkle_batch: [], mediator_countersignature: [], receipt: [], presentation: [], embeddedDelegations: [] };
 }
 
 function parseAll(bundle: Obj): Parsed | B1Failure {
   const artifacts = bundle.artifacts as Obj;
   const parsed = emptyParsed();
+  const mediatorKids = new Set(((artifacts.mediator_countersignatures ?? []) as CborValue[])
+    .map((entry) => envelopeKid(entry)).filter((kid): kid is Uint8Array => kid !== undefined).map(toHex));
   const order: readonly [keyof Obj, ArtifactKind][] = [
     ["credentials", "credential"], ["rotations", "rotation"], ["status_snapshots", "status"], ["requests", "request"], ["delegations", "delegation"],
-    ["epoch_events", "epoch_event"], ["epoch_manifests", "epoch_manifest"], ["anchors", "anchor"], ["merkle_batches", "merkle_batch"], ["receipts", "receipt"],
+    ["epoch_events", "epoch_event"], ["epoch_manifests", "epoch_manifest"], ["anchors", "anchor"], ["merkle_batches", "merkle_batch"],
+    ["mediator_countersignatures", "mediator_countersignature"], ["receipts", "receipt"],
   ];
   for (const [field, kind] of order) {
-    const entries = artifacts[field] as CborValue[];
+    const entries = (artifacts[field] ?? []) as CborValue[];
     for (let index = 0; index < entries.length; index += 1) {
       const result = parseEnvelope(entries[index]!, kind, `bundle.artifacts.${String(field)}[${index}]`);
-      if (isFailure(result)) return result;
+      if (isFailure(result)) {
+        if (kind === "mediator_countersignature") return failure(6, "countersign/invalid", result.path);
+        const loosePayload = kind === "credential" ? envelopePayload(entries[index]) : undefined;
+        if (object(loosePayload) && bytes(loosePayload.subject_kid, 32) && mediatorKids.has(toHex(loosePayload.subject_kid))) {
+          return failure(6, "countersign/credential-invalid", result.path);
+        }
+        return result;
+      }
       parsed[kind].push(result);
       if (kind === "receipt" && object(result.payload.body)) {
         const presentation = result.payload.body.presentation;
@@ -628,25 +660,28 @@ function spkiPublicKey(spki: Uint8Array): Uint8Array | undefined {
 
 function validateMechanics(bundle: Obj, parsed: Parsed): B1Failure | undefined {
   const credentialsByKid = new Map(parsed.credential.map((entry) => [toHex(entry.payload.subject_kid as Uint8Array), entry]));
+  const mediatorKids = new Set(parsed.mediator_countersignature.map((entry) => toHex(entry.kid)));
   const roots = ((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[];
   const evaluationTime = ((bundle.trust_inputs as Obj).evaluation_time as number);
-  const order: ArtifactKind[] = ["credential", "rotation", "status", "request", "delegation", "epoch_event", "epoch_manifest", "anchor", "merkle_batch", "receipt", "presentation"];
+  const order: ArtifactKind[] = ["credential", "rotation", "status", "request", "delegation", "epoch_event", "epoch_manifest", "anchor", "merkle_batch", "mediator_countersignature", "receipt", "presentation"];
   for (const kind of order) for (const entry of kind === "delegation" ? [...parsed.delegation, ...parsed.embeddedDelegations.map((value) => value.delegation)] : parsed[kind]) {
+    const mediatorCredentialEnvelope = kind === "credential" && mediatorKids.has(toHex(entry.payload.subject_kid as Uint8Array));
+    const countersignCredentialFailure = kind === "mediator_countersignature" || mediatorCredentialEnvelope;
     const credential = credentialsByKid.get(toHex(entry.kid));
-    if (credential === undefined) return failure(6, "key/not-found", `${kind}.kid`, true);
+    if (credential === undefined) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "key/not-found", `${kind}.kid`, !countersignCredentialFailure);
     const publicKeyBytes = credential.payload.public_key;
-    if (!(publicKeyBytes instanceof Uint8Array)) return failure(6, "schema/bad-type", "credential.public_key");
-    if (!equalBytes(hash(publicKeyBytes), credential.payload.subject_kid as Uint8Array)) return failure(6, "credential/kid-key-mismatch", "credential.public_key");
+    if (!(publicKeyBytes instanceof Uint8Array)) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "schema/bad-type", "credential.public_key");
+    if (!equalBytes(hash(publicKeyBytes), credential.payload.subject_kid as Uint8Array)) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "credential/kid-key-mismatch", "credential.public_key");
     const publicKey = spkiPublicKey(publicKeyBytes);
-    if (publicKey === undefined) return failure(6, "key/not-p256", "credential.public_key");
+    if (publicKey === undefined) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "key/not-p256", "credential.public_key");
     const requiredUsage = usageFor(entry);
-    if (credential.payload.key_usage !== requiredUsage) return failure(6, kind === "receipt" ? "receipt/signer-role-mismatch" : "credential/usage-mismatch", `${kind}.kid`);
+    if (credential.payload.key_usage !== requiredUsage || (kind === "mediator_countersignature" && credential.payload.principal_role !== "outcome_observer")) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : kind === "receipt" ? "receipt/signer-role-mismatch" : "credential/usage-mismatch", `${kind}.kid`);
     if (["epoch_event", "epoch_manifest", "merkle_batch"].includes(kind) && !same(entry.kid, entry.payload.epoch_owner_kid)) return failure(6, "credential/usage-mismatch", `${kind}.epoch_owner_kid`);
     if (kind === "merkle_batch" && !same(entry.payload.signer_kid, entry.payload.epoch_owner_kid)) return failure(6, "credential/usage-mismatch", "merkle_batch.signer_kid");
     const signingTime = kind === "receipt" && object(entry.payload.emission) && uint(entry.payload.emission.committed_at) ? entry.payload.emission.committed_at : evaluationTime;
-    if (!uint(credential.payload.valid_from) || !uint(credential.payload.valid_until)) return failure(6, "schema/bad-type", "credential.validity");
-    if (signingTime < credential.payload.valid_from) return failure(6, "credential/not-yet-valid", "credential.valid_from");
-    if (signingTime >= credential.payload.valid_until) return failure(6, "credential/expired", "credential.valid_until");
+    if (!uint(credential.payload.valid_from) || !uint(credential.payload.valid_until)) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "schema/bad-type", "credential.validity");
+    if (signingTime < credential.payload.valid_from) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "credential/not-yet-valid", "credential.valid_from");
+    if (signingTime >= credential.payload.valid_until) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "credential/expired", "credential.valid_until");
     if (kind === "receipt") {
       const binding = entry.payload.binding as Obj;
       const emission = entry.payload.emission as Obj;
@@ -654,9 +689,9 @@ function validateMechanics(bundle: Obj, parsed: Parsed): B1Failure | undefined {
       if (coordinateValues.some(([label, value]) => !same(entry.protectedMap.get(label), value))) return failure(6, "cose/receipt-coordinate-mismatch", "receipt.protected");
     }
     const sigStructure = encodeCbor(["Signature1", entry.protectedBytes, new Uint8Array(), entry.payloadBytes]);
-    if (!p256.verify(entry.signature, hash(sigStructure), publicKey, { prehash: false, lowS: true, format: "compact" })) return failure(6, "sig/verify-failed", `${kind}.signature`);
+    if (!p256.verify(entry.signature, hash(sigStructure), publicKey, { prehash: false, lowS: true, format: "compact" })) return failure(6, kind === "mediator_countersignature" ? "countersign/invalid" : mediatorCredentialEnvelope ? "countersign/credential-invalid" : "sig/verify-failed", `${kind}.signature`);
     if (kind === "credential" && (entry.payload.path as CborValue[]).length === 0) {
-      if (!roots.some((root) => same(root.root_kid, entry.payload.subject_kid))) return failure(6, "credential/root-not-accepted", "credential.path");
+      if (!roots.some((root) => same(root.root_kid, entry.payload.subject_kid))) return failure(6, mediatorCredentialEnvelope ? "countersign/credential-invalid" : "credential/root-not-accepted", "credential.path");
     }
   }
   return undefined;
@@ -669,6 +704,7 @@ function usageFor(entry: ParsedEnvelope): string {
   if (entry.kind === "status") return "status_signing";
   if (["epoch_event", "epoch_manifest", "merkle_batch"].includes(entry.kind)) return "ep_signing";
   if (entry.kind === "anchor") return "anchor_signing";
+  if (entry.kind === "mediator_countersignature") return "outcome_signing";
   if (entry.kind === "presentation") return entry.payload.signer_mode === "approver_originated" ? "approver_signing" : "ep_signing";
   const role = entry.payload.issuer_role;
   return role === "agent" ? "agent_signing" : role === "enforcement_point" ? "ep_signing" : role === "outcome_observer" ? "outcome_signing" : "";
@@ -678,15 +714,16 @@ const ID_DOMAINS: Partial<Record<ArtifactKind, readonly [string, string]>> = {
   credential: ["credential_id", "AAR-CREDENTIAL-ID-v1"], rotation: ["rotation_id", "AAR-ROTATION-ID-v1"], status: ["snapshot_id", "AAR-STATUS-ID-v1"],
   delegation: ["delegation_id", "AAR-DELEGATION-ID-v1"], epoch_event: ["event_id", "AAR-EPOCH-EVENT-ID-v1"], epoch_manifest: ["manifest_id", "AAR-EPOCH-MANIFEST-ID-v1"],
   anchor: ["anchor_id", "AAR-ANCHOR-ID-v1"], merkle_batch: ["batch_id", "AAR-BATCH-ID-v1"], presentation: ["presentation_id", "AAR-PRESENTATION-MANIFEST-v1"],
+  mediator_countersignature: ["countersignature_id", "AAR-MEDIATOR-COUNTERSIGNATURE-ID-v1"],
 };
 
 function validateContent(bundle: Obj, parsed: Parsed): B1Failure | undefined {
-  for (const kind of ["delegation", "credential", "status", "rotation", "epoch_event", "epoch_manifest", "anchor", "merkle_batch", "presentation"] as ArtifactKind[]) {
+  for (const kind of ["delegation", "credential", "status", "rotation", "epoch_event", "epoch_manifest", "anchor", "merkle_batch", "mediator_countersignature", "presentation"] as ArtifactKind[]) {
     const domain = ID_DOMAINS[kind];
     if (domain === undefined) continue;
     for (const entry of parsed[kind]) {
       const [field, label] = domain;
-      if (!equalBytes(entry.payload[field] as Uint8Array, domainHash(label, without(entry.payload, field)))) return failure(7, kind === "presentation" ? "hash/mismatch" : "identity/artifact-id-mismatch", `${kind}.${field}`);
+      if (!equalBytes(entry.payload[field] as Uint8Array, domainHash(label, without(entry.payload, field)))) return failure(7, kind === "mediator_countersignature" ? "countersign/digest-mismatch" : kind === "presentation" ? "hash/mismatch" : "identity/artifact-id-mismatch", `${kind}.${field}`);
     }
   }
   for (const { delegation } of parsed.embeddedDelegations) {
@@ -783,6 +820,7 @@ function receiptHashes(payload: Obj): B1Failure | undefined {
 
 function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | undefined {
   const credentials = new Map(parsed.credential.map((entry) => [toHex(entry.payload.credential_id as Uint8Array), entry]));
+  const mediatorKids = new Set(parsed.mediator_countersignature.map((entry) => toHex(entry.kid)));
   const roots = ((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[];
   const evaluation = (bundle.trust_inputs as Obj).evaluation_time as number;
   const roleKids = new Map<string, string>();
@@ -796,23 +834,30 @@ function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | u
   }
   for (const entry of parsed.credential) {
     const payload = entry.payload;
+    const mediatorCredential = mediatorKids.has(toHex(payload.subject_kid as Uint8Array));
     const path = payload.path;
-    if (!Array.isArray(path) || path.length > 8) return failure(8, "schema/out-of-range", "credential.path");
+    if (!Array.isArray(path) || path.length > 8) return failure(8, mediatorCredential ? "countersign/credential-invalid" : "schema/out-of-range", "credential.path");
     const seen = new Set([toHex(payload.credential_id as Uint8Array)]);
     let expectedIssuer = payload.issuer_kid as Uint8Array;
     for (const id of path) {
-      if (!bytes(id, 32) || seen.has(toHex(id))) return failure(8, "credential/path-invalid", "credential.path");
+      if (!bytes(id, 32) || seen.has(toHex(id))) return failure(8, mediatorCredential ? "countersign/credential-invalid" : "credential/path-invalid", "credential.path");
       seen.add(toHex(id));
       const issuer = credentials.get(toHex(id));
-      if (issuer === undefined || !equalBytes(issuer.payload.subject_kid as Uint8Array, expectedIssuer)) return failure(8, "credential/path-invalid", "credential.path");
+      if (issuer === undefined || !equalBytes(issuer.payload.subject_kid as Uint8Array, expectedIssuer)) return failure(8, mediatorCredential ? "countersign/credential-invalid" : "credential/path-invalid", "credential.path");
       expectedIssuer = issuer.payload.issuer_kid as Uint8Array;
     }
   }
   for (const entry of parsed.credential) {
     const payload = entry.payload;
+    const mediatorCredential = mediatorKids.has(toHex(payload.subject_kid as Uint8Array));
     const path = payload.path as CborValue[];
     const last = path.length === 0 ? payload : credentials.get(toHex(path[path.length - 1] as Uint8Array))?.payload;
-    if (last === undefined || !roots.some((root) => same(root.root_kid, last.subject_kid) && same(root.tenant_id, payload.tenant_id) && Array.isArray(root.allowed_sites) && root.allowed_sites.some((site) => same(site, payload.site_id)))) return failure(8, "credential/root-not-accepted", "credential.path");
+    if (last === undefined || !roots.some((root) => same(root.root_kid, last.subject_kid)
+      && same(root.tenant_id, payload.tenant_id)
+      && Array.isArray(root.allowed_sites) && root.allowed_sites.some((site) => same(site, payload.site_id))
+      && (!mediatorCredential || (Array.isArray(root.allowed_key_usages) && root.allowed_key_usages.includes(payload.key_usage))))) {
+      return failure(8, mediatorCredential ? "countersign/credential-invalid" : "credential/root-not-accepted", "credential.path");
+    }
   }
   const rotations = [...parsed.rotation].sort((a, b) => (a.payload.continuity_sequence as number) - (b.payload.continuity_sequence as number));
   let previous: ParsedEnvelope | undefined;
@@ -841,6 +886,23 @@ function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | u
     if (!object(decision) || !Array.isArray(decision.status_snapshot_ids)) continue;
     for (const id of decision.status_snapshot_ids) if (!parsed.status.some((status) => same(status.payload.snapshot_id, id))) return failure(8, "credential/status-missing", "receipt.body.decision.status_snapshot_ids");
   }
+  return undefined;
+}
+
+function validateMediatorCountersignatures(parsed: Parsed, observations: string[]): B1Failure | undefined {
+  if (parsed.mediator_countersignature.length === 0) return undefined;
+  const attempts = parsed.receipt.filter((entry) => entry.payload.kind === "action_attempt");
+  for (const countersignature of parsed.mediator_countersignature) {
+    const payload = countersignature.payload;
+    const matches = attempts.filter((attempt) => equalBytes(hash(attempt.envelopeBytes), payload.action_attempt_receipt_digest as Uint8Array));
+    if (matches.length !== 1) return failure(10, "countersign/digest-mismatch", "mediator_countersignature.action_attempt_receipt_digest");
+    const body = matches[0]!.payload.body;
+    const command = object(body) && object(body.command) ? body.command : undefined;
+    if (command === undefined || !bytes(command.command_digest, 32) || !equalBytes(command.command_digest, payload.command_digest as Uint8Array)) {
+      return failure(10, "countersign/digest-mismatch", "mediator_countersignature.command_digest");
+    }
+  }
+  observe(observations, "mediator_countersigned");
   return undefined;
 }
 
@@ -1611,6 +1673,8 @@ function validateBundle(input: Uint8Array, options: VerifyB1Options): B1Verifica
   if (emissionIssue) return emissionIssue;
   const receiptIssue = validateReceiptSemantics(bundle, parsed);
   if (receiptIssue) return receiptIssue;
+  const countersignatureIssue = validateMediatorCountersignatures(parsed, observations);
+  if (countersignatureIssue) return countersignatureIssue;
   const replayIssue = validateReplay(parsed, options.replayState ?? []);
   if (replayIssue) return replayIssue;
   const graphIssue = validateGraph(parsed);

@@ -2,7 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { id16 } from "../../harness/crypto";
+import { domainHash, hash, id16, signDetached } from "../../harness/crypto";
 import { toHex } from "../../harness/cbor";
 import { buildCommandManifest } from "../../demo/ep/command-manifest";
 import { AppendOnlyWitnessLog } from "../../demo/witness/log";
@@ -12,6 +12,7 @@ import { MediatorHttpClient } from "./client";
 import { assertVmsConfig, type VmsRuntimeConfig } from "./config";
 import { MockVigilControl, type MockVigilControlConfig } from "./mock/vigil-control";
 import { InMemoryMediatorWitnessTransport } from "./mock/transport";
+import { TEST_KEYS } from "../../harness/testkeys";
 
 function testMediatorConfig(secret = "offline-test-canary-secret"): MockVigilControlConfig {
   return {
@@ -111,6 +112,72 @@ describe("VMS adapter", () => {
     });
     const effect = JSON.parse(new TextDecoder().decode(response.body)) as { application_status: string };
     expect(effect.application_status).toBe("body_digest_mismatch");
+  });
+
+  test("contract v3 keeps attempt_digest optional and fails closed only when an offered value cannot be countersigned", async () => {
+    const manifest = buildCommandManifest({
+      actionName: "camera.stream.view", targetId: id16("vms-test-optional-attempt-target"), targetLogicalName: "fixed-primary",
+      parameters: { stream_profile: "test" }, invocationId: id16("vms-test-optional-attempt-invocation"),
+    }, "vms", "0.1.0-d3");
+    const mediator = new MockVigilControl({
+      ...testMediatorConfig(), mediatorSigner: TEST_KEYS.mediator_outcome_signing,
+    });
+    const client = new MediatorHttpClient("http://witness.invalid", 100, {
+      exchange: (request) => mediator.exchange(request),
+    });
+    const dispatchUrl = new URL("/dispatch?op=stream.view&profile=profile-1&host=cam.invalid&port=80&username=operator&cred=camera-ref", "http://mock-vigil-control.invalid");
+    dispatchUrl.searchParams.set("digest", toHex(manifest.command_digest));
+    const absent = await client.request({
+      method: "POST", url: dispatchUrl, body: manifest.canonical_command,
+      context: { invocationId: toHex(id16("vms-test-optional-attempt-absent")), actionBearing: true, commandDigest: toHex(manifest.command_digest) },
+    });
+    const absentEffect = JSON.parse(new TextDecoder().decode(absent.body)) as { application_status: string; countersignature?: string };
+    expect(absentEffect.application_status).toBe("media_payload_valid");
+    expect(absentEffect.countersignature).toBeUndefined();
+
+    const malformedUrl = new URL(dispatchUrl);
+    malformedUrl.searchParams.set("attempt_digest", "not-a-digest");
+    const malformed = await client.request({
+      method: "POST", url: malformedUrl, body: manifest.canonical_command,
+      context: { invocationId: toHex(id16("vms-test-optional-attempt-malformed")), actionBearing: true, commandDigest: toHex(manifest.command_digest) },
+    });
+    const malformedEffect = JSON.parse(new TextDecoder().decode(malformed.body)) as { application_status: string };
+    expect(malformedEffect.application_status).toBe("countersignature_failed");
+    expect(mediator.counters().streamDispatches).toBe(1);
+  });
+
+  test("preserves an offered signed digest mismatch even with a malformed mediator credential", async () => {
+    const root = await mkdtemp(join(tmpdir(), "aar-vms-unit-"));
+    const manifest = buildCommandManifest({
+      actionName: "camera.stream.view", targetId: id16("vms-test-countersign-target"), targetLogicalName: "fixed-primary",
+      parameters: { stream_profile: "test" }, invocationId: id16("vms-test-countersign-invocation"),
+    }, "vms", "0.1.0-d3");
+    const attemptDigest = hash(new TextEncoder().encode("vms-test-attempt-envelope"));
+    const fields = {
+      v: 2,
+      action_attempt_receipt_digest: attemptDigest,
+      command_digest: hash(new TextEncoder().encode("signed-but-wrong-command")),
+      mediator_observed_at: 1_800_030_000,
+    };
+    const signed = signDetached({
+      countersignature_id: domainHash("AAR-MEDIATOR-COUNTERSIGNATURE-ID-v1", fields), ...fields,
+    }, "application/aar-mediator-countersignature+cbor;v=0.2", "outcome_signing");
+    const effect = new TextEncoder().encode(JSON.stringify({
+      op: "stream.view", http_ok: true, application_status: "media_payload_valid",
+      media_valid: true, content_type: "image/jpeg", payload_bytes: 100,
+      countersignature_payload: Buffer.from(signed.payloadBytes).toString("base64"),
+      countersignature: Buffer.from(signed.coseBytes).toString("base64"),
+      mediator_credential: "not-base64",
+    }));
+    const adapter = new VmsAdapter(testRuntimeConfig(root), {
+      httpTransport: { exchange: async () => ({ status: 200, statusMessage: "OK", headers: {}, body: effect }) },
+    });
+    const result = await adapter.dispatch(manifest, {
+      ...testContext(root, toHex(manifest.command_digest)), actionAttemptReceiptDigestHex: toHex(attemptDigest),
+    });
+    expect(result.mediatorCountersignature).toBeDefined();
+    expect(result.mediatorCountersignature?.credentialEnvelope).toBeUndefined();
+    expect(result.mediatorCountersignature?.envelope).toEqual(signed.envelope);
   });
 
   test("backend rejection with contrary readback is contradicted; F19 restore still runs", async () => {

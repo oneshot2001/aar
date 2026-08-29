@@ -25,6 +25,7 @@ TEST_SCALARS = {
     "credential_issuing": 8,
     "status_signing": 9,
     "agent_signing_successor": 10,
+    "mediator_outcome_signing": 11,
 }
 
 

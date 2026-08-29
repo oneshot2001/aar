@@ -2,7 +2,7 @@ import { p256 } from "@noble/curves/nist.js";
 import type { CborValue } from "../../harness/cbor";
 import { encodeCbor } from "../../harness/cbor";
 import { hash } from "../../harness/crypto";
-import type { DemoKey } from "../keys/keys";
+import type { DemoSigningKey } from "../keys/keys";
 
 export interface DemoSignedEnvelope {
   readonly envelope: CborValue[];
@@ -16,7 +16,7 @@ export interface DemoSignedEnvelope {
 export function signDemoDetached(
   payload: CborValue,
   contentType: string,
-  key: DemoKey,
+  key: DemoSigningKey,
   extraProtected: readonly (readonly [number, CborValue])[] = [],
 ): DemoSignedEnvelope {
   const protectedBytes = encodeCbor(new Map<number, CborValue>([

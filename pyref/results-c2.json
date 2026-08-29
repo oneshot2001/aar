@@ -1,6 +1,6 @@
 {
   "deterministic": true,
-  "deterministic_fixtures": 197,
+  "deterministic_fixtures": 201,
   "divergence_count": 0,
   "divergences": [],
   "entry_point_findings": 1,
@@ -145,6 +145,70 @@
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
       "verdict_sha256": "982be60848098a93555ca7cbca73bdc6cfc5d50191fc26e076d3b6fc8f48c707"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": null,
+      "expected_result": "conformant",
+      "first_failure_step": null,
+      "fixture": "kats/countersign/mediator-countersign-absent.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": null,
+      "produced_result": "conformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "4e00bdd964ee271a4693f46b7a49272b32077801736683e7fb61d071d1952d61"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "countersign/digest-mismatch",
+      "expected_result": "nonconformant",
+      "first_failure_step": 10,
+      "fixture": "kats/countersign/mediator-countersign-command-digest-tampered.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "countersign/digest-mismatch",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "c7a1ac4e1b821661fca15929f60a2c6d648b8815b9acbb217fcffe095328539c"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "countersign/credential-invalid",
+      "expected_result": "nonconformant",
+      "first_failure_step": 6,
+      "fixture": "kats/countersign/mediator-countersign-credential-expired.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "countersign/credential-invalid",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "9f458d36f44bb7724b29c494baa519ab207d9dd21ac2062ec33ac8f657266bfd"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": null,
+      "expected_observations": [
+        "mediator_countersigned"
+      ],
+      "expected_result": "conformant",
+      "first_failure_step": null,
+      "fixture": "kats/countersign/mediator-countersign-valid.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": null,
+      "produced_observations": [
+        "mediator_countersigned",
+        "membership_only",
+        "anchor_existence_order_only"
+      ],
+      "produced_result": "conformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "ec5517db1f6bf85811ca7f050d3925c0fea29c6154f0061bd62334d268abb7b0"
     },
     {
       "deterministic": true,
@@ -2777,8 +2841,8 @@
       "verdict_sha256": "8e9e12867bb1cfcd22f26bba9d879a8ec0b2b5a7dee05955692fc065a6db9db6"
     }
   ],
-  "fixtures_evaluated": 197,
-  "matches": 197,
+  "fixtures_evaluated": 201,
+  "matches": 201,
   "mismatches": 0,
   "schema_version": 1,
   "slice": "C2"

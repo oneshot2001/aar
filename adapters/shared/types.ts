@@ -55,6 +55,10 @@ export interface DispatchResult {
   readonly status: number;
   readonly responseBodyDigest: Uint8Array;
   readonly effect: EffectOracle;
+  readonly mediatorCountersignature?: {
+    readonly envelope: readonly CborValue[];
+    readonly credentialEnvelope?: readonly CborValue[];
+  };
 }
 
 export interface DispatchContext {
@@ -62,6 +66,7 @@ export interface DispatchContext {
   readonly commandDigestHex: string;
   readonly witnessLogPath: string;
   readonly observedAt: number;
+  readonly actionAttemptReceiptDigestHex?: string;
   readonly afterActionDispatched?: () => Promise<void>;
 }
 

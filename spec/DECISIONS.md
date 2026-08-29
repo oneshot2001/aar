@@ -1075,3 +1075,40 @@ AI Systems*, [arXiv:2608.15888 §C5](https://arxiv.org/abs/2608.15888), scoped t
 AAR-3 and the R-16 hazard exception. The optional wire markers and additive
 step-13 rule leave all pre-existing verdict preimages and fixture bytes unchanged
 (D-51).
+
+## D-67 — Optional mediator countersignature is a standalone v0.2 artifact
+
+**Decision.** A bundle MAY carry `mediator_countersignatures`. Each artifact is
+a detached COSE_Sign1 under a carried credential with the existing
+`principal_role="outcome_observer"` and `key_usage="outcome_signing"`. It signs
+the SHA-256 of the exact pre-dispatch `action_attempt` receipt-envelope, the
+SHA-256 of the canonical command bytes the mediator verified on dispatch, and
+the mediator's observation time. It is never required in v0.2; omission follows
+the pre-D-67 wire and verdict path byte-for-byte. D-62 through D-65 remain
+unratified candidates and are neither prerequisites nor implied changes.
+
+Validation follows D-54: optional-array shape and ordering at step 3; artifact
+COSE, signature, SPKI, role, and usage at step 6; the domain-separated artifact
+ID at step 7; credential-chain acceptance at step 8; and receipt plus command
+digest agreement at the end of step 10. A fully verified carried set adds
+`mediator_countersigned` to the signed verdict. The closed failure codes are
+`countersign/invalid`, `countersign/digest-mismatch`, and
+`countersign/credential-invalid`.
+
+**Claim boundary.** The artifact proves that an accepted in-tenant credential
+with `principal_role="outcome_observer"` and `key_usage="outcome_signing"`
+signed an observation of those two digests and carried an observation time. The
+v0.2 verifier does not bind that credential's `kid` to "the mediator"; any such
+accepted credential validates. Mediator-`kid` pinning in trust policy is a v0.3
+question. The verifier also does not compare `mediator_observed_at` with any
+other time in v0.2, and it accepts multiple countersignatures for one attempt
+when their distinct observation times produce distinct IDs. The artifact
+narrows T-H2 at the AAR-to-mediator boundary. It does not prove the signer
+caused a device effect, that an outcome report is true, or that the signer is
+independent. The demo's EP and mediator are same-operator (F22), but use
+distinct credentials.
+
+**Why.** The VMS leg already recomputes and compares the canonical-command hash
+before dispatch. Signing that observation binds the pre-send AAR attempt to the
+mediator boundary without importing D-62's future attestation-vantage model or
+changing direct VAPIX bundles.

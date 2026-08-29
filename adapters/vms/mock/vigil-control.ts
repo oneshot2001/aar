@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
+import { p256 } from "@noble/curves/nist.js";
 import type { DigestResponse, HttpTransportRequest } from "../../vapix/digest";
 import type { PtzPosition } from "../config";
+import type { CborValue } from "../../../harness/cbor";
+import { encodeCbor } from "../../../harness/cbor";
+import { domainHash, hash } from "../../../harness/crypto";
 
-// In-memory test double for the vigil-control mediator (contract v2). It
+// In-memory test double for the vigil-control mediator (contract v3). It
 // mirrors the real service's HTTP surface exactly — same paths, same query
 // routing, same body-digest refusal, same DispatchEffect JSON — so the D3
 // live leg swaps only the transport and the FILL-AT-D3 configuration.
@@ -25,6 +29,9 @@ export interface MockVigilControlConfig {
   readonly baseline: PtzPosition;
   readonly safePreset: PtzPosition;
   readonly settlingReads: number;
+  readonly mediatorSigner?: { readonly privateKey: Uint8Array; readonly kid: Uint8Array };
+  readonly mediatorCredential?: readonly CborValue[] | (() => readonly CborValue[]);
+  readonly now?: () => number;
 }
 
 export interface MockVigilControlCounters {
@@ -55,6 +62,9 @@ interface Effect {
   serial?: string;
   firmware?: string;
   error?: string;
+  countersignature?: string;
+  countersignature_payload?: string;
+  mediator_credential?: string;
 }
 
 function interpolate(current: PtzPosition, target: PtzPosition, remaining: number): PtzPosition {
@@ -121,6 +131,35 @@ export class MockVigilControl {
     return { status: 200, statusMessage: "OK", headers: { "content-type": "application/json", "content-length": String(body.length) }, body };
   }
 
+  private countersign(url: URL, commandDigest: string | null): Pick<Effect, "countersignature" | "countersignature_payload" | "mediator_credential"> | undefined {
+    const signer = this.config.mediatorSigner;
+    const attemptDigest = url.searchParams.get("attempt_digest");
+    if (!signer || commandDigest === null || !attemptDigest || !/^[0-9a-f]{64}$/u.test(attemptDigest) || !/^[0-9a-f]{64}$/u.test(commandDigest)) return undefined;
+    const fields: Record<string, CborValue> = {
+      v: 2,
+      action_attempt_receipt_digest: Uint8Array.from(Buffer.from(attemptDigest, "hex")),
+      command_digest: Uint8Array.from(Buffer.from(commandDigest, "hex")),
+      mediator_observed_at: Math.floor((this.config.now?.() ?? Date.now()) / 1000),
+    };
+    const payload = { countersignature_id: domainHash("AAR-MEDIATOR-COUNTERSIGNATURE-ID-v1", fields), ...fields };
+    const payloadBytes = encodeCbor(payload);
+    const protectedBytes = encodeCbor(new Map<number, CborValue>([
+      [1, -7], [3, "application/aar-mediator-countersignature+cbor;v=0.2"], [4, signer.kid],
+    ]));
+    const sigStructure = encodeCbor(["Signature1", protectedBytes, new Uint8Array(), payloadBytes]);
+    const signature = p256.sign(hash(sigStructure), signer.privateKey, { prehash: false, lowS: true, format: "compact", extraEntropy: false });
+    const coseBytes = encodeCbor([protectedBytes, {}, null, signature]);
+    const configuredCredential = this.config.mediatorCredential;
+    const mediatorCredential = typeof configuredCredential === "function" ? configuredCredential() : configuredCredential;
+    return {
+      countersignature: Buffer.from(coseBytes).toString("base64"),
+      countersignature_payload: Buffer.from(payloadBytes).toString("base64"),
+      ...(mediatorCredential === undefined ? {} : {
+        mediator_credential: Buffer.from(encodeCbor(mediatorCredential)).toString("base64"),
+      }),
+    };
+  }
+
   async exchange(request: Pick<HttpTransportRequest, "method" | "url" | "body">): Promise<DigestResponse> {
     const url = request.url;
     if (request.method === "GET" && url.pathname === "/healthz") {
@@ -152,21 +191,26 @@ export class MockVigilControl {
           return this.json({ op, http_ok: false, application_status: "body_digest_mismatch" });
         }
       }
+      const attemptDigest = url.searchParams.get("attempt_digest");
+      if (this.config.mediatorSigner && digest !== null && attemptDigest !== null && !/^[0-9a-f]{64}$/u.test(attemptDigest)) {
+        return this.json({ op, http_ok: false, application_status: "countersignature_failed" });
+      }
+      const respond = (effect: Effect): DigestResponse => this.json({ ...effect, ...this.countersign(url, digest) });
       const routingError = this.resolveRouting(url);
-      if (routingError) return this.json({ op, http_ok: false, application_status: routingError });
+      if (routingError) return respond({ op, http_ok: false, application_status: routingError });
       if (op === "ptz.goto_preset") {
         this.counts.presetDispatches += 1;
-        if (digest === null) return this.json({ op, http_ok: false, application_status: "digest_required" });
+        if (digest === null) return respond({ op, http_ok: false, application_status: "digest_required" });
         const mode = this.mode;
         this.mode = "normal";
-        if (mode === "reject") return this.json({ op, http_ok: false, application_status: "http_rejected_503" });
+        if (mode === "reject") return respond({ op, http_ok: false, application_status: "http_rejected_503" });
         if (mode === "after-send-timeout") return new Promise<DigestResponse>(() => {});
-        if (mode === "backend-transport-error") return this.json({ op, http_ok: false, application_status: "transport_error", error: "mock backend unreachable" });
+        if (mode === "backend-transport-error") return respond({ op, http_ok: false, application_status: "transport_error", error: "mock backend unreachable" });
         if (url.searchParams.get("preset") !== this.config.presetBackendName) {
-          return this.json({ op, http_ok: false, application_status: "http_rejected_404" });
+          return respond({ op, http_ok: false, application_status: "http_rejected_404" });
         }
         this.moveTo(this.config.safePreset);
-        return this.json({ op, http_ok: true, application_status: "ok" });
+        return respond({ op, http_ok: true, application_status: "ok" });
       }
       if (op === "ptz.goto") {
         this.counts.restoreDispatches += 1;
@@ -175,32 +219,32 @@ export class MockVigilControl {
           tilt: Number(url.searchParams.get("tilt")),
           zoom: Number(url.searchParams.get("zoom")),
         };
-        if (!Object.values(restored).every(Number.isFinite)) return this.json({ op, http_ok: false, application_status: "missing_coordinates" });
+        if (!Object.values(restored).every(Number.isFinite)) return respond({ op, http_ok: false, application_status: "missing_coordinates" });
         this.moveTo(restored);
-        return this.json({ op, http_ok: true, application_status: "ok" });
+        return respond({ op, http_ok: true, application_status: "ok" });
       }
       if (op === "stream.view") {
         this.counts.streamDispatches += 1;
-        if (digest === null) return this.json({ op, http_ok: false, application_status: "digest_required" });
+        if (digest === null) return respond({ op, http_ok: false, application_status: "digest_required" });
         const mode = this.mode;
         this.mode = "normal";
-        if (mode === "reject") return this.json({ op, http_ok: false, application_status: "http_rejected_503" });
+        if (mode === "reject") return respond({ op, http_ok: false, application_status: "http_rejected_503" });
         if (mode === "after-send-timeout") return new Promise<DigestResponse>(() => {});
-        if (mode === "backend-transport-error") return this.json({ op, http_ok: false, application_status: "transport_error", error: "mock backend unreachable" });
+        if (mode === "backend-transport-error") return respond({ op, http_ok: false, application_status: "transport_error", error: "mock backend unreachable" });
         // G5-D3-003: the real mediator fetches via the VMS snapshot seam and
         // ECHOES the profile — it does not bind the fetch to it. The mock
         // mirrors that (a profile-mismatch rejection here would fake a check
         // the live leg does not perform).
         const profile = url.searchParams.get("profile") ?? "";
         if (mode === "invalid-media") {
-          return this.json({ op, http_ok: true, application_status: "media_payload_invalid", profile, content_type: "unknown", payload_bytes: 5, media_valid: false });
+          return respond({ op, http_ok: true, application_status: "media_payload_invalid", profile, content_type: "unknown", payload_bytes: 5, media_valid: false });
         }
-        return this.json({
+        return respond({
           op, http_ok: true, application_status: "media_payload_valid",
           profile, content_type: "image/jpeg", payload_bytes: JPEG.length, media_valid: true,
         });
       }
-      return this.json({ op, http_ok: false, application_status: "unsupported_op" });
+      return respond({ op, http_ok: false, application_status: "unsupported_op" });
     }
     const body = new TextEncoder().encode('{"error":"not_found"}');
     return { status: 404, statusMessage: "Not Found", headers: { "content-type": "application/json" }, body };

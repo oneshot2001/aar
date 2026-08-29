@@ -6,6 +6,7 @@
     "generate": "bun run harness/generate.ts",
     "generate-negative": "bun run harness/generate-negative.ts",
     "generate-evidence-commit": "bun run harness/generate-evidence-commit.ts",
+    "generate-countersign": "bun run harness/generate-countersign.ts",
     "test": "bun test harness"
   },
   "dependencies": {

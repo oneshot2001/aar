@@ -38,6 +38,9 @@ interface MediatorEffect {
   readonly payload_bytes?: number;
   readonly media_valid?: boolean;
   readonly profile?: string;
+  readonly countersignature?: string;
+  readonly countersignature_payload?: string;
+  readonly mediator_credential?: string;
 }
 
 interface Outcome {
@@ -47,6 +50,7 @@ interface Outcome {
   readonly responseDigest: Uint8Array;
   readonly evidence: Record<string, string | number | boolean>;
   readonly dispatched?: boolean;
+  readonly mediatorCountersignature?: DispatchResult["mediatorCountersignature"];
 }
 
 const EMPTY_DIGEST = hash(new Uint8Array());
@@ -67,6 +71,48 @@ function parseEffect(response: DigestResponse): MediatorEffect | undefined {
   const effect = parsed as Record<string, unknown>;
   if (typeof effect.op !== "string" || typeof effect.http_ok !== "boolean" || typeof effect.application_status !== "string") return undefined;
   return effect as unknown as MediatorEffect;
+}
+
+function decodeBase64Bytes(value: string): Uint8Array | undefined {
+  try {
+    if (value.length === 0 || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/u.test(value)) return undefined;
+    const bytes = Uint8Array.from(Buffer.from(value, "base64"));
+    if (Buffer.from(bytes).toString("base64") !== value) return undefined;
+    return bytes;
+  } catch {
+    return undefined;
+  }
+}
+
+function decodeBase64Cbor(value: string): { bytes: Uint8Array; decoded: CborValue } | undefined {
+  try {
+    const bytes = decodeBase64Bytes(value);
+    if (bytes === undefined) return undefined;
+    const decoded = decodeCbor(bytes, { strict: true });
+    if (!equalBytes(encodeCbor(decoded), bytes)) return undefined;
+    return { bytes, decoded };
+  } catch {
+    return undefined;
+  }
+}
+
+function mediatorCountersignature(effect: MediatorEffect | undefined): DispatchResult["mediatorCountersignature"] | undefined {
+  if (!effect || (typeof effect.countersignature !== "string" && typeof effect.countersignature_payload !== "string")) return undefined;
+  // Preserve every offered artifact, including malformed or digest-mismatched
+  // bytes. Optional absence is only the case where the mediator offered no
+  // artifact; the verifier owns all closed D-67 failure classification.
+  const payloadBytes = typeof effect.countersignature_payload === "string"
+    ? decodeBase64Bytes(effect.countersignature_payload) ?? new Uint8Array()
+    : new Uint8Array();
+  const coseBytes = typeof effect.countersignature === "string"
+    ? decodeBase64Bytes(effect.countersignature) ?? new Uint8Array()
+    : new Uint8Array();
+  let credentialEnvelope: readonly CborValue[] | undefined;
+  if (typeof effect.mediator_credential === "string") {
+    const credential = decodeBase64Cbor(effect.mediator_credential);
+    if (credential && Array.isArray(credential.decoded)) credentialEnvelope = credential.decoded;
+  }
+  return { envelope: [payloadBytes, coseBytes], ...(credentialEnvelope === undefined ? {} : { credentialEnvelope }) };
 }
 
 function effectStatus(response: DigestResponse, effect: MediatorEffect | undefined): string {
@@ -285,6 +331,7 @@ export class VmsAdapter implements DemoAdapter {
           op: "ptz.goto_preset",
           preset: this.config.presetMappings["gate5-safe"],
           digest: context.commandDigestHex,
+          ...(context.actionAttemptReceiptDigestHex === undefined ? {} : { attempt_digest: context.actionAttemptReceiptDigestHex }),
         }),
         body: command.canonical_command,
         context: { invocationId: context.invocationIdHex, actionBearing: true, commandDigest: context.commandDigestHex },
@@ -292,6 +339,7 @@ export class VmsAdapter implements DemoAdapter {
       dispatched = true;
       await context.afterActionDispatched?.();
       const effect = parseEffect(response);
+      const countersignature = mediatorCountersignature(effect);
       const status = effectStatus(response, effect);
       if (status !== "ok") {
         const readback = await this.readPosition(context, this.config.settlingDeadlineMs);
@@ -306,6 +354,7 @@ export class VmsAdapter implements DemoAdapter {
               ? contrary ? "outside_tolerance" : "within_tolerance"
               : "unavailable",
           },
+          mediatorCountersignature: countersignature,
         };
       } else {
         const poll = await this.pollPosition(this.config.presetPositions["gate5-safe"], context);
@@ -318,10 +367,12 @@ export class VmsAdapter implements DemoAdapter {
             pan_tolerance: sanitizedNumber(this.config.positionTolerance.pan), tilt_tolerance: sanitizedNumber(this.config.positionTolerance.tilt),
             zoom_tolerance: sanitizedNumber(this.config.positionTolerance.zoom),
           },
+          mediatorCountersignature: countersignature,
         } : {
           state: position ? "contradicted" : "unknown", level: position ? "contradicted" : "unknown",
           status: response.status, responseDigest: hash(response.body),
           evidence: { http_status: poll.status || response.status, application_status: position ? "position_outside_tolerance" : "position_readback_unavailable" },
+          mediatorCountersignature: countersignature,
         };
       }
     } catch (error) {
@@ -365,6 +416,7 @@ export class VmsAdapter implements DemoAdapter {
           op: "stream.view",
           profile: mappedProfile,
           digest: context.commandDigestHex,
+          ...(context.actionAttemptReceiptDigestHex === undefined ? {} : { attempt_digest: context.actionAttemptReceiptDigestHex }),
         }),
         body: command.canonical_command,
         context: { invocationId: context.invocationIdHex, actionBearing: true, commandDigest: context.commandDigestHex },
@@ -372,6 +424,7 @@ export class VmsAdapter implements DemoAdapter {
       dispatched = true;
       await context.afterActionDispatched?.();
       const effect = parseEffect(response);
+      const countersignature = mediatorCountersignature(effect);
       const status = effectStatus(response, effect);
       const payloadBytes = typeof effect?.payload_bytes === "number" ? effect.payload_bytes : 0;
       const contentType = typeof effect?.content_type === "string" ? effect.content_type : "missing";
@@ -394,6 +447,7 @@ export class VmsAdapter implements DemoAdapter {
           http_status: response.status, application_status: "media_payload_valid", profile: parameters.stream_profile,
           content_type: contentType, payload_bytes: payloadBytes, media_unit_valid: true,
         },
+        mediatorCountersignature: countersignature,
       } : positivelyContrary ? {
         state: "contradicted", level: "contradicted", status: response.status, responseDigest: hash(response.body),
         evidence: {
@@ -401,12 +455,14 @@ export class VmsAdapter implements DemoAdapter {
           profile: parameters.stream_profile, content_type: contentType, payload_bytes: payloadBytes,
           media_unit_valid: false,
         },
+        mediatorCountersignature: countersignature,
       } : {
         state: "unknown", level: "unknown", status: response.status, responseDigest: hash(response.body),
         evidence: {
           http_status: response.status, application_status: status,
           profile: parameters.stream_profile, media_unit_valid: false,
         },
+        mediatorCountersignature: countersignature,
       };
       return this.effectResult(command, context, "fixed-primary", outcome);
     } catch (error) {
@@ -454,6 +510,7 @@ export class VmsAdapter implements DemoAdapter {
         observation_digest: toHex(hash(oracleData)),
         backend_evidence: evidence,
       },
+      ...(outcome.mediatorCountersignature === undefined ? {} : { mediatorCountersignature: outcome.mediatorCountersignature }),
     };
   }
 }

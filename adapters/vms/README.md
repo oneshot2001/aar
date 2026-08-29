@@ -7,6 +7,19 @@ source unmodified). The witness sits at the **AAR→mediator boundary** — it
 attests whether the EP handed a command to the VMS at all; the device-facing
 wire is the mediator's internal effect channel (GATE5-D3-PLAN.md).
 
+For digest-bound dispatches, `vigil-control` also returns the optional D-67
+COSE_Sign1 countersignature made by its service-owned P-256 key. The signed
+claims bind the exact pre-dispatch action-attempt receipt digest, the canonical
+command digest checked below, and mediator observation time. A verified
+artifact proves that an accepted in-tenant `outcome_observer`/`outcome_signing`
+credential signed this dispatch input; v0.2 does not bind its `kid` to "the
+mediator", and any such accepted credential validates. Mediator-`kid` pinning
+in trust policy is a v0.3 question. The demo's mediator credential has a `kid`
+distinct from the EP outcome key. The artifact does not prove actuation or
+outcome truth. The EP and mediator remain same-operator (F22), so this narrows
+T-H2 without establishing independence. The direct VAPIX leg is unchanged and
+carries no mediator artifact.
+
 ## Claim boundary (verbatim, per operator ruling)
 
 D3 demonstrates **VMS-mediated dispatch** and a **second independent adapter
@@ -20,8 +33,16 @@ The action-bearing dispatch is `POST /dispatch?...&digest=<sha256>` whose
 **body is the canonical command CBOR** the EP committed to in the bundle, so
 the witnessed `request_body_sha256` equals the command digest (the online
 oracle's POST-body binding). vigil-control independently refuses to act when
-`sha256(body) != digest`. The F19 restore (`op=ptz.goto`) is action-bearing
+`sha256(body) != digest`; it countersigns only after that equality succeeds.
+The F19 restore (`op=ptz.goto`) is action-bearing
 but intentionally unbound — safety orchestration, not the committed command.
+
+The mediator HTTP contract is v3 and additive: `attempt_digest` is optional.
+When absent, dispatch proceeds with the pre-D-67 status and no
+countersignature. When present, the mediator must countersign before dispatch
+or fail closed with `countersignature_failed`. The witness oracle accepts both
+the pre-D-67 request line and the additive request line carrying
+`attempt_digest`.
 
 ## Known limitations (on the record)
 
@@ -53,6 +74,8 @@ artifacts for every transform of it.
 - `adapter.ts` — `VmsAdapter` (`DemoAdapter` id `vms`), F19 orchestration
   mirrored from the D2b VAPIX adapter
 - `vigil-control/` — SwiftPM executable mediator (path-dep on the Vigil repo)
+  with a service-owned P-256 key under `~/.aar-demo/vigil-control`; the raw
+  secret never leaves the service
 - `mock/` — in-memory vigil-control double + witness transport
 - `offline/run.ts` — S1–S4 + S6–S7 suite through pyref (S5 crash-cut runs once
   on the EP+VAPIX leg per Q5-2; this leg encodes `outcome_unknown` via
