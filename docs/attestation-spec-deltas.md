@@ -345,6 +345,77 @@ but are operated by the same party (F22). The artifact narrows T-H2 at the
 AAR-to-mediator boundary; it does not prove device actuation, outcome truth,
 operator independence, or ingress completeness.
 
+## D-68 (candidate) — turn-trigger provenance + idle-gap records
+
+Source: openai/codex "persistent" reasoning effort (PRs #40799, #40942, #41050,
+2026-08-26..27; review in vault `08-Agent-Output/2026-08-29-codex-persistent-mode-review/`).
+The client sends `reasoning.effort="disabled"`; the **service** answers a
+final message with `end_turn:false`; the client re-samples with no user turn
+(`codex-rs/core/src/session/turn.rs:2610`). The injected developer prompt tells
+the model to pursue follow-ups, `clock.sleep` up to 12 h between checks, and
+message the user mid-turn via `send_user_message_async`. Three things AAR
+cannot currently say about such a session:
+
+1. **Who triggered this step.** `root-descriptor.kind` is closed to
+   `agent_request` / `human_request` / `standing_condition_trigger`. A
+   service-initiated continuation is none of these; recording it as
+   `agent_request` launders the provenance. The prompt's own invariant
+   ("persistence does not broaden that scope") is exactly the claim a verifier
+   should be able to check against a chain, and today it cannot.
+2. **Where the time went.** A `clock.sleep` is an authorized idle gap, not a
+   missing receipt. Without a record, a 40-minute hole in the L2 chain is
+   indistinguishable from suppressed tool calls (threat model §4).
+3. **What the agent said outside `final`.** `send_user_message_async` is a
+   user-visible action with no tool-boundary artifact in the transcript.
+
+```cddl
+; additive session-lane fields (D-63 chain), present on every receipt
+? turn_trigger: turn-trigger
+
+turn-trigger = {
+  kind: "user_input" / "service_continuation" / "scheduled_wake"
+      / "hook_continuation",
+  ? evidence_digest: digest32,   ; SHA-256 of the trigger evidence bytes
+                                 ; (e.g. the Completed event carrying
+                                 ; end_turn:false), when the recorder has them
+  authorizing_request_id: id16,  ; the last human_request / agent_request root
+                                 ; this continuation claims to serve
+}
+
+; new receipt kinds in the session lane
+idle-gap-body = {
+  requested_ms: uint,
+  elapsed_ms: uint,
+  ended_by: "expiry" / "user_input" / "interrupt",
+}
+
+user-notice-body = {
+  channel: "async_message",
+  message_digest: digest32,
+}
+```
+
+Verifier consequence (D-64 lane): a `service_continuation` receipt whose
+normalized action is not `read_only` and whose `authorizing_request_id` does
+not resolve to an authorization covering that action class →
+`session/continuation-unauthorized`. A chain gap longer than the recorder's
+declared max inter-receipt interval with no `idle-gap` receipt covering it →
+`session/gap-unexplained` (D-63 completeness). Both are closed-table additions.
+
+Claim boundary: `turn_trigger` is recorder-asserted at L2; the service's
+`end_turn` signal is a provider-side record (threat model §3, "noted, not yet a
+rung") and `evidence_digest` binds to whatever the recorder saw, not to a
+provider attestation. The delta proves that the recorder *classified* a step as
+unrequested and bound it to a prior authorization; it does not prove the
+service actually issued the continuation.
+
+Fixture path: the L2 emitter is Claude Code hooks; Claude Code has no
+persistent mode. Fixtures come from a Codex hook recorder (`codex-rs/tui`
+hook lifecycle exists) driven by a bounded persistent turn ("wait for file X,
+then report"), or synthetic. Ratification question: is `hook_continuation`
+(Claude Code Stop-hook `continuation_fragments`) the same class as
+`service_continuation`, or a fourth root kind?
+
 ## Sequencing / compatibility
 
 - v0.2-rc7 untouched. All four candidates are v0.3 wire-bump material. Under
