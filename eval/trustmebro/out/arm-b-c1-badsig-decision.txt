@@ -1,0 +1,7 @@
+arm: B-c1-badsig (receipt/AAR gate)
+command: python -m pyref verify sig-verify-failed.cbor --at 1735689800
+pyref_exit: 1
+pyref_verdict: nonconformant
+scope_covers_action: False
+decision: REFUSE
+transcript: /Users/matthewvisher/projects/aar/eval/trustmebro/out/arm-b-c1-badsig-pyref.txt

@@ -1,0 +1,7 @@
+arm: B-legit (receipt/AAR gate)
+command: python -m pyref verify bundle-valid-subset.cbor --at 1735689800
+pyref_exit: 0
+pyref_verdict: conformant
+scope_covers_action: True
+decision: PROCEED
+transcript: /Users/matthewvisher/projects/aar/eval/trustmebro/out/arm-b-legit-pyref.txt

@@ -1,0 +1,7 @@
+arm: B-attack (receipt/AAR gate)
+command: python -m pyref verify forged-marker.cbor --at 1735689800
+pyref_exit: 1
+pyref_verdict: nonconformant
+scope_covers_action: False
+decision: REFUSE
+transcript: /Users/matthewvisher/projects/aar/eval/trustmebro/out/arm-b-attack-pyref.txt
