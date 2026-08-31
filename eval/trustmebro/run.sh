@@ -1,8 +1,9 @@
 #!/bin/sh
 # One-command re-runner for the TrustMeBro fabricated-tool-output efficacy eval.
-# Runs Arm A (raw-output gate), Arm B (receipt/AAR gate, legit + attack) and
-# Arm C1 (keyless-signer control) and writes every transcript + pyref verdict
-# to eval/trustmebro/out/.
+# Runs Arm A (raw-output gate), Arm B (receipt/AAR gate, legit + attack),
+# Arm C1 (keyless-signer control), Arm C2 (compromised valid signer -- the
+# disclosed boundary) and Arm D (post-emission tamper), writing every transcript
+# + pyref verdict to eval/trustmebro/out/.
 # Run from the repo root:  sh eval/trustmebro/run.sh
 set -eu
 
@@ -20,5 +21,8 @@ echo "== Arm B + Arm C1 =="
 cd "$REPO"
 python3 -m pyref --help >/dev/null 2>&1 || { echo "pyref unavailable" >&2; exit 1; }
 python3 "$DIR/arm_b.py" "$OUTDIR"
+echo
+echo "== Arm C2 + Arm D =="
+python3 "$DIR/arm_cd.py" "$OUTDIR"
 
 echo "transcripts written to $OUTDIR"

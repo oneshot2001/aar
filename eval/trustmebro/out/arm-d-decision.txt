@@ -1,0 +1,9 @@
+arm: D (receipt/AAR gate -- post-emission tamper)
+attacker: flips one byte of a signed authorization receipt after emission
+command: python -m pyref verify tampered-bundle.cbor --at 1735689800
+pyref_exit: 1
+pyref_verdict: nonconformant
+decision: REFUSE
+boundary: tamper-evidence -- a signed receipt cannot be silently edited;
+  the producer signature no longer verifies over the altered payload.
+transcript: /Users/matthewvisher/projects/aar/eval/trustmebro/out/arm-d-pyref.txt

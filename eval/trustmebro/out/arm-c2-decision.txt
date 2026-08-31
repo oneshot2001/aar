@@ -1,0 +1,11 @@
+arm: C2 (receipt/AAR gate -- compromised valid signer)
+attacker: holds a producer signing key the trust policy accepts
+command: python -m pyref verify bundle-valid-subset.cbor --at 1735689800
+pyref_exit: 0
+pyref_verdict: conformant
+attributed_signer_kid: dc0ce633dbcc913dafafa4b89ac44d8ce683fdfc3f60c8bdf21213b9f2b534ba
+decision: PROCEED (attributed)
+boundary: AAR gives attribution + tamper-evidence, NOT compromised-signer
+  immunity. The action proceeds but is non-repudiably bound to the kid
+  above -- a silent bypass becomes an attributed, signed action.
+transcript: /Users/matthewvisher/projects/aar/eval/trustmebro/out/arm-c2-pyref.txt
