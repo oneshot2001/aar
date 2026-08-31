@@ -71,7 +71,7 @@ export async function mintMediatorCredential(input: MintMediatorCredentialInput)
     identity: { kid: fromHex(identity.kid), spki: fromHex(identity.spki) },
     issuer: input.issuer, tenantId: input.tenantId, siteId: input.siteId, evaluatedAt: input.evaluatedAt,
   });
-  const bytes = encodeCbor(envelope);
+  const bytes = encodeCbor([...envelope]);
   await writeFile(join(input.identityDirectory, "credential.cbor"), bytes, { mode: 0o644 });
   return bytes;
 }

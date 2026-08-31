@@ -155,7 +155,7 @@ export class MockVigilControl {
       countersignature: Buffer.from(coseBytes).toString("base64"),
       countersignature_payload: Buffer.from(payloadBytes).toString("base64"),
       ...(mediatorCredential === undefined ? {} : {
-        mediator_credential: Buffer.from(encodeCbor(mediatorCredential)).toString("base64"),
+        mediator_credential: Buffer.from(encodeCbor([...mediatorCredential])).toString("base64"),
       }),
     };
   }
