@@ -1,0 +1,5 @@
+{
+  "name": "repair-d70-trust-created-after-evaluation",
+  "expected_code": "schema/out-of-range",
+  "mutation_description": "Set the trust-store snapshot created_at one second after the evaluation time and repair the store digest."
+}

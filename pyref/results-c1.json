@@ -2,17 +2,17 @@
   "checks": {
     "id_digest_recomputation": {
       "failed": 0,
-      "passed": 55,
+      "passed": 56,
       "skipped": 0
     },
     "round_trip": {
       "failed": 0,
-      "passed": 55,
+      "passed": 56,
       "skipped": 0
     },
     "signature_recomputation": {
       "failed": 0,
-      "passed": 55,
+      "passed": 56,
       "skipped": 0
     }
   },
@@ -322,6 +322,22 @@
         }
       },
       "fixture": "kats/evidence-commit/journal-uncommitted-dispatch.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 67,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 33,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/evidence-commit/repair-d69-anchor-basis-same-operator.cbor"
     },
     {
       "checks": {
@@ -900,7 +916,7 @@
       "fixture": "kats/terminal-state/outcome-terminals-unknown-before-contradicted.cbor"
     }
   ],
-  "fixtures_checked": 55,
+  "fixtures_checked": 56,
   "schema_version": 1,
   "slice": "C1"
 }

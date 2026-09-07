@@ -40,7 +40,7 @@ export function buildMediatorCredential(input: BuildMediatorCredentialInput): re
   const trustAnchorId = opaque(`trust-anchor:${toHex(input.issuer.kid)}`);
   const rootFields = buildDemoCredentialFields({
     subject: input.issuer, issuerKid: input.issuer.kid,
-    principalType: "authority_source", principalRole: "authority_source", keyUsage: "credential_issuing",
+    principalType: "service", principalRole: "authority_source", keyUsage: "credential_issuing",
     tenantId: input.tenantId, siteId: input.siteId, evaluatedAt: input.evaluatedAt,
     trustAnchorId, path: [],
   });

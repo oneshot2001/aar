@@ -633,6 +633,49 @@ export function buildNegativeFixtures(): NegativeFixture[] {
   const result: NegativeFixture[] = [];
   const add = (value: NegativeFixture): void => { result.push(value); };
   const validBytes = encodeCbor(baseBundle());
+  // D-68..D-70 release repairs. Schema negatives deliberately leave later
+  // commitments unrepaired: tests assert the exact step so a later hash
+  // rejection cannot masquerade as schema enforcement.
+  const releaseRepairs: [string, string, string, (bundle: Obj) => void][] = [
+    ["repair-d68-principal-role-as-type", "schema/enum-unknown", "Set the root credential principal_type to the role text authority_source, keeping its credential_id.", (bundle) => {
+      mutateArtifact(bundle, "credentials", (p) => p.key_usage === "credential_issuing", (p) => { p.principal_type = "authority_source"; }, false);
+    }],
+    ["repair-d68-principal-type-not-text", "schema/bad-type", "Set the root credential principal_type to the integer 7, keeping its credential_id.", (bundle) => {
+      mutateArtifact(bundle, "credentials", (p) => p.key_usage === "credential_issuing", (p) => { p.principal_type = 7; }, false);
+    }],
+    ["repair-d68-principal-type-and-short-id", "schema/enum-unknown", "Set the root credential principal_type to authority_source and truncate its credential_id to 31 bytes; the enum check precedes fixed-size checks.", (bundle) => {
+      mutateArtifact(bundle, "credentials", (p) => p.key_usage === "credential_issuing", (p) => { p.principal_type = "authority_source"; p.credential_id = (p.credential_id as Uint8Array).slice(0, 31); }, false);
+    }],
+    ["repair-d69-consumption-empty", "schema/out-of-range", "Empty the root observation consumption items array.", (bundle) => {
+      mutateReceipt(bundle, "observation", (p) => { ((p.body as Obj).consumption as Obj).items = []; });
+    }],
+    ["repair-d69-consumption-overflow", "schema/out-of-range", "Repeat the root observation consumption item 4,097 times.", (bundle) => {
+      mutateReceipt(bundle, "observation", (p) => { const c = (p.body as Obj).consumption as Obj; c.items = Array.from({ length: 4097 }, () => clone((c.items as CborValue[])[0]!)); });
+    }],
+    ["repair-d69-exclusion-reason", "schema/enum-unknown", "Give the action-attempt excluded field an unknown reason while its value commitment is present.", (bundle) => {
+      mutateReceipt(bundle, "action_attempt", (p) => { (((p.body as Obj).command as Obj).excluded_fields as Obj[])[0]!.reason = "injected_only_at_transport"; });
+    }],
+    ["repair-d69-exclusion-commitment", "schema/missing-field", "Remove the action-attempt excluded field value commitment while its reason stays valid.", (bundle) => {
+      mutateReceipt(bundle, "action_attempt", (p) => { delete (((p.body as Obj).command as Obj).excluded_fields as Obj[])[0]!.value_commitment; });
+    }],
+    ["repair-d69-anchor-basis-no-anchor", "schema/enum-unknown", "Declare an unknown anchor-plan independence basis in a manifest carried without any anchor record.", (bundle) => {
+      rebuildManifest(bundle, (p) => { ((p.anchor_plan as Obj).independence as Obj).basis = "same_operator_demo_only"; });
+    }],
+    ["repair-d69-independence-duplicate-operator", "anchor/independence-invalid", "Add a second independence group that repeats the first group's operator_id under a distinct_operator_and_failure_domain plan with its anchor rebuilt.", (bundle) => {
+      rebuildManifest(bundle, (p) => {
+        const groups = ((p.anchor_plan as Obj).independence as Obj).groups as Obj[];
+        groups.push({ independence_group: id16("independence-group:log-2"), operator_id: groups[0]!.operator_id!, failure_domain_id: id16("failure-domain:log-2") });
+      }, true);
+    }],
+    ["repair-d70-evaluation-time", "schema/out-of-range", "Advance the bundle trust_inputs.evaluation_time one second past the caller's evaluation time.", (bundle) => { (bundle.trust_inputs as Obj).evaluation_time = 1_735_689_801; }],
+    ["repair-d70-trust-created-after-evaluation", "schema/out-of-range", "Set the trust-store snapshot created_at one second after the evaluation time and repair the store digest.", (bundle) => {
+      ((bundle.trust_inputs as Obj).trust_store as Obj).created_at = 1_735_689_801; recalcTrust(bundle);
+    }],
+  ];
+  for (const [name, code, description, mutate] of releaseRepairs) {
+    const item = bundleFixture(code, description, mutate);
+    add({ ...item, filename: name, descriptor: { ...item.descriptor, name } });
+  }
 
   add(fixture("resource/bundle-too-large", "Append bytes until the exact input exceeds the fixed bundle limit.", concat(validBytes, new Uint8Array(16_777_217 - validBytes.length))));
   add(fixture("resource/cbor-depth", "Wrap a scalar in 33 nested arrays.", concat(new Uint8Array(33).fill(0x81), Uint8Array.of(0xf6))));
@@ -750,7 +793,8 @@ export function buildNegativeFixtures(): NegativeFixture[] {
     mutateReceipt(bundle, second.kind as string, (value) => { (value.emission as Obj).issuer_seq = firstSeq; }, values.filter((value) => value.kind === second.kind).indexOf(second));
   }));
 
-  add(bundleFixture("receipt/kind-body-mismatch", "Put an inference body under a root observation kind.", (bundle) => { const inference = (artifacts(bundle).receipts as CborValue[]).map(payload).find((value) => value.kind === "inference")!; mutateReceiptWhere(bundle, (value) => value.kind === "observation" && object(value.root), (value) => { value.body = clone(inference.body!); }); }));
+  // D-69: the observation body is shape-checked at step 6, so the mismatch is carried on an inference kind to keep this a step-10 trigger.
+  add(bundleFixture("receipt/kind-body-mismatch", "Put a root observation body under an inference kind.", (bundle) => { const observation = (artifacts(bundle).receipts as CborValue[]).map(payload).find((value) => value.kind === "observation" && object(value.root))!; mutateReceipt(bundle, "inference", (value) => { value.body = clone(observation.body!); }); }));
   add(bundleFixture("receipt/signer-role-mismatch", "Name outcome_observer as an inference issuer while retaining the agent signing key.", (bundle) => mutateReceipt(bundle, "inference", (value) => { value.issuer_role = "outcome_observer"; })));
   add(bundleFixture("receipt/manifest-inconsistent", "Change a root observation consumption ordinal and recompute its direct commitment.", (bundle) => mutateReceiptWhere(bundle, (value) => value.kind === "observation" && object(value.root), (value) => { const consumption = (value.body as Obj).consumption as Obj; ((consumption.items as Obj[])[0]!).ordinal = 1; consumption.manifest_digest = domainHash("AAR-CONSUMPTION-MANIFEST-v1", { items: consumption.items! }); })));
   add(bundleFixture("receipt/consumption-ref-unresolved", "Point an inference consumption reference at an unknown digest.", (bundle) => mutateReceipt(bundle, "inference", (value) => { (value.body as Obj).consumption_manifest_id = deterministicId("unresolved-consumption"); })));
@@ -1164,6 +1208,11 @@ export function buildEvidenceCommitFixtures(): EvidenceCommitFixture[] {
     });
     clearJournal(bundle);
     keepReceipts(bundle, (receipt) => !(receipt.kind === "action_attempt" && (receipt.body as Obj).disposition === "not_dispatched"));
+  });
+
+  // D-69: a same_operator anchor plan is accepted and yields existence/order only.
+  add("repair-d69-anchor-basis-same-operator", "conformant", ["anchor_existence_order_only"], (bundle) => {
+    rebuildManifest(bundle, (manifest) => { ((manifest.anchor_plan as Obj).independence as Obj).basis = "same_operator"; }, true);
   });
 
   add("journal-life-safety-unbound", "nonconformant", [], (bundle) => {

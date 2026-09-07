@@ -56,9 +56,8 @@ export interface VerifyB1Options {
   priorEmissions?: readonly PriorEmission[];
   /**
    * Required: evaluation time is always caller-supplied (pyref --at symmetry).
-   * The wall clock is never read. Validation prefers the bundle's own
-   * trust_inputs.evaluation_time; this value covers failure verdicts on inputs
-   * whose trust inputs are unreadable.
+   * The wall clock is never read. The bundle's trust_inputs.evaluation_time
+   * must equal this value; every verdict records this caller-supplied time.
    */
   evaluationTime: number;
   product?: string;
@@ -554,6 +553,8 @@ function parseEnvelope(entry: CborValue, kind: ArtifactKind, path: string): Pars
     if (payloadValue.v !== 2) return failure(6, "schema/version-wrong", `${path}.payload.v`);
   }
   if (kind === "credential") {
+    if (typeof payloadValue.principal_type !== "string") return failure(6, "schema/bad-type", `${path}.payload.principal_type`);
+    if (!["human", "service", "workload_instance", "model_endpoint"].includes(payloadValue.principal_type)) return failure(6, "schema/enum-unknown", `${path}.payload.principal_type`);
     if (typeof payloadValue.cose_alg !== "number" || typeof payloadValue.curve !== "string") return failure(6, "schema/bad-type", `${path}.payload.algorithm`);
     if (payloadValue.cose_alg !== -7 || payloadValue.curve !== "P-256") return failure(6, "schema/enum-unknown", `${path}.payload.algorithm`);
   }
@@ -561,6 +562,41 @@ function parseEnvelope(entry: CborValue, kind: ArtifactKind, path: string): Pars
   if (kind === "receipt") {
     if (typeof payloadValue.kind !== "string" || !KINDS.includes(payloadValue.kind)) return failure(6, "schema/enum-unknown", `${path}.payload.kind`);
     if (!object(payloadValue.binding) || !object(payloadValue.emission) || !object(payloadValue.freshness) || !Array.isArray(payloadValue.parents) || !object(payloadValue.body)) return failure(6, "schema/bad-type", `${path}.payload`);
+  }
+  if (kind === "receipt") {
+    const body = payloadValue.body as Obj;
+    if (payloadValue.kind === "observation") {
+      if (!object(body.consumption)) return failure(6, "schema/bad-type", `${path}.payload.body.consumption`);
+      if (!("items" in body.consumption)) return failure(6, "schema/missing-field", `${path}.payload.body.consumption.items`);
+      const items = body.consumption.items;
+      if (!Array.isArray(items)) return failure(6, "schema/bad-type", `${path}.payload.body.consumption.items`);
+      if (items.length < 1 || items.length > 4096) return failure(6, "schema/out-of-range", `${path}.payload.body.consumption.items`);
+    }
+    if (payloadValue.kind === "action_attempt") {
+      if (!object(body.command)) return failure(6, "schema/bad-type", `${path}.payload.body.command`);
+      if (!("excluded_fields" in body.command)) return failure(6, "schema/missing-field", `${path}.payload.body.command.excluded_fields`);
+      const excluded = body.command.excluded_fields;
+      if (!Array.isArray(excluded)) return failure(6, "schema/bad-type", `${path}.payload.body.command.excluded_fields`);
+      if (excluded.length > 32) return failure(6, "schema/out-of-range", `${path}.payload.body.command.excluded_fields`);
+      for (const [index, field] of excluded.entries()) {
+        const fieldPath = `${path}.payload.body.command.excluded_fields[${index}]`;
+        if (!object(field)) return failure(6, "schema/bad-type", fieldPath);
+        issue = closed(field, ["name", "reason", "value_commitment"], ["name", "reason", "value_commitment"], 6, fieldPath);
+        if (issue) return issue;
+        if ((issue = textSize(field.name, 128, 6, `${fieldPath}.name`))) return issue;
+        if (typeof field.reason !== "string") return failure(6, "schema/bad-type", `${fieldPath}.reason`);
+        if ((issue = fixed(field.value_commitment, 32, 6, `${fieldPath}.value_commitment`))) return issue;
+        if (!["secret", "volatile_header", "transport_generated"].includes(field.reason)) return failure(6, "schema/enum-unknown", `${fieldPath}.reason`);
+      }
+    }
+  }
+  if (kind === "epoch_manifest") {
+    const plan = payloadValue.anchor_plan;
+    if (!object(plan) || !object(plan.independence)) return failure(6, "schema/bad-type", `${path}.payload.anchor_plan.independence`);
+    const independence = plan.independence;
+    if (!("basis" in independence)) return failure(6, "schema/missing-field", `${path}.payload.anchor_plan.independence.basis`);
+    if (typeof independence.basis !== "string") return failure(6, "schema/bad-type", `${path}.payload.anchor_plan.independence.basis`);
+    if (!["distinct_operator_and_failure_domain", "same_operator"].includes(independence.basis)) return failure(6, "schema/enum-unknown", `${path}.payload.anchor_plan.independence.basis`);
   }
   if (kind === "mediator_countersignature" && !uint(payloadValue.mediator_observed_at)) return failure(6, "countersign/invalid", `${path}.payload.mediator_observed_at`);
   return { kind, envelope: entry, envelopeBytes: encodeCbor(entry), payloadBytes, payload: payloadValue, coseBytes, protectedBytes, protectedMap, signature, kid };
@@ -638,7 +674,7 @@ function parseAll(bundle: Obj): Parsed | B1Failure {
   return parsed;
 }
 
-function validateTrustInputs(bundle: Obj): B1Failure | undefined {
+function validateTrustInputs(bundle: Obj, evaluationTime: number): B1Failure | undefined {
   const selector = bundle.selector as Obj;
   const trust = bundle.trust_inputs as Obj;
   const store = trust.trust_store as Obj;
@@ -647,6 +683,7 @@ function validateTrustInputs(bundle: Obj): B1Failure | undefined {
     if (!object(rootValue)) return failure(5, "schema/bad-type", "bundle.trust_inputs.trust_store.roots");
     if (!same(rootValue.tenant_id, selector.tenant_id) || !Array.isArray(rootValue.allowed_sites) || !(rootValue.allowed_sites as CborValue[]).some((site) => same(site, selector.site_id))) return failure(5, "credential/root-not-accepted", "bundle.trust_inputs.trust_store.roots");
   }
+  if (trust.evaluation_time !== evaluationTime) return failure(5, "schema/out-of-range", "bundle.trust_inputs.evaluation_time");
   if ((trust.evaluation_time as number) < (store.created_at as number)) return failure(5, "schema/out-of-range", "bundle.trust_inputs.evaluation_time");
   return undefined;
 }
@@ -1427,8 +1464,10 @@ function validateAnchors(bundle: Obj, parsed: Parsed, observations: string[]): B
     const independence = plan!.independence as Obj;
     const groups = independence.groups as Obj[];
     const group = groups.find((entry) => same(entry.independence_group, target.independence_group));
-    if (independence.basis !== "distinct_operator_and_failure_domain" || group === undefined || !same(group.operator_id, target.operator_id)
-      || groups.some((entry, index) => groups.some((other, otherIndex) => index !== otherIndex && (same(entry.operator_id, other.operator_id) || same(entry.failure_domain_id, other.failure_domain_id))))) return failure(17, "anchor/independence-invalid", "epoch_manifest.anchor_plan.independence");
+    // A same_operator basis declares no independence between targets (D-69):
+    // the anchor still proves existence/order; no pairwise distinctness is claimed.
+    if (group === undefined || !same(group.operator_id, target.operator_id)
+      || (independence.basis === "distinct_operator_and_failure_domain" && groups.some((entry, index) => groups.some((other, otherIndex) => index !== otherIndex && (same(entry.operator_id, other.operator_id) || same(entry.failure_domain_id, other.failure_domain_id)))))) return failure(17, "anchor/independence-invalid", "epoch_manifest.anchor_plan.independence");
     observe(observations, "anchor_existence_order_only");
   }
   return undefined;
@@ -1637,7 +1676,7 @@ function emitVerdict(input: Uint8Array, bundle: Obj, parsed: Parsed, options: Ve
       requested_profile: bundle.claimed_profile!, evaluated_profile: bundle.claimed_profile!,
       maximum_time_class: evidence.time, maximum_provenance_class: evidence.provenance, maximum_outcome_level: evidence.outcome,
       technical_integrity: "satisfied", source_authenticity: "not_established",
-      custody_continuity: parsed.anchor.length > 0 ? "partially_evidenced" : "not_established",
+      custody_continuity: "not_established",
       discovery_completeness: bundle.coverage === "complete" ? "producer_declared_only" : "not_established",
       legal_admissibility: "not_established",
     },
@@ -1658,7 +1697,7 @@ function validateBundle(input: Uint8Array, options: VerifyB1Options): B1Verifica
   const bundle = decoded as Obj;
   const resourceIssue = validateResourceCounts(bundle);
   if (resourceIssue) return resourceIssue;
-  const trustIssue = validateTrustInputs(bundle);
+  const trustIssue = validateTrustInputs(bundle, options.evaluationTime);
   if (trustIssue) return trustIssue;
   const parsed = parseAll(bundle);
   if (isFailure(parsed)) return parsed;
@@ -1705,9 +1744,8 @@ function emitFailureVerdict(input: Uint8Array, issue: B1Failure, options: Verify
   const trust = object(decoded?.trust_inputs) ? decoded.trust_inputs : {};
   const store = object(trust.trust_store) ? trust.trust_store : {};
   const zero16 = new Uint8Array(16); const zero32 = new Uint8Array(32);
-  // Evaluation time comes from the bundle or the caller — never a wall-clock
-  // read. verifyBundle enforces the caller side at the API boundary.
-  const evaluationTime = uint(trust.evaluation_time) ? trust.evaluation_time : options.evaluationTime;
+  // Failure verdicts bind the caller's time, including time-mismatch failures.
+  const evaluationTime = options.evaluationTime;
   const committedFrom = uint(selector.committed_from) ? selector.committed_from : 0;
   const committedUntil = uint(selector.committed_until) ? selector.committed_until : 0;
   const receiptKinds = Array.isArray(selector.receipt_kinds) && selector.receipt_kinds.length > 0 ? selector.receipt_kinds : ["observation"];
@@ -1748,7 +1786,7 @@ export function verifyBundle(input: Uint8Array, options: VerifyB1Options): B1Ver
   // Evaluation time must be caller-supplied, checked before any verification
   // (pyref --at symmetry); the wall clock is never read. The runtime check
   // covers untyped callers.
-  if (options?.evaluationTime === undefined) throw new Error("verifyBundle requires options.evaluationTime; wall-clock fallback is forbidden");
+  if (!uint(options?.evaluationTime)) throw new Error("verifyBundle requires options.evaluationTime as a uint <= 2^53-1; wall-clock fallback is forbidden");
   const result = validateBundle(input, options);
   return result.ok ? result : emitFailureVerdict(input, result, options);
 }

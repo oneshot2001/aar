@@ -1112,3 +1112,57 @@ distinct credentials.
 before dispatch. Signing that observation binds the pre-send AAR attempt to the
 mediator boundary without importing D-62's future attestation-vantage model or
 changing direct VAPIX bundles.
+
+## D-68 — Credential principal types are checked before content IDs
+
+**Decision.** The credential issuer fixture is a `service` with role
+`authority_source`. Verifiers reject an unknown credential principal-type
+at step 6 with `schema/enum-unknown`; a non-text value is `schema/bad-type`.
+The existing CDDL enum is unchanged.
+**Why.** A role is not a principal type. Corrected dependent KATs must be regenerated.
+
+## D-69 — Demo production follows the consumption and anchor schema; `same_operator` is an explicit basis
+
+**Decision.** The scripted demo commits its signed logical request as its one
+consumption item, emits no exclusions from its secret-free logical command,
+and declares the anchor basis `same_operator`. `independence-declaration.basis`
+gains that second value; it declares no independence between anchor targets,
+and a verifier records anchor existence/order only for such a plan. The basis
+compares anchor targets with each other, not with the producer. Consumption
+bounds, exclusion shape, and the basis enum are checked at step 6, even when
+no anchor record is carried. These repairs give the demo bundles step-6 wire
+shape; they do not by themselves make the demo verifier-conformant. A
+`same_operator` anchor still anchors: it MAY support the `externally_anchored`
+time class, because time class is an anchoring axis and independence is a
+separate axis.
+**Why.** A same-operator demo must not carry a true-sounding independence
+claim on the wire, and the existing basis must keep its meaning. Making the
+limitation an explicit wire value keeps it visible to every verifier.
+
+## D-70 — Evaluation time is explicitly caller-selected
+
+**Decision.** At step 5 the bundle evaluation time must equal the caller's time,
+then be at least the trust-store creation time; either failure is
+`schema/out-of-range`. Both verdict time fields always record the caller's time,
+including on failure. Caller times must be uints no greater than 2^53-1.
+**Why.** The producer must not silently choose a different evaluation time.
+
+## D-71 — v0.2 does not establish custody continuity
+
+**Decision.** Every v0.2 verdict emits `custody_continuity="not_established"`.
+The verdict schema no longer permits `partially_evidenced`.
+**Why.** General conformance, anchoring, and mediator countersignatures do not
+constitute a defined custody-lineage verification procedure.
+
+## D-72 — Every conformant v0.2 verdict observes `ingress_completeness_not_established`
+
+**Decision.** A v0.2 verifier emits the `ingress_completeness_not_established`
+observation on every conformant verdict, not only when the bundle declares
+complete coverage. Both reference implementations emit it last, after any
+`producer_declared_complete` observation. A failure verdict carries an empty
+`observations` array; observations accumulated before the first failure are
+report-layer only.
+**Why.** CONFORMANCE.md defines the observation as "no independent
+census/reconciliation", which is true of every v0.2 verdict. The harness
+verifier already behaved this way; pyref emitted it only for complete coverage,
+which broke cross-implementation verdict-byte equality on conformant bundles.

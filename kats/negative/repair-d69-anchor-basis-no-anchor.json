@@ -1,0 +1,5 @@
+{
+  "name": "repair-d69-anchor-basis-no-anchor",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Declare an unknown anchor-plan independence basis in a manifest carried without any anchor record."
+}

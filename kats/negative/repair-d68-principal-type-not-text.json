@@ -1,0 +1,5 @@
+{
+  "name": "repair-d68-principal-type-not-text",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "Set the root credential principal_type to the integer 7, keeping its credential_id."
+}

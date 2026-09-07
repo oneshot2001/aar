@@ -60,9 +60,9 @@ async function goldenBundle(scenarioId: "S1" | "S3"): Promise<string> {
 
 describe("RealNarrative byte-compatibility (golden digests)", () => {
   test("S1 dispatch bundle bytes unchanged with narrative omitted", async () => {
-    expect(await goldenBundle("S1")).toBe("cc6de319093265601f92ecaa63784f9c8f2c576f5b2b69d6e3b03df511f21ee8");
+    expect(await goldenBundle("S1")).toBe("a1b1d8f2f447e0f3735e5f0693c84322806b3c4adb88a506a0b0c295b12e056d");
   });
   test("S3 refusal bundle bytes unchanged with narrative omitted", async () => {
-    expect(await goldenBundle("S3")).toBe("116c1b70e2cecf66d89ddf6bdfd3d89efcfb2740290ce83bc2bdca50430e4d20");
+    expect(await goldenBundle("S3")).toBe("5c7fb275d122319b1bc183e8abaef0e77ac1aca3201c945705a2aaf09d5a086f");
   });
 });

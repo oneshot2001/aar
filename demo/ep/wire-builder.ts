@@ -244,7 +244,7 @@ function credentialSpec(role: DemoKeyRole): { principalType: string; principalRo
     case "authority": return { principalType: "service", principalRole: "authority_source", usage: "authority_signing" };
     case "outcome": return { principalType: "service", principalRole: "outcome_observer", usage: "outcome_signing" };
     case "anchor": return { principalType: "service", principalRole: "anchor_service", usage: "anchor_signing" };
-    case "verifier-trust": return { principalType: "authority_source", principalRole: "authority_source", usage: "credential_issuing" };
+    case "verifier-trust": return { principalType: "service", principalRole: "authority_source", usage: "credential_issuing" };
   }
 }
 
@@ -255,7 +255,7 @@ function buildCredentials(input: WireBuildInput): { envelopes: DemoSignedEnvelop
   const trustAnchorId = opaque(`trust-anchor:${toHex(rootKey.kid)}`);
   const rootFields = buildDemoCredentialFields({
     subject: rootKey, issuerKid: rootKey.kid,
-    principalType: "authority_source", principalRole: "authority_source", keyUsage: "credential_issuing",
+    principalType: "service", principalRole: "authority_source", keyUsage: "credential_issuing",
     tenantId: input.tenantId, siteId: input.siteId, evaluatedAt: input.evaluatedAt,
     trustAnchorId, path: [],
   });
@@ -404,11 +404,19 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
     : delegations.find((item) => (item.payload.not_before as number) <= input.evaluatedAt && input.evaluatedAt < (item.payload.not_after as number));
   if (!selected) throw new Error(`no ${input.scenarioId === "S3" ? "expired" : "valid"} delegation candidate at evaluation time`);
 
-  const consumptionFields: Obj = { items: [] };
+  // The scripted demo consumes a logical request, not camera media.
+  const consumptionFields: Obj = { items: [{
+    ordinal: 0,
+    item_id: requestId,
+    media_type: CONTENT_TYPES.request,
+    content_commitment: hash(request.payloadBytes),
+    transformations: [],
+    disposition: "used",
+  }] };
   const consumption: Obj = { manifest_digest: domainHash("AAR-CONSUMPTION-MANIFEST-v1", consumptionFields), ...consumptionFields };
   const sourceDevice: Obj = {
     device_id: input.targetId, manufacturer: input.sourceDeviceMetadata.manufacturer, model: input.sourceDeviceMetadata.model,
-    firmware: input.sourceDeviceMetadata.firmware, device_credential_id: opaque(`device-credential:${toHex(input.targetId)}`), failure_domain_id: opaque(`failure-domain:${toHex(input.targetId)}`),
+    firmware: input.sourceDeviceMetadata.firmware, device_credential_id: opaque(`device-credential:${toHex(input.targetId)}`), failure_domain_id: id16(`failure-domain:${toHex(input.targetId)}`),
   };
   const observation = makeReceipt(input, "observation", "agent", 0, [], { source_device: sourceDevice, consumption, observed_at: input.narrative?.observedAt ?? input.evaluatedAt - 49 }, requestRoot);
 
@@ -511,7 +519,7 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
     receipt_index: { ordering: "committed_at_epoch_seq_receipt_id", leaf_count: receipts.length, root: indexRoot, entries: indexEntries },
     anchor_plan: {
       max_submission_delay_s: 86400, max_head_age_s: 86400, targets: [anchorTarget],
-      independence: { basis: "same_operator_demo_only", groups: [{ independence_group: anchorTarget.independence_group!, operator_id: anchorTarget.operator_id!, failure_domain_id: id16("failure-domain:same-operator-log") }] },
+      independence: { basis: "same_operator", groups: [{ independence_group: anchorTarget.independence_group!, operator_id: anchorTarget.operator_id!, failure_domain_id: id16("failure-domain:same-operator-log") }] },
     },
   };
   const manifestId = domainHash("AAR-EPOCH-MANIFEST-ID-v1", manifestFields);

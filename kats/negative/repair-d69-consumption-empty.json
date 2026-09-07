@@ -1,0 +1,5 @@
+{
+  "name": "repair-d69-consumption-empty",
+  "expected_code": "schema/out-of-range",
+  "mutation_description": "Empty the root observation consumption items array."
+}

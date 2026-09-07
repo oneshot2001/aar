@@ -1,0 +1,5 @@
+{
+  "name": "repair-d68-principal-type-and-short-id",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Set the root credential principal_type to authority_source and truncate its credential_id to 31 bytes; the enum check precedes fixed-size checks."
+}

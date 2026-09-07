@@ -1,0 +1,5 @@
+{
+  "name": "repair-d69-exclusion-commitment",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "Remove the action-attempt excluded field value commitment while its reason stays valid."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "repair-d69-exclusion-reason",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Give the action-attempt excluded field an unknown reason while its value commitment is present."
+}

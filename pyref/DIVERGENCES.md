@@ -14,6 +14,11 @@ The standalone `aar-wire-object` entry-point convention was accepted by the gate
 
 The 20 Run A divergences were adjudicated and closed by [`spec/GATE4-SLICE-C2-REVIEW.md`](../spec/GATE4-SLICE-C2-REVIEW.md).
 
+## Known pre-existing divergences (not KAT fixtures)
+
+- Demo bundles (`demo/ep/wire-builder.ts`) fail the TypeScript verifier at step 10 `receipt/action-command-mismatch`: the demo's canonical command carries `parameters`, while the harness verifier expects `parameters_digest`; pyref compares name/target only and accepts. Pre-existing before D-68..D-72; out of that pass's scope; D-73 candidate.
+- pyref performs no credential `cose_alg`/`curve` enum check at step 6; the harness verifier rejects anything other than `-7`/`P-256` with `schema/enum-unknown`. Pre-existing.
+
 ## C2 verdict/reason divergences
 
 No verdict, reason-code, class, or determinism divergences recorded.

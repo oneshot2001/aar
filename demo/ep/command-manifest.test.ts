@@ -10,7 +10,7 @@ test("command manifest is built from secret-free logical data", () => {
     parameters: { preset_name: "gate5-safe" },
     invocationId: id16("demo-invocation"),
   }, "vapix-stub", "0.1.0");
-  expect(command.excluded_fields).toEqual([{ name: "authorization", reason: "injected_only_at_transport" }]);
+  expect(command.excluded_fields).toEqual([]);
   expect(JSON.stringify(command)).not.toContain("password");
   expect(command.command_digest.length).toBe(32);
 });

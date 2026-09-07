@@ -14,6 +14,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 // unreadable (caller-supplied always; the wall clock is never read — pyref --at symmetry). Matches the fixture corpus.
 const AT = 1_735_689_800;
 const negativeFixtures = buildNegativeFixtures();
+const repairStep = (filename: string): number => filename.startsWith("repair-d70") ? 5 : filename.includes("independence") ? 17 : 6;
 
 describe("B2 reference verifier", () => {
   test("the full positive bundle passes steps 1 through 20 and yields a round-trippable signed verdict", () => {
@@ -105,6 +106,30 @@ describe("B2 reference verifier", () => {
       if (!result.ok) expect(result.reason, fixture.filename).toBe(fixture.descriptor.expected_code);
     }
   }, 30_000);
+
+  test("release-repair fixtures fail at their schema step, not a later hash step (D-68..D-70)", () => {
+    const repairs = negativeFixtures.filter((fixture) => fixture.filename.startsWith("repair-"));
+    expect(repairs).toHaveLength(11);
+    for (const fixture of repairs) {
+      const result = verifyBundle(fixture.bytes, { evaluationTime: AT });
+      expect(result.ok, fixture.filename).toBe(false);
+      if (!result.ok) expect(result.step, fixture.filename).toBe(repairStep(fixture.filename));
+    }
+  });
+
+  test("caller evaluation time is authoritative and recorded on mismatch (D-70)", () => {
+    const input = readFileSync(join(root, "kats", "positive", "bundle-valid-subset.cbor"));
+    for (const at of [AT - 1, AT + 1]) {
+      const result = verifyBundle(input, { evaluationTime: at });
+      expect(result.ok, String(at)).toBe(false);
+      if (!result.ok) {
+        expect(result.reason, String(at)).toBe("schema/out-of-range");
+        expect(result.step, String(at)).toBe(5);
+        expect(result.verdict?.evaluated_at, String(at)).toBe(at);
+        expect((result.verdict?.trust_policy as Record<string, CborValue>).evaluation_time, String(at)).toBe(at);
+      }
+    }
+  });
 
   test("generated negative files and descriptors equal the in-memory fixtures", () => {
     for (const fixture of negativeFixtures) {

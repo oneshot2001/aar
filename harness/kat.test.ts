@@ -105,9 +105,9 @@ describe("positive KAT harness", () => {
     }
   }, 30_000);
 
-  test("D-66 evidence-commit fixtures match files and exact verdict behavior", () => {
+  test("D-66/D-69 evidence-commit fixtures match files and exact verdict behavior", () => {
     const first = buildEvidenceCommitFixtures(); const second = buildEvidenceCommitFixtures();
-    expect(first).toHaveLength(5);
+    expect(first).toHaveLength(6);
     for (let index = 0; index < first.length; index += 1) {
       const fixture = first[index]!;
       expect(equalBytes(fixture.bytes, second[index]!.bytes), fixture.filename).toBe(true);

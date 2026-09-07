@@ -1,0 +1,5 @@
+{
+  "name": "repair-d69-consumption-overflow",
+  "expected_code": "schema/out-of-range",
+  "mutation_description": "Repeat the root observation consumption item 4,097 times."
+}

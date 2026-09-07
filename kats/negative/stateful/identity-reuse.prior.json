@@ -1,12 +1,12 @@
 {
   "prior_emissions": [
     {
-      "issuer_kid": "5cd252fb0ce8932436faf8ccd1040981b89ee4ad6b9fe9e2a2b7e71aacb27cd3",
-      "issuer_seq": 101,
+      "issuer_kid": "dc0ce633dbcc913dafafa4b89ac44d8ce683fdfc3f60c8bdf21213b9f2b534ba",
+      "issuer_seq": 108,
       "epoch_owner_kid": "dc0ce633dbcc913dafafa4b89ac44d8ce683fdfc3f60c8bdf21213b9f2b534ba",
       "epoch_id": 42,
-      "epoch_seq": 1,
-      "receipt_id": "064253c4098dfa40c00e8f652f5093a0815271636f7772dd19a5861da8a1dd39",
+      "epoch_seq": 8,
+      "receipt_id": "0fdddddca272ed0ea99de7347ec0205629c69de237986135513b52dedb2e1378",
       "envelope_digest": "85bcb3ce10567177d4a47a6c58c8a126a8846401ee2dbfe94372f937c9c0870a"
     }
   ]

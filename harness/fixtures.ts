@@ -185,7 +185,7 @@ function profileLimits(profile: CredentialFixture["profile"]): Obj {
 }
 
 const CREDENTIAL_SPECS: readonly [TestKeyName, string, string, CredentialFixture["profile"]][] = [
-  ["credential_issuing", "authority_source", "authority_source", "AAR-2A"],
+  ["credential_issuing", "service", "authority_source", "AAR-2A"],
   ["agent_signing", "model_endpoint", "agent", "AAR-2A"],
   ["agent_signing_successor", "model_endpoint", "agent", "AAR-2"],
   ["ep_signing", "service", "enforcement_point", "AAR-2A"],

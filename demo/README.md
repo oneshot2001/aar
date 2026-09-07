@@ -103,6 +103,13 @@ Additional demo-scope limits (F22 and adapter identity):
   is operated by the same party as the producer. It demonstrates the anchor
   mechanics; it does NOT provide independent timestamping or
   withholding-resistance. RFP language must not imply otherwise.
+  The wire declares this with the `same_operator` anchor-plan basis (D-69):
+  no independence is claimed, and the verifier records anchor
+  existence/order only. The D-69 repairs give these bundles step-6 wire
+  shape; they do not make the demo verifier-conformant (see
+  `pyref/DIVERGENCES.md`, known pre-existing divergences).
+- The scripted consumption item commits the signed logical request, not
+  camera imagery. Transport authorization is outside the logical command.
 - Adapter and mediator identity (model/firmware strings, mediator name) are
   **self-asserted** by the producing side; preflight cross-checks them against
   device readback, but no third party attests them.

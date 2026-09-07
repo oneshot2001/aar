@@ -1,0 +1,5 @@
+{
+  "name": "repair-d68-principal-role-as-type",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Set the root credential principal_type to the role text authority_source, keeping its credential_id."
+}

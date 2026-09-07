@@ -1,0 +1,5 @@
+{
+  "name": "repair-d69-independence-duplicate-operator",
+  "expected_code": "anchor/independence-invalid",
+  "mutation_description": "Add a second independence group that repeats the first group's operator_id under a distinct_operator_and_failure_domain plan with its anchor rebuilt."
+}

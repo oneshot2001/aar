@@ -4,8 +4,8 @@
   "content_type": null,
   "key_ids_used": {},
   "computed_ids": {
-    "batch_id": "c975fc081a7b1a3faed6fb2400719d47bd126416f82e9530fd3d99245278cf3e",
-    "leaf_hash": "9c9bf19d97f7ee5df9b3a59bad546f009046a284e7ecf395d76018a0b0bdc13d",
-    "root": "08b6780f31f397ac28232dd47f986e3553e664ca531e50bd6385bc29682c926b"
+    "batch_id": "201247b5a423ac88bd724b43363c829a9b2c5ac490f89573fed7647b21c42b5f",
+    "leaf_hash": "e5b8af895fff60ed645d916b9e18479d250210c561016566c9354fe6045dbd95",
+    "root": "f19e6dc7e60d1316cc7b1190e2810e4b8b1d6b3ac829c1fbf28fa0dc1aa47d1f"
   }
 }

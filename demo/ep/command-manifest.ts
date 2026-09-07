@@ -24,7 +24,9 @@ export function buildCommandManifest<T extends LogicalCommandRequest>(
     action_name: request.actionName,
     canonical_command: canonicalCommand,
     command_digest: hash(canonicalCommand),
-    excluded_fields: [{ name: "authorization", reason: "injected_only_at_transport" }],
+    // Transport authorization is not part of this secret-free logical command.
+    // No logical-command field was removed.
+    excluded_fields: [],
     idempotency_key: request.invocationId,
   };
   return { command_id: domainHash("AAR-COMMAND-MANIFEST-v1", fields as unknown as CborValue), ...fields };

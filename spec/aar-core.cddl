@@ -500,6 +500,9 @@ command-manifest-fields = (
 ;   "AAR-COMMAND-MANIFEST-v1", command-manifest-id-input
 ; ])).
 
+; excluded_fields lists fields removed from the logical command representation.
+; Transport-only fields never present in that representation are not entries.
+; Every listed exclusion commits its actual excluded value.
 excluded-command-fields = [ 0*32 excluded-command-field ]
 excluded-command-field = {
   name: bounded-text,
@@ -924,8 +927,11 @@ anchor-target = {
   independence_group: id16,
 }
 
+; The basis compares declared anchor targets with one another, not with the
+; producer. "same_operator" declares no independence between targets (D-69):
+; the plan's anchors prove existence/order only.
 independence-declaration = {
-  basis: "distinct_operator_and_failure_domain",
+  basis: "distinct_operator_and_failure_domain" / "same_operator",
   groups: [ 1*8 independence-group ],
 }
 independence-group = {

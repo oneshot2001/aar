@@ -64,6 +64,12 @@ normative as the step order itself (D-54).
    count, individual proof byte lengths, and aggregate proof bytes in that order.
 5. **Trust-policy input.** Validate the trust-store snapshot digest, root records,
    tenant/site scopes, evaluation time, expected anchor heads, and policy digest.
+   At the evaluation-time check, require the bundle's `evaluation_time` to
+   equal the explicitly supplied verifier evaluation time; then require that
+   time to be at least the trust-store snapshot's `created_at`. Either failure
+   is `schema/out-of-range` at step 5. Every verdict, including an earlier
+   failure verdict, records the caller's time in both `evaluated_at` and
+   `trust_policy.evaluation_time`. No wall-clock fallback is permitted.
 6. **Envelope mechanics.** For each signed object, in this artifact order —
    credentials, rotation records, status snapshots, request envelopes,
    delegations, epoch events, epoch manifests, anchor records, Merkle batches,
@@ -79,6 +85,9 @@ normative as the step order itself (D-54).
       `r,s`, and low-S;
    6. decode the detached payload bytes under step 2's CBOR rules, then validate
       its selected closed schema;
+      this includes nested productions and closed scalar enums, including
+      a credential's `principal_type`. Unknown principal-type text is
+      `schema/enum-unknown` at step 6, before content-ID validation.
    7. resolve a P-256 verification key through the accepted credential path,
       require `SHA-256(public_key) == subject_kid`, use that carried SPKI for
       verification, and enforce key usage, tenant/site scope, validity, and
@@ -255,6 +264,14 @@ normative as the step order itself (D-54).
     `anchor/manifest-binding`; then verify submission deadline, expected-head
     match/freshness, and multi-target independence declaration. An anchor proves
     existence/order by time only.
+    The independence basis compares anchor targets with each other; it does
+    not assert that an anchor operator differs from the producer. A
+    `same_operator` basis declares no independence: the verifier performs no
+    pairwise distinctness check and records existence/order only. The basis
+    enum is validated at step 6 even when no anchor record is carried.
+    Observation consumption cardinality and command exclusion shape are
+    likewise step-6 schema checks; missing exclusion commitments are not
+    deferred to command hashing.
 18. **Bundle ranges and coverage.** Verify each range against the signed manifest
     index root; require contiguous leaf indices and correct left/right temporal
     boundaries; evaluate the selector; require every selected entry and its closed
@@ -653,11 +670,16 @@ verdict-limits = {
     / "independently_sensed" / "contradicted" / "unknown" / "not_evaluated",
   technical_integrity: "satisfied" / "not_satisfied" / "not_evaluated",
   source_authenticity: "not_established",
-  custody_continuity: "not_established" / "partially_evidenced",
+  custody_continuity: "not_established",
   discovery_completeness: "not_established" / "producer_declared_only",
   legal_admissibility: "not_established",
 }
 ```
+
+A v0.2 verifier MUST emit `custody_continuity="not_established"` for every
+result. Receipt signatures, anchors, and mediator countersignatures do not
+establish custody continuity. A positive custody value requires a future
+normative decision defining custody evidence and its validation.
 
 A v0.2 verifier MUST emit only `not_established` for `ingress_completeness`.
 `census_supported` and `reconciliation_supported` are reserved for the later

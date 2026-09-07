@@ -442,6 +442,8 @@ def _trust_policy_checks(state: State) -> None:
             _fail("credential/root-not-accepted", 5)
     if trust["evaluation_time"] != state.evaluated_at:
         _fail("schema/out-of-range", 5)
+    if state.evaluated_at < store["created_at"]:
+        _fail("schema/out-of-range", 5)
     heads = trust["expected_anchor_heads"]
     if not heads:
         _fail("schema/missing-field", 5, indeterminate=True)
@@ -530,6 +532,11 @@ def _schema_payload(content_type: str, payload: Any) -> dict[str, Any]:
             _fail("schema/bad-type", 6)
         if payload["v"] != 2:
             _fail("schema/version-wrong", 6)
+    if content_type == CONTENT_TYPES["credentials"]:
+        if not isinstance(payload["principal_type"], str):
+            _fail("schema/bad-type", 6)
+        if payload["principal_type"] not in ("human", "service", "workload_instance", "model_endpoint"):
+            _fail("schema/enum-unknown", 6)
     for field, size in PAYLOAD_FIXED_FIELDS[content_type]:
         value = payload.get(field)
         if not isinstance(value, bytes):
@@ -548,6 +555,61 @@ def _schema_payload(content_type: str, payload: Any) -> dict[str, Any]:
                 and isinstance(payload.get("parents"), list)
                 and isinstance(payload.get("body"), dict)):
             _fail("schema/bad-type", 6)
+    if content_type == CONTENT_TYPES["receipts"]:
+        body = payload["body"]
+        if payload["kind"] == "observation":
+            consumption = body.get("consumption")
+            if not isinstance(consumption, dict):
+                _fail("schema/bad-type", 6)
+            if "items" not in consumption:
+                _fail("schema/missing-field", 6)
+            items = consumption["items"]
+            if not isinstance(items, list):
+                _fail("schema/bad-type", 6)
+            if not 1 <= len(items) <= 4096:
+                _fail("schema/out-of-range", 6)
+        if payload["kind"] == "action_attempt":
+            command = body.get("command")
+            if not isinstance(command, dict):
+                _fail("schema/bad-type", 6)
+            if "excluded_fields" not in command:
+                _fail("schema/missing-field", 6)
+            excluded = command["excluded_fields"]
+            if not isinstance(excluded, list):
+                _fail("schema/bad-type", 6)
+            if len(excluded) > 32:
+                _fail("schema/out-of-range", 6)
+            for field in excluded:
+                if not isinstance(field, dict):
+                    _fail("schema/bad-type", 6)
+                required = {"name", "reason", "value_commitment"}
+                if set(field) - required:
+                    _fail("schema/unknown-field", 6)
+                if required - set(field):
+                    _fail("schema/missing-field", 6)
+                if not isinstance(field["name"], str):
+                    _fail("schema/bad-type", 6)
+                if not 1 <= len(field["name"].encode("utf-8")) <= 128:
+                    _fail("schema/string-size", 6)
+                if not isinstance(field["reason"], str):
+                    _fail("schema/bad-type", 6)
+                if not isinstance(field["value_commitment"], bytes):
+                    _fail("schema/bad-type", 6)
+                if len(field["value_commitment"]) != 32:
+                    _fail("schema/digest-size", 6)
+                if field["reason"] not in ("secret", "volatile_header", "transport_generated"):
+                    _fail("schema/enum-unknown", 6)
+    if content_type == CONTENT_TYPES["epoch_manifests"]:
+        plan = payload.get("anchor_plan")
+        if not isinstance(plan, dict) or not isinstance(plan.get("independence"), dict):
+            _fail("schema/bad-type", 6)
+        independence = plan["independence"]
+        if "basis" not in independence:
+            _fail("schema/missing-field", 6)
+        if not isinstance(independence["basis"], str):
+            _fail("schema/bad-type", 6)
+        if independence["basis"] not in ("distinct_operator_and_failure_domain", "same_operator"):
+            _fail("schema/enum-unknown", 6)
     if content_type == CONTENT_TYPES["mediator_countersignatures"] and not _uint(payload.get("mediator_observed_at")):
         _fail("countersign/invalid", 6)
     return payload
@@ -1706,6 +1768,13 @@ def _anchor_checks(state: State) -> None:
         group = groups.get(target["independence_group"])
         if group is None or group["operator_id"] != target["operator_id"]:
             _fail("anchor/independence-invalid", 17)
+        independence = manifest["anchor_plan"]["independence"]
+        if independence["basis"] == "distinct_operator_and_failure_domain":
+            declared = independence["groups"]
+            for index, entry in enumerate(declared):
+                for other in declared[index + 1:]:
+                    if entry["operator_id"] == other["operator_id"] or entry["failure_domain_id"] == other["failure_domain_id"]:
+                        _fail("anchor/independence-invalid", 17)
         state.observations.append("anchor_existence_order_only")
 
 
@@ -1808,7 +1877,8 @@ def _bundle_ranges(state: State) -> None:
         extras = set(state.receipts_by_id) - reachable - selector_receipts
         if extras:
             _fail("bundle/artifact-out-of-scope", 18)
-        state.observations.extend(["producer_declared_complete", "ingress_completeness_not_established"])
+        state.observations.append("producer_declared_complete")
+    state.observations.append("ingress_completeness_not_established")
 
 
 def _evidence_classes(state: State) -> None:
@@ -1982,7 +2052,7 @@ def _verdict_fields(state: State, result: str, reason: str | None, step: int) ->
             "not_satisfied" if bundle is not None else "not_evaluated"
         ),
         "source_authenticity": "not_established",
-        "custody_continuity": "partially_evidenced" if result == "conformant" else "not_established",
+        "custody_continuity": "not_established",
         "discovery_completeness": "producer_declared_only" if bundle and bundle["coverage"] == "complete" else "not_established",
         "legal_admissibility": "not_established",
     }
@@ -2000,7 +2070,8 @@ def _verdict_fields(state: State, result: str, reason: str | None, step: int) ->
         "trust_policy": trust_policy,
         "scope": scope,
         "limits": limits,
-        "observations": list(dict.fromkeys(state.observations)),
+        # Failure verdicts carry no observations (harness parity, D-72).
+        "observations": [] if reason is not None else list(dict.fromkeys(state.observations)),
     }
     if reason is not None:
         fields["reason"] = reason

@@ -1,0 +1,8 @@
+{
+  "name": "repair-d69-anchor-basis-same-operator",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_observations": [
+    "anchor_existence_order_only"
+  ]
+}
