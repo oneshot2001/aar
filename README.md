@@ -71,6 +71,16 @@ honest list.
 - `adapters/` — VAPIX + VMS reference legs
 - `demo/` — sanitized end-to-end run evidence
 
+## Release gate
+
+Every tag runs, and must pass, all three:
+
+```console
+bun test harness                          # KATs, verifier, cross-impl bytes, schema oracle (engine pin: pyref/README.md)
+python3 -B -m pyref.kat --slice all       # pyref C1/C2 clean-room KATs
+bun test demo/ep/wire-builder.golden.test.ts
+```
+
 ## Process
 
 Two-model pipeline: Claude plans and gates (CDDL review → KAT coverage audit →

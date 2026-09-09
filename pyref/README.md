@@ -107,6 +107,21 @@ verdict continues to bind absence with the normative zero
 `replay_state_digest`; supplying even an empty prior-state file binds the
 canonical empty replay-state map instead.
 
+## Schema oracle (release test, D-74)
+
+`python3 -B -m pyref.schema_kat` validates every conformant fixture, the two
+golden demo bundles, and their signed verdicts against `spec/aar-core.cddl` and
+the verdict CDDL in `spec/CONFORMANCE.md`, plus the D1/D2/D4 schema probes. It
+shells out to the Ruby `cddl` gem (Bormann reference implementation), pinned
+at **0.12.14**; any other version, a missing engine, or a failed engine
+self-test exits 1. The gem is a dev tool, not a pyref dependency:
+
+```console
+gem install --user-install json_pure -v 2.7.6   # only on system Ruby 2.6
+gem install --user-install cddl -v 0.12.14
+export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"   # optional; the runner also looks there
+```
+
 ## Claim boundary
 
 A conformant verdict proves that the carried artifacts in the signed scope

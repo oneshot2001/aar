@@ -1166,3 +1166,31 @@ report-layer only.
 census/reconciliation", which is true of every v0.2 verdict. The harness
 verifier already behaved this way; pyref emitted it only for complete coverage,
 which broke cross-implementation verdict-byte equality on conformant bundles.
+
+## D-74 — Schema membership is gated by an external CDDL oracle at release, not by runtime validators
+
+**Decision.** CDDL membership of every conformant fixture, the golden demo
+bundles, and their signed verdicts is proven at release by
+`python3 -B -m pyref.schema_kat`, which feeds exact bytes (including every
+`bstr .cbor` payload and protected header) to the Ruby `cddl` gem pinned at
+0.12.14, after self-tests prove the engine enforces `.cbor` recursion, closed
+maps, enums, `.size`, and occurrence bounds. The verdict CDDL is read from the
+normative block in CONFORMANCE.md at run time; there is no second copy. A
+missing or mismatched engine fails the gate; it never skips. The runtime
+verifiers are unchanged: they keep their focused step-6 checks and their
+first-failure ordering, and do not become recursive schema validators.
+**Why.** Handwritten payload checks in two verifiers agreeing with each other
+does not establish CDDL membership; an independent engine does, at release,
+without adding release risk to the runtime path.
+
+## D-75 — A decision record MAY cite zero status snapshots
+
+**Decision.** `decision-record.status_snapshot_ids` is `optional-digest-ids`
+(`0*64 digest32`), not `digest-ids` (`1*64`). The `1*64` minimum was never
+justified by a decision entry, is not enforced by either runtime verifier, has
+no negative KAT, and CONFORMANCE step 8 only resolves the references a record
+actually cites. The change is wire-additive: zero verdict-byte change, zero
+fixture change. The same-operator demo precedent (D-69) went the other way
+because that enum value carried an independence claim the demo had to state
+explicitly; an empty snapshot list claims nothing. Proposed by the reviewer
+(D5 oracle, headline finding) and accepted by the gate 2026-09-09.

@@ -586,15 +586,17 @@ verdict-envelope = [
 ]
 
 verdict-cose-sign1 = [
-  protected: bstr .cbor {
-    1: -7,
-    3: "application/aar-verdict+cbor;v=0.2",
-    4: bstr .size 32,
-  },
+  protected: bstr .cbor verdict-protected,
   unprotected: {},
   payload: nil,
   signature: bstr .size 64,
 ]
+
+verdict-protected = {
+  1: -7,
+  3: "application/aar-verdict+cbor;v=0.2",
+  4: bstr .size 32,
+}
 
 verdict = {
   verdict_id: bstr .size 32,

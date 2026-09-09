@@ -396,7 +396,7 @@ decision-record-fields = (
   evaluated_inputs: evaluated-inputs,
   decision: "permit" / "deny" / "permit_with_approval",
   counter_state_digest: digest32,
-  status_snapshot_ids: digest-ids,
+  status_snapshot_ids: optional-digest-ids,
   profile: profile,
   delegation_id: digest32,
   ? approver_credential_id: digest32,

@@ -574,7 +574,7 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
   const bundle: Obj = {
     v: 2, created_at: input.evaluatedAt, bundle_nonce: id16(`bundle:${toHex(input.invocationId)}`), claimed_profile: "AAR-3",
     selector, selector_commitment: selectorCommitment, coverage: "complete", trust_inputs: trust,
-    ranges: [{ manifest_id: manifestId, selector_commitment: selectorCommitment, first_leaf_index: 0, entries: rangeEntries }],
+    ranges: [{ manifest_id: manifestId, selector_commitment: selectorCommitment, tree_size: indexEntries.length, first_leaf_index: 0, entries: rangeEntries }],
     artifacts,
   };
   return {
