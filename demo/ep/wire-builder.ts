@@ -8,6 +8,7 @@ import type { DemoKey, DemoKeyRole, DemoSigningKey } from "../keys/keys";
 import type { BuiltCommandManifest } from "./command-manifest";
 import { signDemoDetached, type DemoSignedEnvelope } from "./signing";
 import { policyFields, type DemoTrustPolicy } from "./authorization";
+import { TEST_KEYS } from "../../harness/testkeys";
 
 type Obj = Record<string, CborValue>;
 
@@ -17,6 +18,7 @@ const CONTENT_TYPES = {
   delegation: "application/aar-delegation+cbor;v=0.2",
   credential: "application/aar-credential+cbor;v=0.2",
   epochManifest: "application/aar-epoch-manifest+cbor;v=0.2",
+  epochEvent: "application/aar-epoch-event+cbor;v=0.2",
 } as const;
 
 export interface DelegationWindow {
@@ -275,6 +277,17 @@ function buildCredentials(input: WireBuildInput): { envelopes: DemoSignedEnvelop
   }
   const envelopes = (Object.keys(fieldsByRole) as DemoKeyRole[]).map((role) =>
     signDemoDetached({ credential_id: ids[role], ...fieldsByRole[role] }, CONTENT_TYPES.credential, rootKey));
+  // D-58/D-73: step 20 resolves the verifier's signing key from bundle
+  // credentials. Both reference verifiers sign verdicts with the published
+  // Gate-4 KAT verifier key (pyref/README.md), so the demo credentials that
+  // key exactly as the corpus does. Not an operational verifier identity.
+  const verifierFields = buildDemoCredentialFields({
+    subject: TEST_KEYS.verifier_signing, issuerKid: rootKey.kid,
+    principalType: "service", principalRole: "verifier", keyUsage: "verifier_signing",
+    tenantId: input.tenantId, siteId: input.siteId, evaluatedAt: input.evaluatedAt,
+    trustAnchorId, path: [ids["verifier-trust"]],
+  });
+  envelopes.push(signDemoDetached({ credential_id: domainHash("AAR-CREDENTIAL-ID-v1", verifierFields), ...verifierFields }, CONTENT_TYPES.credential, rootKey));
   return { envelopes: sortById(envelopes, (item) => (item.payload as Obj).credential_id as Uint8Array), ids };
 }
 
@@ -524,6 +537,26 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
   };
   const manifestId = domainHash("AAR-EPOCH-MANIFEST-ID-v1", manifestFields);
   const manifest = signDemoDetached({ manifest_id: manifestId, ...manifestFields }, CONTENT_TYPES.epochManifest, input.keys.ep);
+  // D-73: a closed epoch carries its open and close events (CONFORMANCE step 14,
+  // "one open and one close"). The demo used to ship the manifest alone; pyref
+  // accepted that and the harness rejected it — a step-14 divergence.
+  const eventBase: Obj = {
+    v: 2, tenant_id: manifestFields.tenant_id!, site_id: manifestFields.site_id!,
+    epoch_owner_kid: manifestFields.epoch_owner_kid!, epoch_id: manifestFields.epoch_id!,
+  };
+  const openFields: Obj = {
+    ...eventBase, event_seq: 0, occurred_at: manifestFields.opened_at!, event: "open",
+    body: { state: "open", first_epoch_seq: 0, max_duration_s: 86400, late_arrival_policy: "next_epoch_only" },
+  };
+  const openEvent = signDemoDetached({ event_id: domainHash("AAR-EPOCH-EVENT-ID-v1", openFields), ...openFields }, CONTENT_TYPES.epochEvent, input.keys.ep);
+  const closeFields: Obj = {
+    ...eventBase, event_seq: 1, previous_event_digest: hash(openEvent.payloadBytes), occurred_at: manifestFields.closed_at!, event: "close",
+    body: {
+      state: "closed", close_reason: manifestFields.close_reason!, last_epoch_seq: receipts.length - 1, item_count: receipts.length,
+      manifest_id: manifestId, anchor_deadline: manifestFields.anchor_deadline!,
+    },
+  };
+  const closeEvent = signDemoDetached({ event_id: domainHash("AAR-EPOCH-EVENT-ID-v1", closeFields), ...closeFields }, CONTENT_TYPES.epochEvent, input.keys.ep);
   // G5-D1-003: live runs supply the real anchor submission time; the offline
   // default keeps corpus determinism (fixed offset inside the epoch window).
   const logHead = await input.anchorLog.append(manifest.payloadBytes, input.anchorObservedAt ?? input.evaluatedAt - 39);
@@ -567,7 +600,7 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
   const artifacts: Obj = {
     receipts: sortById(receipts, (item) => item.id).map((item) => item.signed.envelope), requests: [request.envelope],
     delegations: sortById(delegations, (item) => item.payload.delegation_id as Uint8Array).map((item) => item.signed.envelope),
-    credentials: allCredentials, status_snapshots: [], rotations: [], epoch_events: [],
+    credentials: allCredentials, status_snapshots: [], rotations: [], epoch_events: sortById([openEvent, closeEvent], (item) => (item.payload as Obj).event_id as Uint8Array).map((item) => item.envelope),
     epoch_manifests: [manifest.envelope], anchors: [], merkle_batches: [], merkle_proofs: [], manifest_payloads: manifestPayloads,
   };
   if (dispatchResult?.mediatorCountersignature !== undefined) artifacts.mediator_countersignatures = [[...dispatchResult.mediatorCountersignature.envelope]];

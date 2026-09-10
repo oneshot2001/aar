@@ -163,8 +163,11 @@ registrations exist and are deliberately not seeded — for example,
 TEE-anchored execution; a registration states where its grade sits relative to
 the seeded values."*
 
-That unseeded value is the layer AAR has already specified, implemented twice,
-and exercised on live hardware. AAR's independent-observer outcome discipline
+That unseeded value is the layer AAR has specified and implemented twice. On
+live hardware so far the outcome layer has recorded `device_acknowledged`
+results (same-vendor readback), not independently sensed ones; the
+independent-observer grade is defined and fixture-covered, not yet exercised
+live. AAR's independent-observer outcome discipline
 is an existence proof for the exact `effect_attestation` grade the draft
 anticipates; conversely, a SCITT Transparency Service is a conforming
 replacement for AAR's weakest disclosed component (F22 same-operator
@@ -336,33 +339,15 @@ reference toolset; the org owns the `agent-receipts` handle and
 | Ontology | broad hierarchical taxonomy + `unknown` fallback | closed 2-action pinned ontology (deliberate scope) |
 | Verdict | verify result codes; no signed verdict object | signed verdicts binding bundle_digest; a bare PASS is never conformant |
 
-### B.4 Trajectory and collision facts
+### B.4 (removed 2026-09-09)
 
-**INTERNAL ONLY — DO NOT QUOTE OR PARAPHRASE EXTERNALLY.** The roadmap and
-cadence observations below describe another author's unlaunched work; using
-them outbound would read as surveilling and pre-empting it. Nothing in this
-subsection may appear in any public or outbound text.
-
-- Roadmap: an explicit HN launch is planned (*"Post 3"* = OpenClaw/Claude
-  Code demo *"published to HN"*, drafted against *"the failure mode that gets
-  quoted in the top comment"*), then v1 public protocol release, v1.5
-  regulated-industries work (RFC 3161 anchoring, revocation, object-lock
-  sinks). Commit cadence tapering through August; no monetization found
-  anywhere in repo or site sources.
-- Positioning language stakes the generic ground: *"The EU AI Act mandates
-  traceability for high-risk AI systems. The regulation exists. The standard
-  for how to comply doesn't."* and the gap table row *"| **Action receipts**
-  | **Nothing** | **This specification** |"* (spec.md:31) — written as if
-  AAR, the mih cohort, and cMCP (the TEE policy-gateway
-  project from the 2026-08-19 competitive board) do not exist. That is a survey gap on their
-  side, not malice; AAR's public materials must not mirror it.
-- Names/domains held: `agent-receipts` org, agentreceipts.ai, obsigna.dev,
-  npm `@obsigna/sdk-ts`, PyPI `obsigna`, Go `obsigna.dev/sdk/go`, and an
-  `agent-receipts/ar/mcp-proxy` module path (note the `ar` segment).
-  Combined with the dormant third-party `botindex-aar-python` ("Agent Action
-  Receipts"), the generic name space around AAR's expansion is now
-  substantially occupied. AAR's disambiguator is its domain qualifier:
-  evidence profiles for agents on **physical-security systems**.
+This subsection recorded observations about another author's unlaunched
+roadmap and was marked internal-only. A public repository has no internal
+sections, so it was removed rather than relabelled. The name/domain facts it
+carried that matter publicly are one sentence: the generic "agent receipts"
+name space (org, domain, package names) is held by Obsigna, and AAR's
+disambiguator is its domain qualifier — evidence profiles for agents on
+physical-security systems.
 
 ### B.5 Disposition
 

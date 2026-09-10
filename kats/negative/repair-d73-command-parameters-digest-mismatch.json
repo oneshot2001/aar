@@ -1,0 +1,5 @@
+{
+  "name": "repair-d73-command-parameters-digest-mismatch",
+  "expected_code": "receipt/action-command-mismatch",
+  "mutation_description": "Rebuild the attempt canonical command with a foreign parameters_digest, recomputing command_digest and command_id so step 7 stays clean."
+}

@@ -633,7 +633,7 @@ export function buildNegativeFixtures(): NegativeFixture[] {
   const result: NegativeFixture[] = [];
   const add = (value: NegativeFixture): void => { result.push(value); };
   const validBytes = encodeCbor(baseBundle());
-  // D-68..D-70 release repairs. Schema negatives deliberately leave later
+  // D-68..D-70 and D-73 release repairs. Schema negatives deliberately leave later
   // commitments unrepaired: tests assert the exact step so a later hash
   // rejection cannot masquerade as schema enforcement.
   const releaseRepairs: [string, string, string, (bundle: Obj) => void][] = [
@@ -657,6 +657,34 @@ export function buildNegativeFixtures(): NegativeFixture[] {
     }],
     ["repair-d69-exclusion-commitment", "schema/missing-field", "Remove the action-attempt excluded field value commitment while its reason stays valid.", (bundle) => {
       mutateReceipt(bundle, "action_attempt", (p) => { delete (((p.body as Obj).command as Obj).excluded_fields as Obj[])[0]!.value_commitment; });
+    }],
+    // The three command fixtures recompute command_digest/command_id so step 7 (content commitments) stays clean; the
+    // mediator countersignature is NOT re-bound, which is fine only because step 10's action/command check fires first.
+    ["repair-d73-command-parameters-digest-mismatch", "receipt/action-command-mismatch", "Rebuild the attempt canonical command with a foreign parameters_digest, recomputing command_digest and command_id so step 7 stays clean.", (bundle) => {
+      mutateReceipt(bundle, "action_attempt", (p) => { const b = p.body as Obj; const a = b.action as Obj; const c = b.command as Obj;
+        c.canonical_command = encodeCbor({ operation: a.action_name!, target: a.target_id!, parameters_digest: deterministicId("foreign-parameters") });
+        c.command_digest = hash(c.canonical_command as Uint8Array); c.command_id = domainHash("AAR-COMMAND-MANIFEST-v1", withoutField(c, "command_id")); });
+    }],
+    ["repair-d73-command-parameters-present-mismatch", "receipt/action-command-mismatch", "Carry a parameters map in the canonical command whose deterministic encoding does not hash to the correct parameters_digest.", (bundle) => {
+      mutateReceipt(bundle, "action_attempt", (p) => { const b = p.body as Obj; const a = b.action as Obj; const c = b.command as Obj;
+        c.canonical_command = encodeCbor({ operation: a.action_name!, target: a.target_id!, parameters_digest: a.parameters_digest!, parameters: { stream_profile: "not-the-committed-profile" } });
+        c.command_digest = hash(c.canonical_command as Uint8Array); c.command_id = domainHash("AAR-COMMAND-MANIFEST-v1", withoutField(c, "command_id")); });
+    }],
+    ["repair-d73-command-parameters-nontext-key", "receipt/action-command-mismatch", "Carry a parameters map with an integer key whose deterministic encoding DOES hash to a matching parameters_digest; non-text keys are outside canonical-command-payload.", (bundle) => {
+      mutateReceipt(bundle, "action_attempt", (p) => { const b = p.body as Obj; const a = b.action as Obj; const c = b.command as Obj;
+        const parameters = new Map<CborScalar, CborValue>([[1, "x"]]); const digest = hash(encodeCbor(parameters));
+        a.parameters_cbor = encodeCbor(parameters); a.parameters_digest = digest;
+        c.canonical_command = encodeCbor(new Map<CborScalar, CborValue>([["operation", a.action_name!], ["target", a.target_id!], ["parameters_digest", digest], ["parameters", parameters]]));
+        c.command_digest = hash(c.canonical_command as Uint8Array); c.command_id = domainHash("AAR-COMMAND-MANIFEST-v1", withoutField(c, "command_id")); });
+    }],
+    ["repair-d73-credential-alg-unknown", "schema/enum-unknown", "Set the root credential cose_alg to -8, keeping its credential_id.", (bundle) => {
+      mutateArtifact(bundle, "credentials", (p) => p.key_usage === "credential_issuing", (p) => { p.cose_alg = -8; }, false);
+    }],
+    ["repair-d73-credential-alg-not-int", "schema/bad-type", "Set the root credential cose_alg to the text ES256, keeping its credential_id.", (bundle) => {
+      mutateArtifact(bundle, "credentials", (p) => p.key_usage === "credential_issuing", (p) => { p.cose_alg = "ES256"; }, false);
+    }],
+    ["repair-d73-manifest-without-events", "epoch/open-close", "Remove every epoch event while keeping the closed manifest; a manifest with no open/close is not a closed epoch.", (bundle) => {
+      artifacts(bundle).epoch_events = [];
     }],
     ["repair-d69-anchor-basis-no-anchor", "schema/enum-unknown", "Declare an unknown anchor-plan independence basis in a manifest carried without any anchor record.", (bundle) => {
       rebuildManifest(bundle, (p) => { ((p.anchor_plan as Obj).independence as Obj).basis = "same_operator_demo_only"; });

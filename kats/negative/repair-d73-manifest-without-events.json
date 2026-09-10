@@ -1,0 +1,5 @@
+{
+  "name": "repair-d73-manifest-without-events",
+  "expected_code": "epoch/open-close",
+  "mutation_description": "Remove every epoch event while keeping the closed manifest; a manifest with no open/close is not a closed epoch."
+}

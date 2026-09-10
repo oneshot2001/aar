@@ -11,7 +11,7 @@ import { verifyBundle } from "./verifier";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const AT = 1_735_689_800;
-const repairStep = (filename: string): number => filename.startsWith("repair-d70") ? 5 : filename.includes("independence") ? 17 : 6;
+const repairStep = (filename: string): number => filename.startsWith("repair-d70") ? 5 : filename.includes("independence") ? 17 : filename.startsWith("repair-d73-command") ? 10 : filename.startsWith("repair-d73-manifest") ? 14 : 6;
 
 const PYREF = `
 import sys, json

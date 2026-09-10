@@ -1,0 +1,5 @@
+{
+  "name": "repair-d73-command-parameters-present-mismatch",
+  "expected_code": "receipt/action-command-mismatch",
+  "mutation_description": "Carry a parameters map in the canonical command whose deterministic encoding does not hash to the correct parameters_digest."
+}

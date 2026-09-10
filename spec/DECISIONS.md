@@ -1167,6 +1167,58 @@ census/reconciliation", which is true of every v0.2 verdict. The harness
 verifier already behaved this way; pyref emitted it only for complete coverage,
 which broke cross-implementation verdict-byte equality on conformant bundles.
 
+## D-73 — Demo-only divergences: canonical command binding, epoch event pairing, verifier credential, algorithm enum
+
+**Decision.** Four rules the KAT corpus never exercised — three surfaced by
+running the reference demo bundles through both verifiers, one (the algorithm
+enum) already listed as a known gap in `pyref/DIVERGENCES.md` — ruled
+2026-09-09 as the release prerequisite for `v0.2.0`:
+
+1. **Canonical command binding (step 10).** `canonical_command` decodes as
+   `canonical-command-payload` (new CDDL production): required `operation`,
+   `target`, `parameters_digest`, optional `logical_target` and `parameters`.
+   The verifier compares the three required members to the normalized action
+   and, when `parameters` is present, requires its deterministic encoding to
+   hash to `parameters_digest`. The harness already compared the required
+   members; pyref compared only `action_name`/`target_id` on the manifest and
+   never decoded the command; the demo emitted `parameters` with no
+   `parameters_digest`. Adapters keep executing from `parameters`.
+2. **Epoch event pairing (step 14).** A carried manifest with no event group,
+   or an event group with no manifest, is `epoch/open-close`. The harness
+   already enforced both halves; pyref enforced neither and tolerated an
+   event-less closed manifest (the demo shipped exactly that). The open must
+   also precede the close in both `event_seq` and `occurred_at` (the harness
+   checked time, pyref checked sequence; both now check both). The demo now
+   emits signed open and close events.
+3. **Verifier credential (step 20).** D-58's rule — the verifier's signing kid
+   resolves from bundle credentials, else signed indeterminate
+   `key/not-found` — was enforced by the harness only; pyref signed
+   regardless. pyref now enforces it with the harness's find-first semantics
+   (the first credential carrying the verifier kid must have
+   `verifier_signing` usage); the demo credentials the published
+   Gate-4 KAT verifier key exactly as the corpus does. This remains the
+   published test key, not an operational verifier identity (pyref/README).
+   An interoperable external-key input stays a v0.3 candidate (D-58).
+4. **Algorithm enum (step 6).** pyref now rejects credential `cose_alg` ≠ -7
+   or `curve` ≠ "P-256" (`schema/bad-type` for wrong type, then
+   `schema/enum-unknown`), in harness order after `principal_type`.
+
+**Evidence.** Six new negative KATs (`repair-d73-*`), golden demo digests
+re-pinned, `canonical-command-payload` wired into the CDDL so the D-74 oracle
+validates it, and a new test proving both verifiers emit byte-identical
+conformant verdicts for the S1/S3 golden bundles (byte identity there is
+under a caller-supplied verifier identity copied from pyref, as in the
+cross-implementation gate; it proves rule agreement, not independent
+identity). Corpus positive fixtures are unchanged; only the demo bundles
+changed bytes. Not fixture-covered: the open-before-close time rule, because a
+mutated event breaks the event chain first; parity rests on the aligned code.
+
+**Why.** Same lesson as D-56 and D-60: two implementations agreeing over the
+corpus proves unambiguity only where the corpus reaches. The demo is the first
+producer outside the harness, and it found three rules the corpus never put
+in front of pyref. Ruled by the gate 2026-09-09; the two open items in
+`pyref/DIVERGENCES.md` are closed by this entry.
+
 ## D-74 — Schema membership is gated by an external CDDL oracle at release, not by runtime validators
 
 **Decision.** CDDL membership of every conformant fixture, the golden demo

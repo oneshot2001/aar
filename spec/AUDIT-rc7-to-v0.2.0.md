@@ -27,3 +27,16 @@ All other commits in range are docs, drafts, eval (`eval/trustmebro/`), emitter 
 ## Disposition
 
 Proceed to public-face repair → release-check + CI → tag `v0.2.0`. No live-camera rerun required (transport unchanged; wire additions are fixture-covered in both implementations).
+
+## Addendum 2026-09-09 — commits after the audit range, before the tag
+
+| Commit | Change | Gate trail | Verdict |
+|---|---|---|---|
+| `ac000fd`, `6c30fb2` | D-68..D-72 corpus/producer schema repairs, caller-time contract, custody `not_established`, cross-impl byte gate; D-74 CDDL oracle, D-75 optional status snapshots. **Touches CDDL + both verifiers + KATs** | Astra outside review (5 lanes) → Claude gate → build packets → reviewer-gated build reports (`08-Agent-Output/2026-09-05-aar-astra-review/output/09,11`) | gated |
+| D-73 (this tag's final normative commit) | Demo-only divergences: canonical-command binding (new `canonical-command-payload`, wired `.cbor`), epoch event pairing, D-58 verifier-credential enforcement in pyref, alg enum. **Touches CDDL + both verifiers + KATs + demo golden bytes** | Reviewer-gated 2 rounds (r1 FIX-FIRST: 2 P2 + 5 P3, all fixed; gate re-run green); 6 KATs; two-verifier byte-identity test on the demo bundles | gated |
+
+Release delta vs rc7 is therefore D-58..D-61, D-66..D-75. Pre-existing corpus
+positive fixtures and their verdict bytes are unchanged across all of it; only
+the demo golden bundles changed bytes (D-73). rc7 bundles that carried a
+canonical command without `parameters_digest` are **not** valid under v0.2.0
+(D-73 item 1); no such bundle exists outside the demo.

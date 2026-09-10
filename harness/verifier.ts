@@ -892,7 +892,7 @@ function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | u
     if (last === undefined || !roots.some((root) => same(root.root_kid, last.subject_kid)
       && same(root.tenant_id, payload.tenant_id)
       && Array.isArray(root.allowed_sites) && root.allowed_sites.some((site) => same(site, payload.site_id))
-      && (!mediatorCredential || (Array.isArray(root.allowed_key_usages) && root.allowed_key_usages.includes(payload.key_usage))))) {
+      && (!mediatorCredential || (Array.isArray(root.allowed_key_usages) && payload.key_usage !== undefined && root.allowed_key_usages.includes(payload.key_usage))))) {
       return failure(8, mediatorCredential ? "countersign/credential-invalid" : "credential/root-not-accepted", "credential.path");
     }
   }
@@ -1056,7 +1056,8 @@ function validateReceiptSemantics(bundle: Obj, parsed: Parsed): B1Failure | unde
       }
       let decodedCommand: CborValue | undefined;
       try { decodedCommand = decodeCbor(command.canonical_command as Uint8Array, { strict: true }); } catch { /* hash checks already ran */ }
-      if (!same(action.action_name, command.action_name) || !same(action.target_id, command.target_id) || !object(decodedCommand) || !same(decodedCommand.operation, action.action_name) || !same(decodedCommand.target, action.target_id) || !same(decodedCommand.parameters_digest, action.parameters_digest)) return failure(10, "receipt/action-command-mismatch", "receipt.body.command");
+      if (!same(action.action_name, command.action_name) || !same(action.target_id, command.target_id) || !object(decodedCommand) || !same(decodedCommand.operation, action.action_name) || !same(decodedCommand.target, action.target_id) || !same(decodedCommand.parameters_digest, action.parameters_digest)
+        || (decodedCommand.parameters !== undefined && (!object(decodedCommand.parameters) || !bytes(action.parameters_digest) || !equalBytes(hash(encodeCbor(decodedCommand.parameters)), action.parameters_digest as Uint8Array)))) return failure(10, "receipt/action-command-mismatch", "receipt.body.command");
     }
     if (payload.kind === "dispatch") {
       const edge = (payload.parents as Obj[]).find((parent) => parent.edge_type === "attempted_as");
@@ -1325,7 +1326,7 @@ function validateEpochs(parsed: Parsed): B1Failure | undefined {
   }
 
   for (const { opens, closes, manifest } of states) {
-    if (opens.length !== 1 || closes.length !== 1 || (opens[0]!.payload.occurred_at as number) >= (closes[0]!.payload.occurred_at as number)) return failure(14, "epoch/open-close", "epoch_events");
+    if (opens.length !== 1 || closes.length !== 1 || (opens[0]!.payload.event_seq as number) >= (closes[0]!.payload.event_seq as number) || (opens[0]!.payload.occurred_at as number) >= (closes[0]!.payload.occurred_at as number)) return failure(14, "epoch/open-close", "epoch_events");
     if (manifest === undefined) return failure(14, "epoch/open-close", "epoch_manifest");
   }
   for (const manifest of manifests) {

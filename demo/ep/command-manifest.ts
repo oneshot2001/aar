@@ -15,6 +15,9 @@ export function buildCommandManifest<T extends LogicalCommandRequest>(
     operation: request.actionName,
     target: request.targetId,
     logical_target: request.targetLogicalName,
+    // D-73: the verifier binds the command to the normalized action through
+    // parameters_digest; adapters execute from the carried parameters.
+    parameters_digest: hash(encodeCbor(request.parameters)),
     parameters: request.parameters,
   });
   const fields: CommandManifest = {

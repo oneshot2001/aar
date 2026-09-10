@@ -1,0 +1,5 @@
+{
+  "name": "repair-d73-command-parameters-nontext-key",
+  "expected_code": "receipt/action-command-mismatch",
+  "mutation_description": "Carry a parameters map with an integer key whose deterministic encoding DOES hash to a matching parameters_digest; non-text keys are outside canonical-command-payload."
+}

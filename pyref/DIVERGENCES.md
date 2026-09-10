@@ -14,10 +14,16 @@ The standalone `aar-wire-object` entry-point convention was accepted by the gate
 
 The 20 Run A divergences were adjudicated and closed by [`spec/GATE4-SLICE-C2-REVIEW.md`](../spec/GATE4-SLICE-C2-REVIEW.md).
 
-## Known pre-existing divergences (not KAT fixtures)
+## Demo-bundle divergences — CLOSED by D-73 (2026-09-09)
 
-- Demo bundles (`demo/ep/wire-builder.ts`) fail the TypeScript verifier at step 10 `receipt/action-command-mismatch`: the demo's canonical command carries `parameters`, while the harness verifier expects `parameters_digest`; pyref compares name/target only and accepts. Pre-existing before D-68..D-72; out of that pass's scope; D-73 candidate.
-- pyref performs no credential `cose_alg`/`curve` enum check at step 6; the harness verifier rejects anything other than `-7`/`P-256` with `schema/enum-unknown`. Pre-existing.
+Running the golden demo bundles through both verifiers surfaced three rules the KAT corpus never exercised; the fourth (algorithm enum) was the known gap listed here before. All are ruled in `spec/DECISIONS.md` D-73 and covered by `kats/negative/repair-d73-*` plus the two-verifier byte-identity test in `demo/ep/wire-builder.golden.test.ts`:
+
+- step 10: demo canonical command carried `parameters` without `parameters_digest`; pyref never decoded the command (harness rejected, pyref accepted) — fixed both sides, CDDL `canonical-command-payload` added and wired `.cbor`.
+- step 14: demo shipped a closed manifest with zero epoch events; pyref tolerated it (harness rejected) — pyref now pairs manifests and events both ways; open precedes close in seq and time in both; demo emits open/close events.
+- step 20: pyref never enforced D-58's verifier-credential resolution (harness did) — pyref now enforces, find-first; demo credentials the KAT verifier key.
+- step 6: pyref had no `cose_alg`/`curve` enum check — added.
+
+No open divergences remain. Not fixture-covered: the open-before-close time rule (a mutated event breaks the event chain first).
 
 ## C2 verdict/reason divergences
 

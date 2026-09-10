@@ -1,4 +1,4 @@
-; Agent Action Receipts (AAR) core wire format -- gate-1 candidate v0.2
+; Agent Action Receipts (AAR) core wire format -- v0.2 (gates 1-5 closed; see spec/GATE*.md, DECISIONS.md)
 ; Normative RFC 8610 CDDL.  The prose comments in this file are normative.
 ;
 ; Encoding profile
@@ -489,13 +489,27 @@ command-manifest-fields = (
   adapter_version: bounded-text,
   target_id: id16,
   action_name: "camera.stream.view" / "camera.ptz.preset",
-  canonical_command: bstr .size (1..65536),
+  canonical_command: bstr .cbor canonical-command-payload,
   command_digest: digest32,
   excluded_fields: excluded-command-fields,
   idempotency_key: id16,
 )
 
 ; command_digest = SHA-256(canonical_command).
+; canonical_command = deterministic-CBOR(canonical-command-payload), at most
+; 65536 bytes (D-73). The three required members bind the command to the
+; normalized action at step 10. The runtime verifiers enforce: outer map with
+; text keys, the three equalities, and — when parameters is present — a
+; text-keyed map whose deterministic encoding hashes to parameters_digest.
+; Member value types and closed-map membership are CDDL-only (D-74 oracle).
+
+canonical-command-payload = {
+  operation: "camera.stream.view" / "camera.ptz.preset",
+  target: id16,
+  parameters_digest: digest32,
+  ? logical_target: bounded-text,
+  ? parameters: { * tstr => tstr / int / bool },
+}
 ; command_id = SHA-256(deterministic-CBOR([
 ;   "AAR-COMMAND-MANIFEST-v1", command-manifest-id-input
 ; ])).

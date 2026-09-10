@@ -537,6 +537,12 @@ def _schema_payload(content_type: str, payload: Any) -> dict[str, Any]:
             _fail("schema/bad-type", 6)
         if payload["principal_type"] not in ("human", "service", "workload_instance", "model_endpoint"):
             _fail("schema/enum-unknown", 6)
+        # D-73: closed algorithm enum, checked in harness order (type, then value).
+        if not isinstance(payload.get("cose_alg"), int) or isinstance(payload.get("cose_alg"), bool) \
+                or not isinstance(payload.get("curve"), str):
+            _fail("schema/bad-type", 6)
+        if payload["cose_alg"] != -7 or payload["curve"] != "P-256":
+            _fail("schema/enum-unknown", 6)
     for field, size in PAYLOAD_FIXED_FIELDS[content_type]:
         value = payload.get(field)
         if not isinstance(value, bytes):
@@ -1213,6 +1219,30 @@ def _receipt_semantics(state: State) -> None:
             for field in ("action_name", "target_id"):
                 if action.get(field) is None or action.get(field) != command.get(field):
                     _fail("receipt/action-command-mismatch", 10)
+            # D-73: canonical_command decodes to canonical-command-payload and
+            # its operation/target/parameters_digest agree with the normalized
+            # action; an undecodable command is disagreement (harness parity).
+            # When the optional parameters map is present, its deterministic
+            # encoding must hash to parameters_digest.
+            try:
+                decoded = loads(command["canonical_command"]) \
+                    if isinstance(command.get("canonical_command"), bytes) else None
+            except CBORError:
+                decoded = None
+            # harness `object()` excludes maps with any non-text key; mirror it.
+            if not isinstance(decoded, dict) or not all(isinstance(k, str) for k in decoded):
+                _fail("receipt/action-command-mismatch", 10)
+            for left, right in (("operation", "action_name"), ("target", "target_id"),
+                                ("parameters_digest", "parameters_digest")):
+                if decoded.get(left) is None or action.get(right) is None \
+                        or dumps(decoded[left]) != dumps(action[right]):
+                    _fail("receipt/action-command-mismatch", 10)
+            if "parameters" in decoded:
+                if not isinstance(decoded["parameters"], dict) \
+                        or not all(isinstance(k, str) for k in decoded["parameters"]) \
+                        or not isinstance(action.get("parameters_digest"), bytes) \
+                        or hashes.sha256(dumps(decoded["parameters"])) != action["parameters_digest"]:
+                    _fail("receipt/action-command-mismatch", 10)
 
         if kind == "dispatch":
             # Mirror the harness find() semantics exactly: take the FIRST
@@ -1546,9 +1576,20 @@ def _epoch_state_machine(state: State) -> None:
     for key, ordered in ordered_events.items():
         opens = [env for env in ordered if env.payload["event"] == "open"]
         closes = [env for env in ordered if env.payload["event"] == "close"]
-        if len(opens) != 1 or len(closes) != 1 or opens[0].payload["event_seq"] >= closes[0].payload["event_seq"]:
+        if len(opens) != 1 or len(closes) != 1 \
+                or opens[0].payload["event_seq"] >= closes[0].payload["event_seq"] \
+                or opens[0].payload["occurred_at"] >= closes[0].payload["occurred_at"]:
+            _fail("epoch/open-close", 14)
+        # D-73: an event group without its manifest is not a closed epoch.
+        if key not in primary_manifests:
             _fail("epoch/open-close", 14)
         open_close[key] = opens[0].payload, closes[0].payload
+    # D-73: a carried manifest whose owner/epoch has no open+close events is
+    # not a closed epoch either (harness parity; demo bundles used to omit
+    # events and pyref accepted them).
+    for key in manifests_by_group:
+        if key not in ordered_events:
+            _fail("epoch/open-close", 14)
 
     for opened, closed in open_close.values():
         if closed["occurred_at"] - opened["occurred_at"] > 86_400:
@@ -1573,17 +1614,12 @@ def _epoch_state_machine(state: State) -> None:
             _fail("epoch/late-insertion", 14)
 
     for key, (_, closed) in open_close.items():
-        manifest_env = primary_manifests.get(key)
-        if manifest_env:
-            manifest = manifest_env.payload
-            expected_deadline = manifest["closed_at"] + 86_400
-            deadline_valid = (
-                manifest["anchor_deadline"] == expected_deadline
-                and closed["body"]["anchor_deadline"] == expected_deadline
-            )
-        else:
-            expected_deadline = closed["occurred_at"] + 86_400
-            deadline_valid = closed["body"]["anchor_deadline"] == expected_deadline
+        manifest = primary_manifests[key].payload  # paired above (D-73)
+        expected_deadline = manifest["closed_at"] + 86_400
+        deadline_valid = (
+            manifest["anchor_deadline"] == expected_deadline
+            and closed["body"]["anchor_deadline"] == expected_deadline
+        )
         if not deadline_valid:
             _fail("epoch/anchor-deadline", 14)
         submitted = [env.payload for env in ordered_events[key] if env.payload["event"] == "anchor_submitted"]
@@ -2161,6 +2197,15 @@ def evaluate(
         _anchor_checks(state)
         _bundle_ranges(state)
         _evidence_classes(state)
+        # D-58 (step 20 for the verifier credential), enforced under D-73:
+        # the verifier's signing key resolves from bundle credentials; an
+        # unresolvable verifier kid is a signed indeterminate key/not-found.
+        # The harness always did this; pyref signed regardless.
+        verifier_kid = key_id(TEST_SCALARS["verifier_signing"])
+        verifier_credential = next((env for env in state.envelopes["credentials"]
+                                    if env.payload.get("subject_kid") == verifier_kid), None)
+        if verifier_credential is None or verifier_credential.payload.get("key_usage") != "verifier_signing":
+            _fail("key/not-found", 20, indeterminate=True)
     except ValidationError as exc:
         result = "indeterminate" if exc.indeterminate else "nonconformant"
         reason = exc.code

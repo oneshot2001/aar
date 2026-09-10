@@ -105,9 +105,9 @@ Additional demo-scope limits (F22 and adapter identity):
   withholding-resistance. RFP language must not imply otherwise.
   The wire declares this with the `same_operator` anchor-plan basis (D-69):
   no independence is claimed, and the verifier records anchor
-  existence/order only. The D-69 repairs give these bundles step-6 wire
-  shape; they do not make the demo verifier-conformant (see
-  `pyref/DIVERGENCES.md`, known pre-existing divergences).
+  existence/order only. Since D-73 (2026-09-09) the golden demo bundles verify
+  `conformant` through both reference verifiers with byte-identical signed
+  verdicts (`demo/ep/wire-builder.golden.test.ts`).
 - The scripted consumption item commits the signed logical request, not
   camera imagery. Transport authorization is outside the logical command.
 - Adapter and mediator identity (model/firmware strings, mediator name) are

@@ -86,7 +86,10 @@ normative as the step order itself (D-54).
    6. decode the detached payload bytes under step 2's CBOR rules, then validate
       its selected closed schema;
       this includes nested productions and closed scalar enums, including
-      a credential's `principal_type`. Unknown principal-type text is
+      a credential's `principal_type`, and its `cose_alg`/`curve` (integer
+      `-7` and text `P-256` only; wrong type is `schema/bad-type`, wrong
+      value `schema/enum-unknown`, in that order after `principal_type`,
+      D-73). Unknown principal-type text is
       `schema/enum-unknown` at step 6, before content-ID validation.
    7. resolve a P-256 verification key through the accepted credential path,
       require `SHA-256(public_key) == subject_kid`, use that carried SPKI for
@@ -173,7 +176,12 @@ normative as the step order itself (D-54).
     `hazard_class="life_safety"` marker's normalized `action_name` to occur in
     the bound trust policy's optional `life_safety_action_names` list, otherwise
     reject with `receipt/hazard-class-unbound`; then degraded-marker constraints;
-    normalized action/command agreement; and dispatch/outcome subject agreement,
+    normalized action/command agreement (D-73: `canonical_command` MUST decode
+    as `canonical-command-payload` whose `operation`, `target`, and
+    `parameters_digest` equal the normalized action's `action_name`,
+    `target_id`, and `parameters_digest`; an undecodable command is
+    disagreement; when `parameters` is present its deterministic encoding MUST
+    hash to `parameters_digest`); and dispatch/outcome subject agreement,
     in that order. Then evaluate mediator countersignatures in artifact-array
     order: `action_attempt_receipt_digest` MUST equal SHA-256 of exactly one
     carried `action_attempt` receipt-envelope's received deterministic-CBOR
@@ -238,6 +246,9 @@ normative as the step order itself (D-54).
     event sequences, predecessor manifest digest, one open and one close, duration,
     sequence span/count, immutable close, late-arrival routing, anchor deadline,
     and fork rules. Two distinct manifests for one owner/epoch are a fork.
+    D-73: a carried manifest whose owner/epoch has no event group, and an
+    event group with no carried manifest, are each `epoch/open-close` — a
+    closed epoch is the manifest **and** its open/close events.
     `previous_event_digest` is absent only on event sequence zero and otherwise
     MUST equal SHA-256 of the exact preceding epoch-event payload bstr; a mismatch
     is `epoch/event-chain`. A predecessor manifest digest is absent only on the
@@ -312,7 +323,10 @@ normative as the step order itself (D-54).
     under section 5. The result is `conformant` only if every requested check
     succeeded. Missing external policy, key, expected head, or replay state yields
     `indeterminate`; a malformed or semantically invalid bundle yields
-    `nonconformant` with the first reason code.
+    `nonconformant` with the first reason code. Per D-58 the verifier's own
+    signing key resolves from bundle credentials (plus explicit configuration,
+    none in v0.2): a bundle carrying no `verifier_signing` credential for the
+    verifier's kid yields a signed indeterminate `key/not-found` at this step.
 
 ### 2.1 Edge legality and roots
 

@@ -1,8 +1,8 @@
 # Model RFP language — AAR v0.2 (phase 5)
 
-Status: draft against `v0.2-rc7`. AAR v0.2 is a **release candidate**, not a
+Status: draft against `v0.2.0`. AAR v0.2 is a **stable experimental spec**, not a
 ratified standard. Any RFP using this text MUST pin the exact version it
-requires ("AAR v0.2-rc7" or a later ratified release) — conformance claims are
+requires ("AAR v0.2.0" or a later release) — conformance claims are
 version-specific.
 
 How to use: each clause below is written to be pasted into a solicitation's
@@ -44,10 +44,10 @@ during proposal review.
 Guidance for the issuer: AAR-1 (Observe) is the read-only on-ramp; AAR-2
 (Advise) adds recommendation receipts; AAR-3 (Act) covers physical actuation.
 Profiles are cumulative. **Ontology scoping is version-critical:** under
-v0.2-rc7 the wire's action ontology is closed to two camera actions
+v0.2.0 the wire's action ontology is closed to two camera actions
 (`camera.stream.view`, `camera.ptz.preset`); alert disposition
 (`alert.suppress`) is specified but experimental — not implementable on the
-v0.2-rc7 wire — and access control is out of v0 entirely. Draw [SCOPE OF
+v0.2.0 wire — and access control is out of v0 entirely. Draw [SCOPE OF
 SYSTEMS] to the pinned ontology, and reserve the disposition sentence above
 for a version whose ontology includes those actions. The principle stands:
 the decision *not* to act is a use of authority; the suppressed alarm is what
@@ -69,12 +69,14 @@ The AAR reference toolchain is designed to satisfy this clause: `python -m
 pyref verify BUNDLE.cbor --at UNIX_SECONDS --trust-policy POLICY.json
 [--prior-state PRIOR.json]` (Python standard library only; no network, no
 wall clock), plus a second independent implementation used for
-cross-verification during conformance testing. **Availability caveat:** as
-of v0.2-rc7 the AAR repository is private and its license is TBD at launch.
-This clause MUST NOT be issued against a version whose verifier is not yet
-public under an open license — publishing pyref under an OSI-approved
-license is a release precondition for using this model text in a live
-solicitation.
+cross-verification during conformance testing. **Availability:** the
+repository is public at github.com/oneshot2001/aar; code (including pyref) is
+Apache-2.0 and the specification text is CC BY 4.0, so the precondition for
+using this clause in a live solicitation — a verifier that is public under an
+OSI-approved license — is met as of `v0.2.0`. Two further disclosures the
+issuer should carry into the solicitation: the reference verdict is signed
+with a published test key (reproducible bytes, not an operational verifier
+identity), and no party other than the author has yet run an emitter.
 
 ## Clause 3 — Refusal and zero-dispatch
 
