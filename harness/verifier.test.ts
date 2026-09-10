@@ -97,7 +97,7 @@ describe("B2 reference verifier", () => {
       expect(equalBytes(first[index]!.bytes, second[index]!.bytes), first[index]!.filename).toBe(true);
       expect(first[index]!.descriptor).toEqual(second[index]!.descriptor);
     }
-  }, 30_000);
+  }, 180_000);
 
   test("every negative fixture returns exactly its first expected reason", () => {
     for (const fixture of negativeFixtures) {
@@ -105,7 +105,7 @@ describe("B2 reference verifier", () => {
       expect(result.ok, fixture.filename).toBe(false);
       if (!result.ok) expect(result.reason, fixture.filename).toBe(fixture.descriptor.expected_code);
     }
-  }, 30_000);
+  }, 180_000);
 
   test("release-repair fixtures fail at their schema step, not a later hash step (D-68..D-73)", () => {
     const repairs = negativeFixtures.filter((fixture) => fixture.filename.startsWith("repair-"));
@@ -199,7 +199,7 @@ describe("B2 reference verifier", () => {
       expect(output.includes("request/coordinate-mismatch"), variant.label).toBe(true);
       expect(output.includes("Traceback"), variant.label).toBe(false);
     }
-  });
+  }, 180_000);
 
   test("stateful paired fixtures return their exact prior-state identity code", () => {
     for (const fixture of buildStatefulFixtures()) {

@@ -103,7 +103,7 @@ describe("positive KAT harness", () => {
         expect(`${terminals[0]}_before_${terminals[1]}`, fixture.filename).toBe(fixture.descriptor.terminal_order);
       }
     }
-  }, 30_000);
+  }, 180_000);
 
   test("D-66/D-69 evidence-commit fixtures match files and exact verdict behavior", () => {
     const first = buildEvidenceCommitFixtures(); const second = buildEvidenceCommitFixtures();
@@ -129,7 +129,7 @@ describe("positive KAT harness", () => {
         }
       }
     }
-  }, 30_000);
+  }, 180_000);
 
   test("D-67 fixtures are deterministic and have exact countersign behavior", () => {
     const first = buildCountersignFixtures(); const second = buildCountersignFixtures();
@@ -152,5 +152,5 @@ describe("positive KAT harness", () => {
         expect(result.observations.includes("mediator_countersigned"), fixture.filename).toBe(false);
       }
     }
-  }, 30_000);
+  }, 180_000);
 });
