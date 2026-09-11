@@ -8,5 +8,6 @@ Branch `night/YYYY-MM-DD` off `main`. Never push. Never touch `spec/` normative 
 - [ ] `emitter/l2-claude-code/verify.ts`: add `--json` flag printing `{ok, receipts, chain_checks:[{name,pass}], close_present}` to stdout, exit code unchanged — accept: `bun test harness emitter` exits 0 with a new test covering `--json` on an intact chain and on a forked chain.
 
 ## Blocked / needs Matthew
+- [ ] DESIGN (no accept line, do not loop): "authority crossing" — bind each consequential action to authorizing principal + permitted scope (already partly in the authorization binding), and make the verifier *flag* an action whose parameters exceed the cited authorization's scope, with a negative KAT that demonstrates the flag. Driver: FBI Cyber Strategy 2026 §4.4 ("human review and legal controls" with no mechanism). Needs Claude spec pass on `spec/` first; then split into night-loop items.
 
 ## Done

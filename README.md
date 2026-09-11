@@ -91,6 +91,14 @@ Two clean-room codebases, one operator. Nobody outside this repo has run an
 emitter yet; that is the next thing this project needs, and the wire may still
 change in response to it.
 
+Why the demand side is moving: the FBI Cyber Strategy (September 2026,
+Objective 4.4) commits the Bureau to "rapidly adopt agentic AI" and to
+"detect, divert, and deceive threat actors," with governance stated only as
+"human review and legal controls." An agent acting under legal authority needs
+a record that binds each consequential action to the person who authorized it
+and the scope they permitted, checkable by someone who does not trust the
+operator. That is the record this profile is for.
+
 ## Integrate
 
 An emitter sits at the enforcement point between the agent and the device. It
