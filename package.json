@@ -7,7 +7,7 @@
     "generate-negative": "bun run harness/generate-negative.ts",
     "generate-evidence-commit": "bun run harness/generate-evidence-commit.ts",
     "generate-countersign": "bun run harness/generate-countersign.ts",
-    "test": "bun test harness"
+    "test": "bun test harness emitter"
   },
   "dependencies": {
     "@noble/curves": "2.2.0",

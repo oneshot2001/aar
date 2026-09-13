@@ -60,7 +60,7 @@ describe("l2 emitter", () => {
   });
 
   test("one flipped byte in a receipt → signature reject", () => {
-    const dir = mkdtempSync(join(tmpdir(), "aar-l2-tamper-"));
+    const dir = mkdtempSync(join(base, "aar-l2-tamper-"));
     cpSync(sessionPath(), dir, { recursive: true });
     const path = join(dir, "receipts.hexl");
     const lines = readFileSync(path, "utf8").trim().split("\n");
@@ -74,7 +74,7 @@ describe("l2 emitter", () => {
   });
 
   test("deleted interior receipt → chain-broken", () => {
-    const dir = mkdtempSync(join(tmpdir(), "aar-l2-omit-"));
+    const dir = mkdtempSync(join(base, "aar-l2-omit-"));
     cpSync(sessionPath(), dir, { recursive: true });
     const path = join(dir, "receipts.hexl");
     const lines = readFileSync(path, "utf8").trim().split("\n");
@@ -85,7 +85,7 @@ describe("l2 emitter", () => {
   });
 
   test("forged close: a validly-signed RECEIPT as close.hex + emptied log → reject (P1 repro)", () => {
-    const dir = mkdtempSync(join(tmpdir(), "aar-l2-forge-"));
+    const dir = mkdtempSync(join(base, "aar-l2-forge-"));
     cpSync(sessionPath(), dir, { recursive: true });
     const receipts = readFileSync(join(dir, "receipts.hexl"), "utf8").trim().split("\n");
     writeFileSync(join(dir, "close.hex"), receipts[0]! + "\n");
@@ -96,7 +96,7 @@ describe("l2 emitter", () => {
   });
 
   test("duplicate close lines → session/duplicate-close", () => {
-    const dir = mkdtempSync(join(tmpdir(), "aar-l2-dup-"));
+    const dir = mkdtempSync(join(base, "aar-l2-dup-"));
     cpSync(sessionPath(), dir, { recursive: true });
     const close = readFileSync(join(dir, "close.hex"), "utf8").trim();
     writeFileSync(join(dir, "close.hex"), close + "\n" + close + "\n");
@@ -106,7 +106,7 @@ describe("l2 emitter", () => {
   });
 
   test("re-signed close with wrong tenant → close-coordinate-mismatch", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "aar-l2-coord-"));
+    const dir = mkdtempSync(join(base, "aar-l2-coord-"));
     cpSync(sessionPath(), dir, { recursive: true });
     const lib = await import("./lib");
     // Build the recorder key from the isolated base dir directly — never via
@@ -128,7 +128,7 @@ describe("l2 emitter", () => {
   });
 
   test("cross-session close replay → close-coordinate-mismatch (round-2 P1 repro)", () => {
-    const victim = mkdtempSync(join(tmpdir(), "aar-l2-replay-"));
+    const victim = mkdtempSync(join(base, "aar-l2-replay-"));
     cpSync(sessionPath(), victim, { recursive: true });
     // Close an EMPTY second session with the same recorder key, then replay
     // its genuine close into the victim dir with the receipt log deleted.
@@ -143,7 +143,7 @@ describe("l2 emitter", () => {
   });
 
   test("missing close → not_established, never intact", () => {
-    const dir = mkdtempSync(join(tmpdir(), "aar-l2-noclose-"));
+    const dir = mkdtempSync(join(base, "aar-l2-noclose-"));
     cpSync(sessionPath(), dir, { recursive: true });
     writeFileSync(join(dir, "close.hex"), "");
     const r = verify(dir);
