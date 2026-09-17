@@ -4,6 +4,7 @@ import { describe, expect, test, beforeAll } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { CborValue } from "./lib";
 
 const base = mkdtempSync(join(tmpdir(), "aar-l2-"));
 const env = { ...process.env, AAR_L2_DIR: base };
@@ -15,10 +16,10 @@ function run(script: string, stdin: string): void {
   expect(proc.exitCode).toBe(0);
 }
 
-function verify(dir: string, sidHex?: string): { code: number; out: string } {
+function verify(dir: string, sidHex?: string, json = false): { code: number; out: string; stdout: string } {
   const sid = sidHex ?? require("node:path").basename(sessionPath());
-  const proc = Bun.spawnSync(["bun", "run", join(here, "verify.ts"), dir, join(base, "recorder.pub"), sid], { env });
-  return { code: proc.exitCode, out: proc.stdout.toString() + proc.stderr.toString() };
+  const proc = Bun.spawnSync(["bun", "run", join(here, "verify.ts"), dir, join(base, "recorder.pub"), sid, ...(json ? ["--json"] : [])], { env });
+  return { code: proc.exitCode, out: proc.stdout.toString() + proc.stderr.toString(), stdout: proc.stdout.toString() };
 }
 
 function sessionPath(): string {
@@ -44,6 +45,60 @@ describe("l2 emitter", () => {
     expect(r.out).toContain("intact");
     expect(r.out).toContain("3 action(s)");
     expect(r.code).toBe(0);
+  });
+
+  test("--json reports an intact chain and rejects a validly signed fork", async () => {
+    const intact = verify(sessionPath(), undefined, true);
+    expect(intact.code).toBe(0);
+    expect(JSON.parse(intact.stdout)).toEqual({
+      ok: true,
+      receipts: 3,
+      chain_checks: [
+        { name: "genesis", pass: true },
+        { name: "first_receipt_digest", pass: true },
+        { name: "successor_uniqueness", pass: true },
+        { name: "predecessor_resolution", pass: true },
+        { name: "final_chain_digest", pass: true },
+        { name: "walked_length", pass: true },
+      ],
+      close_present: true,
+    });
+
+    const dir = mkdtempSync(join(base, "aar-l2-fork-"));
+    cpSync(sessionPath(), dir, { recursive: true });
+    const lib = await import("./lib");
+    const spki = lib.fromHex(readFileSync(join(base, "recorder.pub"), "utf8").trim());
+    const key = {
+      privateKey: lib.fromHex(readFileSync(join(base, "recorder.key"), "utf8").trim()),
+      spki,
+      kid: lib.sha256(spki),
+    };
+    const path = join(dir, "receipts.hexl");
+    const receipts = lib.readHexLines(path);
+    const genesis = lib.openEnvelope(receipts[0]!, spki);
+    const last = lib.openEnvelope(receipts[2]!, spki).payload as Record<string, CborValue>;
+    const fork = new Map(Object.entries(last));
+    // Make the second and third receipts distinct, signed successors of genesis.
+    fork.set("session_prev_digest", lib.sha256(genesis.payloadBytes));
+    receipts[2] = lib.signEnvelope(fork, lib.RECEIPT_CONTENT_TYPE, key);
+    writeFileSync(path, receipts.map(lib.toHex).join("\n") + "\n");
+
+    const text = verify(dir);
+    expect(text.code).toBe(1);
+    expect(text.out).toContain("session/chain-broken");
+    expect(text.out).toContain("fork at");
+    const forked = verify(dir, undefined, true);
+    expect(forked.code).toBe(text.code);
+    expect(JSON.parse(forked.stdout)).toEqual({
+      ok: false,
+      receipts: 3,
+      chain_checks: [
+        { name: "genesis", pass: true },
+        { name: "first_receipt_digest", pass: true },
+        { name: "successor_uniqueness", pass: false },
+      ],
+      close_present: true,
+    });
   });
 
   test("second close is refused (single close on disk)", () => {
@@ -149,5 +204,8 @@ describe("l2 emitter", () => {
     const r = verify(dir);
     expect(r.code).toBe(1);
     expect(r.out).toContain("not_established");
+    const json = verify(dir, undefined, true);
+    expect(json.code).toBe(r.code);
+    expect(JSON.parse(json.stdout)).toEqual({ ok: false, receipts: 3, chain_checks: [], close_present: false });
   });
 });

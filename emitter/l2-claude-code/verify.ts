@@ -1,7 +1,7 @@
 // Offline session verifier for the L2 candidate wire. Implements the D-63
 // evaluation: signatures, the six chain checks (successor uniqueness — the
 // walk MUST be a function), coordinate agreement, and single-close.
-// Usage: bun run verify.ts <session-dir> <recorder-spki-hex-file> <session-id-hex>
+// Usage: bun run verify.ts [--json] <session-dir> <recorder-spki-hex-file> <session-id-hex>
 // The expected session id is a REQUIRED input: a verifier that infers the
 // session from the evidence it is checking can be replayed a genuine close
 // from a different session (round-2 P1). Exit 0 = intact; exit 1 = reason code.
@@ -15,14 +15,29 @@ import {
 type Receipt = Record<string, CborValue>;
 const get = (m: CborValue, k: string): CborValue => (m as Receipt)[k] as CborValue;
 
+const args = process.argv.slice(2);
+const json = args.includes("--json");
+// Only evaluated checks are reported; verification still stops at the first failure.
+const chainChecks: { name: string; pass: boolean }[] = [];
+function report(ok: boolean, message: string): void {
+  console.log(json ? JSON.stringify({
+    ok, receipts: receiptEnvs.length, chain_checks: chainChecks, close_present: closeEnvs.length > 0,
+  }) : message);
+}
+
 function fail(code: string, detail: string): never {
-  console.log(`nonconformant ${code} — ${detail}`);
+  report(false, `nonconformant ${code} — ${detail}`);
   process.exit(1);
 }
 
-const [dir, spkiFile, expectedSidHex] = process.argv.slice(2);
+function chainCheck(name: string, pass: boolean, detail: string): void {
+  chainChecks.push({ name, pass });
+  if (!pass) fail("session/chain-broken", detail);
+}
+
+const [dir, spkiFile, expectedSidHex] = args.filter((arg) => arg !== "--json");
 if (!dir || !spkiFile || !/^[0-9a-f]{32}$/.test(expectedSidHex ?? "")) {
-  console.error("usage: verify.ts <session-dir> <recorder-spki-hex-file> <session-id-hex (32 hex chars)>");
+  console.error("usage: verify.ts [--json] <session-dir> <recorder-spki-hex-file> <session-id-hex (32 hex chars)>");
   process.exit(2);
 }
 const spki = fromHex(readFileSync(spkiFile, "utf8").trim());
@@ -30,7 +45,7 @@ const spki = fromHex(readFileSync(spkiFile, "utf8").trim());
 const receiptEnvs = readHexLines(join(dir, "receipts.hexl"));
 const closeEnvs = readHexLines(join(dir, "close.hex"));
 if (closeEnvs.length === 0) {
-  console.log(`no session-close — completeness not_established (${receiptEnvs.length} receipt(s) present)`);
+  report(false, `no session-close — completeness not_established (${receiptEnvs.length} receipt(s) present)`);
   process.exit(1);
 }
 if (closeEnvs.length > 1) fail("session/duplicate-close", `${closeEnvs.length} close records`);
@@ -75,12 +90,12 @@ if (itemCount > 0 && (!(firstDigest instanceof Uint8Array) || !(finalDigest inst
 
 // Chain checks (1)-(6), in the D-63 order.
 const genesis = openedReceipts.filter((r) => get(r.payload, "session_prev_digest") === null);
-if (itemCount > 0 && genesis.length !== 1) fail("session/chain-broken", `genesis count ${genesis.length}`);
-if (itemCount === 0 && openedReceipts.length > 0) fail("session/chain-broken", "receipts present under empty close");
+chainCheck("genesis", itemCount > 0 ? genesis.length === 1 : openedReceipts.length === 0,
+  itemCount > 0 ? `genesis count ${genesis.length}` : "receipts present under empty close");
 
 if (itemCount > 0) {
-  if (hex(get(close, "first_receipt_digest")) !== toHex(genesis[0]!.digest))
-    fail("session/chain-broken", "first_receipt_digest does not match genesis");
+  chainCheck("first_receipt_digest", hex(get(close, "first_receipt_digest")) === toHex(genesis[0]!.digest),
+    "first_receipt_digest does not match genesis");
   const byDigest = new Map(openedReceipts.map((r) => [toHex(r.digest), r]));
   const successors = new Map<string, number>();
   for (const r of openedReceipts) {
@@ -88,9 +103,11 @@ if (itemCount > 0) {
     if (prev === null) continue;
     const prevHex = hex(prev);
     successors.set(prevHex, (successors.get(prevHex) ?? 0) + 1);
-    if ((successors.get(prevHex) ?? 0) > 1) fail("session/chain-broken", `fork at ${prevHex.slice(0, 12)}`);
-    if (!byDigest.has(prevHex)) fail("session/chain-broken", `dangling predecessor ${prevHex.slice(0, 12)}`);
+    if ((successors.get(prevHex) ?? 0) > 1) chainCheck("successor_uniqueness", false, `fork at ${prevHex.slice(0, 12)}`);
+    if (!byDigest.has(prevHex)) chainCheck("predecessor_resolution", false, `dangling predecessor ${prevHex.slice(0, 12)}`);
   }
+  chainCheck("successor_uniqueness", true, "");
+  chainCheck("predecessor_resolution", true, "");
   let walked = 1;
   let cursor = toHex(genesis[0]!.digest);
   while (true) {
@@ -99,9 +116,9 @@ if (itemCount > 0) {
     cursor = toHex(next.digest);
     walked += 1;
   }
-  if (cursor !== hex(get(close, "final_chain_digest"))) fail("session/chain-broken", "walk does not terminate at final_chain_digest");
-  if (walked !== itemCount) fail("session/chain-broken", `walked ${walked}, item_count ${itemCount}`);
-  if (walked !== openedReceipts.length) fail("session/chain-broken", "carried receipt off the single walk");
+  chainCheck("final_chain_digest", cursor === hex(get(close, "final_chain_digest")), "walk does not terminate at final_chain_digest");
+  chainCheck("walked_length", walked === itemCount && walked === openedReceipts.length,
+    walked !== itemCount ? `walked ${walked}, item_count ${itemCount}` : "carried receipt off the single walk");
 }
 
 // Coordinate agreement.
@@ -122,7 +139,7 @@ for (const [i, r] of openedReceipts.entries()) {
   if (at < openedAt || at > closedAt) fail("session/close-coordinate-mismatch", `committed_at receipt ${i} outside close window`);
 }
 
-console.log(
+report(true,
   `intact — session_close_declared, ${itemCount} action(s), attestation harness_hook (agent_kid nil → ranks undeclared). ` +
   `NOT proven: recorder honesty (T-H1), external anchoring (A2 retroactive re-close), producer conformance to AAR v0.2.`,
 );
