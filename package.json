@@ -7,14 +7,19 @@
     "generate-negative": "bun run harness/generate-negative.ts",
     "generate-evidence-commit": "bun run harness/generate-evidence-commit.ts",
     "generate-countersign": "bun run harness/generate-countersign.ts",
-    "test": "bun test harness emitter"
+    "test": "bun test harness emitter",
+    "hedge:preflight": "bun run demo/hedge/preflight.ts"
   },
   "dependencies": {
     "@noble/curves": "2.2.0",
-    "@noble/hashes": "2.2.0"
+    "@noble/hashes": "2.2.0",
+    "jpeg-js": "0.4.4"
   },
   "devDependencies": {
     "@types/bun": "1.3.14",
     "typescript": "5.9.3"
+  },
+  "dependencyLicenses": {
+    "jpeg-js": "BSD-3-Clause"
   }
 }

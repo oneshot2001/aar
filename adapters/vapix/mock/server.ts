@@ -4,10 +4,28 @@ import type { Socket } from "node:net";
 import { mkdir, unlink } from "node:fs/promises";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { encode } from "jpeg-js";
 import type { VapixPosition } from "../config";
 import { DigestTransportError, type DigestResponse, type HttpTransportRequest } from "../digest";
 
 export type MockFaultMode = "normal" | "reject" | "application-error" | "after-send-timeout" | "settling-poll-transport-error" | "position-unavailable";
+
+export interface MockLightGroup {
+  lightID: string;
+  enabled: boolean;
+  active: boolean;
+  sync: boolean;
+  syncSupported?: boolean;
+}
+
+export interface MockHedgeConfig {
+  irCutFilter?: "on" | "off" | "auto";
+  lights?: MockLightGroup[];
+  /** Called for each observer snapshot; can observe the separate actor backend. */
+  frameLuma?: () => number;
+  unreadableSnapshot?: boolean;
+  restoreReadbackMismatch?: boolean;
+}
 
 export interface MockVapixConfig {
   readonly username: string;
@@ -22,6 +40,7 @@ export interface MockVapixConfig {
   readonly safePreset: VapixPosition;
   readonly settlingReads: number;
   readonly stateFile?: string;
+  readonly hedge?: MockHedgeConfig;
 }
 
 export interface MockVapixCounters {
@@ -71,10 +90,13 @@ export class MockVapixBackend {
   private remaining = 0;
   private mode: MockFaultMode = "normal";
   private failNextSettlingPoll = false;
+  private irCutFilter: string;
+  private dayNightUpdates = 0;
   private staleKind?: "action" | "poll";
   private counts = { challenges: 0, presetDispatches: 0, restoreDispatches: 0, streamDispatches: 0, positionReads: 0 };
 
   constructor(readonly config: MockVapixConfig) {
+    this.irCutFilter = config.hedge?.irCutFilter ?? "on";
     const persisted = config.stateFile && existsSync(config.stateFile)
       ? JSON.parse(readFileSync(config.stateFile, "utf8")) as { position: VapixPosition; target: VapixPosition; remaining: number }
       : undefined;
@@ -97,6 +119,14 @@ export class MockVapixBackend {
 
   currentPosition(): VapixPosition {
     return { ...this.position };
+  }
+
+  currentIrCutFilter(): string { return this.irCutFilter; }
+
+  private lightGroups(): MockLightGroup[] {
+    return (this.config.hedge?.lights ?? [{ lightID: "led0", enabled: true, active: false, sync: true }]).map((light) => ({
+      ...light, active: light.enabled && (light.active || (light.sync && this.irCutFilter === "off")),
+    }));
   }
 
   async listen(socketPath?: string): Promise<string> {
@@ -187,7 +217,7 @@ export class MockVapixBackend {
     return { status, statusMessage, headers: { "content-type": contentType, "content-length": String(body.length) }, body };
   }
 
-  async exchange(request: Pick<HttpTransportRequest, "method" | "url" | "headers">): Promise<DigestResponse> {
+  async exchange(request: Pick<HttpTransportRequest, "method" | "url" | "headers"> & { body?: Uint8Array }): Promise<DigestResponse> {
     const authorization = request.headers.authorization;
     if (!this.authenticated(request.method, typeof authorization === "string" ? authorization : undefined, request.url)) {
       this.counts.challenges += 1;
@@ -221,6 +251,21 @@ export class MockVapixBackend {
     }
 
     if (url.pathname === "/axis-cgi/param.cgi") {
+      const textResponse = (text: string) => this.response(200, "OK", "text/plain", new TextEncoder().encode(text));
+      const irCutKey = "ImageSource.I0.DayNight.IrCutFilter";
+      if (url.searchParams.get("action") === "update") {
+        const value = url.searchParams.get(irCutKey);
+        if (!value || !["on", "off", "auto"].includes(value) || [...url.searchParams.keys()].some((key) => key !== "action" && key !== irCutKey)) {
+          return textResponse("Error: unsupported parameter update\n");
+        }
+        this.dayNightUpdates++;
+        if (!(this.config.hedge?.restoreReadbackMismatch && this.dayNightUpdates > 1)) this.irCutFilter = value;
+        return textResponse("OK\n");
+      }
+      if (url.searchParams.get("action") !== "list") return textResponse("Error: unknown parameter action\n");
+      if (url.searchParams.get("group")?.replace(/^root\./, "") === "ImageSource.I0.DayNight") {
+        return textResponse(`root.${irCutKey}=${this.irCutFilter}\n`);
+      }
       return this.response(200, "OK", "text/plain", new TextEncoder().encode([
         `root.Brand.ProdFullName=${this.config.model}`,
         `root.Properties.Firmware.Version=${this.config.firmware}`,
@@ -228,6 +273,27 @@ export class MockVapixBackend {
         "root.PTZ.Preset.P0.Name=gate5-safe",
         "root.StreamProfile.S0.Name=gate5-offline",
       ].join("\n")));
+    }
+
+    if (url.pathname === "/axis-cgi/lightcontrol.cgi") {
+      const json = (value: unknown) => this.response(200, "OK", "application/json", new TextEncoder().encode(JSON.stringify(value)));
+      let input: { apiVersion?: string; method?: string; params?: { lightID?: string } };
+      try { input = JSON.parse(new TextDecoder().decode(request.body)); }
+      catch { return json({ error: { code: 2001, message: "Invalid JSON" } }); }
+      if (!input || request.method !== "POST" || input.apiVersion !== "1.0") return json({ error: { code: 2001, message: "Invalid request" } });
+      const result = (data: unknown) => json({ apiVersion: "1.0", method: input.method, data });
+      const groups = this.lightGroups();
+      // Flat, device-wide shape, as the real Light Control API returns it.
+      if (input.method === "getServiceCapabilities") return result({
+        dayNightSynchronizeSupport: groups.some((light) => light.syncSupported !== false),
+      });
+      if (input.method === "getLightInformation") return result({ items: groups.map((light) => ({
+        lightID: light.lightID, enabled: light.enabled, lightState: light.active, synchronizeDayNightMode: light.sync, error: false,
+      })) });
+      const light = groups.find((group) => group.lightID === input.params?.lightID);
+      if (light && input.method === "getLightStatus") return result({ status: light.active });
+      if (light && input.method === "getLightSynchronizeDayNightMode" && light.syncSupported !== false) return result({ synchronize: light.sync });
+      return json({ apiVersion: "1.0", method: input.method, error: { code: 1002, message: "Unsupported method or light ID" } });
     }
 
     if (url.pathname === "/axis-cgi/com/ptz.cgi" && url.searchParams.get("query") === "position") {
@@ -275,6 +341,17 @@ export class MockVapixBackend {
 
     if (url.pathname === "/axis-cgi/jpg/image.cgi") {
       this.counts.streamDispatches += 1;
+      if (this.config.hedge && !url.searchParams.has("streamprofile")) {
+        if (this.config.hedge.unreadableSnapshot) return this.response(200, "OK", "image/jpeg", JPEG);
+        const luma = this.config.hedge.frameLuma?.() ?? 20;
+        if (!Number.isInteger(luma) || luma < 0 || luma > 255) throw new Error("invalid mock luma");
+        const data = Buffer.alloc(16 * 16 * 4);
+        for (let i = 0; i < data.length; i += 4) {
+          data[i] = data[i + 1] = data[i + 2] = luma;
+          data[i + 3] = 255;
+        }
+        return this.response(200, "OK", "image/jpeg", encode({ data, width: 16, height: 16 }, 100).data);
+      }
       if (url.searchParams.get("streamprofile") !== this.config.streamBackendProfile) {
         return this.response(200, "OK", "text/plain", new TextEncoder().encode("Error: unknown stream profile\n"));
       }
@@ -290,12 +367,14 @@ export class MockVapixBackend {
   private handle(request: IncomingMessage, response: ServerResponse): void {
     const url = new URL(request.url ?? "/", "http://mock.invalid");
     const headers = Object.fromEntries(Object.entries(request.headers).flatMap(([name, value]) => typeof value === "string" ? [[name, value]] : []));
-    this.exchange({ method: (request.method === "POST" ? "POST" : "GET"), url, headers }).then((result) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    request.on("end", () => this.exchange({ method: (request.method === "POST" ? "POST" : "GET"), url, headers, body: Buffer.concat(chunks) }).then((result) => {
       response.writeHead(result.status, result.statusMessage, result.headers);
       response.end(result.body);
     }).catch(() => {
       response.writeHead(500, "Mock failure");
       response.end();
-    });
+    }));
   }
 }
