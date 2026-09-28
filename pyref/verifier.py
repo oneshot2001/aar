@@ -1994,7 +1994,7 @@ def _limits_digest() -> bytes:
     return hashes.domain_hash("AAR-VERDICT-LIMITS-v1", LIMITS)
 
 
-BUILD_DIGEST = hashes.sha256(b"pyref-aar-v0.2-gate4-c2-clean-room-build-v1")
+BUILD_DIGEST = hashes.sha256(b"pyref-aar-v0.2.1-prior-emissions-digest-build-v1")
 CONFIG_DIGEST = hashes.sha256(b"pyref-aar-v0.2-gate4-c2-fixed-conformance-config-v1")
 
 
@@ -2011,6 +2011,32 @@ def _normal_replay_state(value: dict[str, Any] | None) -> dict[str, Any] | None:
         })
     normalized.sort(key=lambda item: dumps([item["replay_domain"], item["invocation_id"], item["content_digest"]]))
     return {"entries": normalized}
+
+
+def _prior_emissions_map(value: dict[str, Any]) -> dict[str, Any]:
+    entries = [{
+        "issuer_kid": bytes.fromhex(entry["issuer_kid"]),
+        "issuer_seq": entry["issuer_seq"],
+        "epoch_owner_kid": bytes.fromhex(entry["epoch_owner_kid"]),
+        "epoch_id": entry["epoch_id"],
+        "epoch_seq": entry["epoch_seq"],
+        "receipt_id": bytes.fromhex(entry["receipt_id"]),
+        "envelope_digest": bytes.fromhex(entry["envelope_digest"]),
+    } for entry in value.get("prior_emissions", [])]
+    emission_order = [
+        dumps([entry["issuer_kid"], entry["issuer_seq"], entry["epoch_owner_kid"],
+               entry["epoch_id"], entry["epoch_seq"], entry["receipt_id"], entry["envelope_digest"]])
+        for entry in entries
+    ]
+    if any(previous >= current for previous, current in zip(emission_order, emission_order[1:])):
+        raise ValueError("prior-state.prior_emissions must be strictly sorted and unique")
+    return {"entries": entries}
+
+
+def _prior_emissions_digest(value: dict[str, Any] | None) -> bytes:
+    return ZERO32 if value is None else hashes.domain_hash(
+        "AAR-VERDICT-PRIOR-v1", _prior_emissions_map(value)
+    )
 
 
 def _verdict_fields(state: State, result: str, reason: str | None, step: int) -> dict[str, Any]:
@@ -2038,6 +2064,7 @@ def _verdict_fields(state: State, result: str, reason: str | None, step: int) ->
             "replay_state_digest": ZERO32 if replay is None else hashes.domain_hash(
                 "AAR-VERDICT-REPLAY-v1", replay
             ),
+            "prior_emissions_digest": _prior_emissions_digest(state.prior_state),
         }
         selector_commitment = bundle["selector_commitment"]
         requested_profile = bundle["claimed_profile"]
@@ -2053,6 +2080,7 @@ def _verdict_fields(state: State, result: str, reason: str | None, step: int) ->
                 "trust_store_snapshot_id": ZERO32, "trust_store_digest": ZERO32,
                 "verifier_policy_digest": ZERO32, "evaluation_time": state.evaluated_at,
                 "anchor_heads_digest": ZERO32, "replay_state_digest": ZERO32,
+                "prior_emissions_digest": ZERO32,
             }
         else:
             store = configured["trust_store"]
@@ -2068,6 +2096,7 @@ def _verdict_fields(state: State, result: str, reason: str | None, step: int) ->
                 "replay_state_digest": ZERO32 if replay is None else hashes.domain_hash(
                     "AAR-VERDICT-REPLAY-v1", replay
                 ),
+                "prior_emissions_digest": _prior_emissions_digest(state.prior_state),
             }
         selector_commitment = ZERO32
         requested_profile = "AAR-1"
@@ -2093,7 +2122,7 @@ def _verdict_fields(state: State, result: str, reason: str | None, step: int) ->
         "legal_admissibility": "not_established",
     }
     fields: dict[str, Any] = {
-        "v": 2,
+        "v": 3,
         "evaluated_at": state.evaluated_at,
         "result": result,
         "bundle_digest": hashes.sha256(state.raw),
@@ -2154,6 +2183,8 @@ def evaluate(
     """
     if not _uint(evaluated_at):
         raise ValueError("evaluated_at must be an explicit uint <= 2^53-1")
+    if prior_state is not None:
+        _prior_emissions_map(prior_state)
     state = State(
         raw=raw,
         evaluated_at=evaluated_at,

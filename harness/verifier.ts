@@ -1621,10 +1621,10 @@ const VERDICT_LIMITS: Obj = {
   credential_path_length: 8,
 };
 
-// Stable reference-harness identity preimages for release 0.2.0-b2.1. The
+// Stable reference-harness identity preimages for release 0.2.1-b1. The
 // deterministicId helper hashes UTF-8 "AAR-KAT-OPAQUE-ID:" plus these labels.
-const DEFAULT_VERSION = "0.2.0-b2.1";
-const DEFAULT_BUILD_DIGEST = deterministicId("verifier-build:aar-reference-verifier@0.2.0-b2.1");
+const DEFAULT_VERSION = "0.2.1-b1";
+const DEFAULT_BUILD_DIGEST = deterministicId("verifier-build:aar-reference-verifier@0.2.1-b1");
 const DEFAULT_CONFIG_DIGEST = deterministicId("verifier-config:aar-reference-verifier@0.2.0-default");
 const ZERO_DIGEST = new Uint8Array(32);
 
@@ -1646,10 +1646,20 @@ function replayStateDigest(state: readonly ReplayUse[] | undefined): Uint8Array 
   return state === undefined ? ZERO_DIGEST : domainHash("AAR-VERDICT-REPLAY-v1", replayStateMap(state));
 }
 
+function priorEmissionsDigest(state: readonly PriorEmission[] | undefined): Uint8Array {
+  if (state === undefined) return ZERO_DIGEST;
+  const entries = state.map((entry) => ({
+    issuer_kid: entry.issuerKid, issuer_seq: entry.issuerSeq,
+    epoch_owner_kid: entry.epochOwnerKid, epoch_id: entry.epochId, epoch_seq: entry.epochSeq,
+    receipt_id: entry.receiptId, envelope_digest: entry.envelopeDigest,
+  }));
+  return domainHash("AAR-VERDICT-PRIOR-v1", { entries });
+}
+
 function emitVerdict(input: Uint8Array, bundle: Obj, parsed: Parsed, options: VerifyB1Options, observations: string[], evidence: EvidenceLimits): B1Success {
   const selector = bundle.selector as Obj; const trust = bundle.trust_inputs as Obj; const store = trust.trust_store as Obj;
   const fields: Obj = {
-    v: 2,
+    v: 3,
     evaluated_at: trust.evaluation_time!,
     result: "conformant",
     bundle_digest: hash(input),
@@ -1668,6 +1678,7 @@ function emitVerdict(input: Uint8Array, bundle: Obj, parsed: Parsed, options: Ve
       evaluation_time: trust.evaluation_time!,
       anchor_heads_digest: anchorHeadsDigest(trust.expected_anchor_heads!),
       replay_state_digest: replayStateDigest(options.replayState),
+      prior_emissions_digest: priorEmissionsDigest(options.priorEmissions),
     },
     scope: {
       tenant_id: selector.tenant_id!, site_id: selector.site_id!, committed_from: selector.committed_from!, committed_until: selector.committed_until!,
@@ -1751,7 +1762,7 @@ function emitFailureVerdict(input: Uint8Array, issue: B1Failure, options: Verify
   const committedUntil = uint(selector.committed_until) ? selector.committed_until : 0;
   const receiptKinds = Array.isArray(selector.receipt_kinds) && selector.receipt_kinds.length > 0 ? selector.receipt_kinds : ["observation"];
   const fields: Obj = {
-    v: 2, evaluated_at: evaluationTime, result: issue.result, reason: issue.reason,
+    v: 3, evaluated_at: evaluationTime, result: issue.result, reason: issue.reason,
     bundle_digest: hash(input), selector_commitment: bytes(decoded?.selector_commitment, 32) ? decoded!.selector_commitment! : zero32,
     verifier: {
       product: options.product ?? "aar-reference-verifier", version: options.version ?? DEFAULT_VERSION,
@@ -1764,6 +1775,7 @@ function emitFailureVerdict(input: Uint8Array, issue: B1Failure, options: Verify
       evaluation_time: evaluationTime,
       anchor_heads_digest: Array.isArray(trust.expected_anchor_heads) ? anchorHeadsDigest(trust.expected_anchor_heads) : ZERO_DIGEST,
       replay_state_digest: replayStateDigest(options.replayState),
+      prior_emissions_digest: priorEmissionsDigest(options.priorEmissions),
     },
     scope: {
       tenant_id: bytes(selector.tenant_id, 16) ? selector.tenant_id! : zero16, site_id: bytes(selector.site_id, 16) ? selector.site_id! : zero16,
@@ -1788,6 +1800,13 @@ export function verifyBundle(input: Uint8Array, options: VerifyB1Options): B1Ver
   // (pyref --at symmetry); the wall clock is never read. The runtime check
   // covers untyped callers.
   if (!uint(options?.evaluationTime)) throw new Error("verifyBundle requires options.evaluationTime as a uint <= 2^53-1; wall-clock fallback is forbidden");
+  const priorKeys = (options.priorEmissions ?? []).map((entry) => toHex(encodeCbor([
+    entry.issuerKid, entry.issuerSeq, entry.epochOwnerKid, entry.epochId,
+    entry.epochSeq, entry.receiptId, entry.envelopeDigest,
+  ])));
+  if (priorKeys.some((key, index) => index > 0 && priorKeys[index - 1]! >= key)) {
+    throw new Error("prior-state.prior_emissions must be strictly sorted and unique");
+  }
   const result = validateBundle(input, options);
   return result.ok ? result : emitFailureVerdict(input, result, options);
 }

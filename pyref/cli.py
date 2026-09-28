@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .cbor import CBORError, dumps, loads
-from .verifier import KEY_USAGES, LIMITS, MAX_U53, Evaluation, evaluate
+from .verifier import KEY_USAGES, LIMITS, MAX_U53, Evaluation, _prior_emissions_map, evaluate
 
 
 EXIT_CONFORMANT = 0
@@ -204,6 +204,11 @@ def _prior_state(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
                 item["envelope_digest"], 32, f"{label}.envelope_digest"
             ).hex(),
         })
+
+    try:
+        _prior_emissions_map({"prior_emissions": emissions})
+    except ValueError as exc:
+        raise UsageError(str(exc)) from exc
 
     entries = []
     for index, item in enumerate(entries_source):

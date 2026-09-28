@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CborValue, decodeCbor, encodeCbor, equalBytes } from "./cbor";
+import { CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
 import { buildNegativeFixtures, buildRequestCoordinateVariants } from "./negative-fixtures";
 import { buildStatefulFixtures, parseStatefulPrior } from "./stateful-fixtures";
 import { domainHash, verifySigned } from "./crypto";
@@ -23,6 +24,7 @@ describe("B2 reference verifier", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.result).toBe("conformant");
+      expect(result.verdict.v).toBe(3);
       expect(result.completedThrough).toBe(20);
       const decoded = decodeCbor(result.verdictEnvelope, { strict: true });
       expect(equalBytes(encodeCbor(decoded), result.verdictEnvelope)).toBe(true);
@@ -57,12 +59,14 @@ describe("B2 reference verifier", () => {
       expect(equalBytes(verifier.limits_digest as Uint8Array, domainHash("AAR-VERDICT-LIMITS-v1", limitsMap))).toBe(true);
       expect(equalBytes(policy.anchor_heads_digest as Uint8Array, domainHash("AAR-VERDICT-HEADS-v1", trust.expected_anchor_heads!))).toBe(true);
       expect(equalBytes(policy.replay_state_digest as Uint8Array, new Uint8Array(32))).toBe(true);
+      expect(equalBytes(policy.prior_emissions_digest as Uint8Array, new Uint8Array(32))).toBe(true);
     }
-    const suppliedEmpty = verifyBundle(input, { evaluationTime: AT, replayState: [] });
+    const suppliedEmpty = verifyBundle(input, { evaluationTime: AT, replayState: [], priorEmissions: [] });
     expect(suppliedEmpty.ok).toBe(true);
     if (suppliedEmpty.ok) {
       const policy = suppliedEmpty.verdict.trust_policy as Record<string, CborValue>;
       expect(equalBytes(policy.replay_state_digest as Uint8Array, domainHash("AAR-VERDICT-REPLAY-v1", { entries: [] }))).toBe(true);
+      expect(equalBytes(policy.prior_emissions_digest as Uint8Array, domainHash("AAR-VERDICT-PRIOR-v1", { entries: [] }))).toBe(true);
     }
   });
 
@@ -78,7 +82,7 @@ describe("B2 reference verifier", () => {
     const zero16 = new Uint8Array(16); const zero32 = new Uint8Array(32);
     expect(verdict.evaluated_at).toBe(evaluationTime);
     expect(policy.evaluation_time).toBe(evaluationTime);
-    for (const field of ["trust_store_snapshot_id", "trust_store_digest", "verifier_policy_digest", "anchor_heads_digest", "replay_state_digest"]) {
+    for (const field of ["trust_store_snapshot_id", "trust_store_digest", "verifier_policy_digest", "anchor_heads_digest", "replay_state_digest", "prior_emissions_digest"]) {
       expect(equalBytes(policy[field] as Uint8Array, zero32), field).toBe(true);
     }
     expect(equalBytes(verdict.selector_commitment as Uint8Array, zero32)).toBe(true);
@@ -208,6 +212,52 @@ describe("B2 reference verifier", () => {
       if (!result.ok) expect(result.reason, fixture.name).toBe(fixture.descriptor.expected_code);
     }
   });
+
+  test("D-76 binds empty, unrelated, and rollback prior files with pyref digest parity", () => {
+    const directory = mkdtempSync(join(tmpdir(), "aar-d76-"));
+    const stem = join(root, "kats", "negative", "stateful", "identity-issuer-sequence-rollback");
+    const input = readFileSync(`${stem}.bundle.cbor`);
+    const rollback = JSON.parse(readFileSync(`${stem}.prior.json`, "utf8"));
+    const unrelated = { prior_emissions: rollback.prior_emissions.map((entry: Record<string, unknown>) => ({ ...entry, issuer_kid: "00".repeat(32) })) };
+    const cases = [{ label: "empty", prior: { prior_emissions: [] } }, { label: "unrelated", prior: unrelated }, { label: "rollback", prior: rollback }];
+    const digests: string[] = []; const verdicts: string[] = [];
+    try {
+      for (const { label, prior } of cases) {
+        const path = join(directory, `${label}.json`);
+        writeFileSync(path, JSON.stringify(prior));
+        const result = verifyBundle(input, { evaluationTime: AT, replayState: [], priorEmissions: parseStatefulPrior(JSON.parse(readFileSync(path, "utf8"))) });
+        expect(result.ok, label).toBe(label !== "rollback");
+        if (!result.ok) expect(result.reason).toBe("identity/issuer-sequence-rollback");
+        expect(result.verdict!.v).toBe(3);
+        const digest = toHex((result.verdict!.trust_policy as Record<string, CborValue>).prior_emissions_digest as Uint8Array);
+        const proc = Bun.spawnSync(["python3", "-B", "-c", `
+import sys
+from pathlib import Path
+from pyref.cli import _prior_state
+from pyref.verifier import evaluate
+prior, replay = _prior_state(Path(sys.argv[1]))
+r = evaluate(sys.stdin.buffer.read(), evaluated_at=int(sys.argv[2]), prior_state=prior, replay_state=replay)
+print(r.verdict["trust_policy"]["prior_emissions_digest"].hex())
+`, path, String(AT)], { cwd: root, stdin: input });
+        expect(proc.exitCode, proc.stderr.toString()).toBe(0);
+        const pyDigest = proc.stdout.toString().trim();
+        expect(digest, label).toBe(pyDigest);
+        console.log(`D-76 ${label}: harness=${digest} pyref=${pyDigest}`);
+        digests.push(digest); verdicts.push(toHex(result.verdictEnvelope!));
+      }
+      expect(new Set(digests).size).toBe(3);
+      expect(new Set(verdicts).size).toBe(3);
+      const omitted = verifyBundle(input, { evaluationTime: AT, replayState: [], priorEmissions: parseStatefulPrior({}) });
+      expect(toHex((omitted.verdict!.trust_policy as Record<string, CborValue>).prior_emissions_digest as Uint8Array)).toBe(digests[0]!);
+      const low = unrelated.prior_emissions[0]!; const high = { ...rollback.prior_emissions[0]!, issuer_seq: 1 };
+      expect(() => verifyBundle(input, { evaluationTime: AT, priorEmissions: parseStatefulPrior({ prior_emissions: [low, high] }) })).not.toThrow();
+      for (const entries of [[high, low], [high, high]]) {
+        expect(() => verifyBundle(input, { evaluationTime: AT, priorEmissions: parseStatefulPrior({ prior_emissions: entries }) })).toThrow("prior-state.prior_emissions must be strictly sorted and unique");
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 120_000);
 
   test("generated stateful pairs and descriptors match in-memory fixtures", () => {
     for (const fixture of buildStatefulFixtures()) {

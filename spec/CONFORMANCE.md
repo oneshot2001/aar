@@ -576,13 +576,13 @@ first-failure reason:
   matching the selector — the verdict asserts nothing about any receipt;
 - `stateful_not_evaluated` (GATE3 F6): no prior evaluated state was supplied, so
   cross-evaluation sequence-rollback and one-time-reuse properties were NOT
-  evaluated — they did not "pass." The verdict's `replay_state_digest` binds
-  which state, if any, was used.
+  evaluated — they did not "pass." The verdict's `replay_state_digest` and
+  `prior_emissions_digest` bind which state, if any, was used.
 
 In v0.2, `empty_scope` and `stateful_not_evaluated` are REPORT-LAYER
 observations: verifier tools MUST surface them in human/machine reports, but
-they do not enter the signed verdict bytes (the D-51 verdict preimages are
-frozen). Promoting them into the signed verdict is a wire-version decision.
+they do not enter the signed verdict bytes (the D-51 verdict preimages, extended
+by D-76, are frozen). Promoting them into the signed verdict is a wire-version decision.
 
 ## 5. W-12 signed machine-readable verdict
 
@@ -620,7 +620,7 @@ verdict = {
 verdict-id-input = { verdict-fields }
 
 verdict-fields = (
-  v: 2,
+  v: 3,
   evaluated_at: uint .le 9007199254740991,
   result: "conformant" / "nonconformant" / "indeterminate",
   ? reason: tstr .size (1..128),
@@ -658,6 +658,7 @@ verdict-trust-policy = {
   evaluation_time: uint .le 9007199254740991,
   anchor_heads_digest: bstr .size 32,
   replay_state_digest: bstr .size 32,
+  prior_emissions_digest: bstr .size 32,
 }
 
 verdict-scope = {
@@ -702,6 +703,10 @@ A v0.2 verifier MUST emit only `not_established` for `ingress_completeness`.
 R-15/census feature and MUST NOT be emitted by a verifier that does not implement
 that feature.
 
+The v0.2.1 verdict uses `v: 3` because its closed trust-policy map gained a
+required key (D-76); the protected content type continues to name the v0.2
+minor line. A v2 consumer must not silently accept this verdict.
+
 The verdict digest preimages are frozen as follows:
 
 - `limits_digest = SHA-256(deterministic-CBOR(["AAR-VERDICT-LIMITS-v1",
@@ -722,7 +727,20 @@ The verdict digest preimages are frozen as follows:
   strictly sorted by deterministic CBOR of
   `[replay_domain, invocation_id, content_digest]`. When no replay state was
   supplied, `replay_state_digest` is 32 zero bytes rather than the digest of an
-  empty map.
+  empty map;
+- when prior state is supplied, `prior_emissions_digest =
+  SHA-256(deterministic-CBOR(["AAR-VERDICT-PRIOR-v1", prior-emissions-map]))`.
+  `prior-emissions-map` is the closed map `{ entries: [...] }`; each entry is
+  the closed map `{ issuer_kid: bstr .size 32, issuer_seq: uint,
+  epoch_owner_kid: bstr .size 32, epoch_id: uint, epoch_seq: uint,
+  receipt_id: bstr .size 32, envelope_digest: bstr .size 32 }`. Entries are
+  strictly sorted and unique by deterministic CBOR of `[issuer_kid, issuer_seq,
+  epoch_owner_kid, epoch_id, epoch_seq, receipt_id, envelope_digest]`.
+  Duplicate or unsorted `prior_emissions` in a supplied prior-state file is a
+  usage error. Supplying a file whose `prior_emissions` is empty or absent binds
+  the digest of `{ entries: [] }`. When no prior state was supplied,
+  `prior_emissions_digest` is 32 zero bytes. No supplied prior state uses a zero
+  digest (the D-51 absence discipline, extended by D-76).
 
 `build_digest` and `config_digest` have implementation-defined preimages. An
 implementation MUST keep each value stable for one released build or effective

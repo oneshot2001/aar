@@ -40,3 +40,12 @@ positive fixtures and their verdict bytes are unchanged across all of it; only
 the demo golden bundles changed bytes (D-73). rc7 bundles that carried a
 canonical command without `parameters_digest` are **not** valid under v0.2.0
 (D-73 item 1); no such bundle exists outside the demo.
+
+## v0.2.1 delta
+
+D-76 adds the required `prior_emissions_digest` to the signed verdict's
+trust-policy map and raises the verdict version to 3, committing the prior
+receipt identity and sequence history that governs cross-evaluation checks.
+The protected content type remains `application/aar-verdict+cbor;v=0.2`.
+This extends D-51's frozen preimages and changes verdict bytes, with zero
+receipt-fixture changes and no change to `spec/aar-core.cddl`.

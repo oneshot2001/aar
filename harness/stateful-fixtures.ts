@@ -6,7 +6,7 @@ import { PriorEmission } from "./verifier";
 type Obj = Record<string, CborValue>;
 
 export interface StatefulPriorJson {
-  prior_emissions: Array<{
+  prior_emissions?: Array<{
     issuer_kid: string;
     issuer_seq: number;
     epoch_owner_kid: string;
@@ -53,7 +53,7 @@ function priorJson(value: PriorEmission): StatefulPriorJson {
 }
 
 export function parseStatefulPrior(value: StatefulPriorJson): PriorEmission[] {
-  return value.prior_emissions.map((entry) => ({
+  return (value.prior_emissions ?? []).map((entry) => ({
     issuerKid: fromHex(entry.issuer_kid), issuerSeq: entry.issuer_seq,
     epochOwnerKid: fromHex(entry.epoch_owner_kid), epochId: entry.epoch_id, epochSeq: entry.epoch_seq,
     receiptId: fromHex(entry.receipt_id), envelopeDigest: fromHex(entry.envelope_digest),

@@ -74,7 +74,10 @@ bundle or its signed-verdict preimage.
 The closed top-level keys are `prior_emissions` and `entries`; either may be
 omitted and defaults to an empty array. All byte strings are hex. `entries`
 must be strictly sorted and unique by deterministic CBOR of
-`[replay_domain, invocation_id, content_digest]`.
+`[replay_domain, invocation_id, content_digest]`. `prior_emissions` must also be
+strictly sorted and unique by deterministic CBOR of `[issuer_kid, issuer_seq,
+epoch_owner_kid, epoch_id, epoch_seq, receipt_id, envelope_digest]` with hex
+strings decoded to byte strings. Unsorted or duplicate entries are usage errors.
 
 ```json
 {
@@ -100,12 +103,16 @@ must be strictly sorted and unique by deterministic CBOR of
 ```
 
 `prior_emissions` supplies cross-evaluation receipt identity and sequence
-state. `entries` supplies previously accepted one-time replay coordinates. If
-`--prior-state` is absent, the report includes `stateful_not_evaluated`: those
-cross-evaluation properties were not evaluated and did not pass. The signed
-verdict continues to bind absence with the normative zero
-`replay_state_digest`; supplying even an empty prior-state file binds the
-canonical empty replay-state map instead.
+state, bound into the signed verdict by `prior_emissions_digest` (D-76):
+`SHA-256(deterministic-CBOR(["AAR-VERDICT-PRIOR-v1", { entries: [...] }]))`,
+with the seven entry fields above and hex strings decoded to byte strings.
+`entries` supplies previously accepted one-time replay coordinates, bound by
+`replay_state_digest`. If `--prior-state` is absent, both digests are 32 zero
+bytes and the report includes `stateful_not_evaluated`: those cross-evaluation
+properties were not evaluated and did not pass. Supplying even an empty file
+binds the canonical empty entries map under each digest's separate domain;
+omitted arrays also mean empty arrays. Verdicts use `v: 3`, with the protected
+content type still `application/aar-verdict+cbor;v=0.2`.
 
 ## Schema oracle (release test, D-74)
 
@@ -145,8 +152,8 @@ legal admissibility, or complete discovery. In particular:
   rollback and cross-evaluation one-time reuse were not evaluated.
 
 The last two are REPORT-LAYER observations. They are shown in the report but
-are intentionally absent from the signed verdict bytes; D-51 preimages remain
-frozen. Other section 4 observations are signed when applicable.
+are intentionally absent from the signed verdict bytes; D-51 preimages, extended
+by D-76, remain frozen. Other section 4 observations are signed when applicable.
 
 The reference verdict is signed with the published Gate 4 KAT
 `verifier_signing` key so its bytes remain independently reproducible. That
@@ -154,5 +161,5 @@ public test key is not an operational verifier identity and its signature must
 not be treated as third-party assurance or used as a deployment credential.
 
 The implementation-defined verifier identity preimages are stable constants:
-`pyref-aar-v0.2-gate4-c2-clean-room-build-v1` for `build_digest` and
+`pyref-aar-v0.2.1-prior-emissions-digest-build-v1` for `build_digest` and
 `pyref-aar-v0.2-gate4-c2-fixed-conformance-config-v1` for `config_digest`.

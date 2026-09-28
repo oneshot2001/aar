@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
@@ -840,6 +841,62 @@ def _divergence_hypothesis(fixture: dict[str, Any]) -> str:
     )
 
 
+def _prior_digest_checks() -> None:
+    from .cli import UsageError, _prior_state
+
+    stem = ROOT / "kats" / "negative" / "stateful" / "identity-issuer-sequence-rollback"
+    raw = stem.with_suffix(".bundle.cbor").read_bytes()
+    rollback = json.loads(stem.with_suffix(".prior.json").read_text())
+    unrelated = {"prior_emissions": [
+        {**entry, "issuer_kid": "00" * 32} for entry in rollback["prior_emissions"]
+    ]}
+    digests = []
+    verdicts = []
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "prior.json"
+        for label, source in [("empty", {"prior_emissions": []}),
+                              ("unrelated", unrelated), ("rollback", rollback)]:
+            path.write_text(json.dumps(source))
+            prior, replay = _prior_state(path)
+            result = evaluate(raw, evaluated_at=KAT_EVALUATION_TIME,
+                              prior_state=prior, replay_state=replay)
+            assert result.reason == ("identity/issuer-sequence-rollback" if label == "rollback" else None)
+            assert result.verdict["v"] == 3
+            digest = result.verdict["trust_policy"]["prior_emissions_digest"]
+            digests.append(digest)
+            verdicts.append(result.verdict_bytes)
+            print(f"D-76 {label}: pyref={digest.hex()}")
+        assert len(set(digests)) == 3, "D-76 prior digests collided"
+        assert len(set(verdicts)) == 3, "D-76 signed verdicts collided"
+        assert digests[0] == hashes.domain_hash("AAR-VERDICT-PRIOR-v1", {"entries": []})
+        absent = evaluate(raw, evaluated_at=KAT_EVALUATION_TIME)
+        assert absent.verdict["trust_policy"]["prior_emissions_digest"] == bytes(32)
+        path.write_text("{}")
+        prior, replay = _prior_state(path)
+        omitted = evaluate(raw, evaluated_at=KAT_EVALUATION_TIME,
+                           prior_state=prior, replay_state=replay)
+        assert omitted.verdict["trust_policy"]["prior_emissions_digest"] == digests[0]
+        low = unrelated["prior_emissions"][0]
+        high = {**rollback["prior_emissions"][0], "issuer_seq": 1}
+        try:
+            evaluate(raw, evaluated_at=KAT_EVALUATION_TIME,
+                     prior_state={"prior_emissions": [high, low]})
+        except ValueError as exc:
+            assert str(exc) == "prior-state.prior_emissions must be strictly sorted and unique"
+        else:
+            raise AssertionError("D-76 direct evaluate accepted invalid prior ordering")
+        for entries in ([high, low], [high, high]):
+            path.write_text(json.dumps({"prior_emissions": entries}))
+            try:
+                _prior_state(path)
+            except UsageError as exc:
+                assert str(exc) == "prior-state.prior_emissions must be strictly sorted and unique"
+            else:
+                raise AssertionError("D-76 invalid prior ordering accepted")
+        path.write_text(json.dumps({"prior_emissions": [low, high]}))
+        _prior_state(path)
+
+
 def run_c2() -> dict[str, Any]:
     base_raw = (ROOT / "kats" / "positive" / "bundle-valid-subset.cbor").read_bytes()
     fixtures: list[dict[str, Any]] = []
@@ -971,6 +1028,7 @@ def main(argv: list[str] | None = None) -> int:
         _print_c1(c1)
         failed |= c1["divergence_count"] != 0
     if args.slice in {"c2", "all"}:
+        _prior_digest_checks()
         c2 = run_c2()
         _print_c2(c2)
         failed |= c2["divergence_count"] != 0

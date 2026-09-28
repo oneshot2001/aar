@@ -259,6 +259,11 @@ async function advancePriorState(path: string, producer: ProducerResult): Promis
       receipt_id: toHex(receipt.id), envelope_digest: toHex(hash(receipt.signed.envelopeBytes)),
     });
   }
+  const emissionKey = (entry: PriorStateJson["prior_emissions"][number]): Buffer => Buffer.from(encodeCbor([
+    fromHex(entry.issuer_kid), entry.issuer_seq, fromHex(entry.epoch_owner_kid),
+    entry.epoch_id, entry.epoch_seq, fromHex(entry.receipt_id), fromHex(entry.envelope_digest),
+  ]));
+  state.prior_emissions.sort((left, right) => Buffer.compare(emissionKey(left), emissionKey(right)));
   await writeFile(path, `${JSON.stringify(state, null, 2)}\n`);
 }
 

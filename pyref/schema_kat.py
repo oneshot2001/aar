@@ -139,6 +139,8 @@ def probes() -> list[tuple[str, str, str, bytes, bool, bool]]:
         ("D2 zero exclusions", CORE, "receipt-envelope", mutate(attempt, "body.command.excluded_fields", []), True, False),
         ("D2 basis unknown", CORE, "epoch-manifest-envelope", mutate(manifest, "anchor_plan.independence.basis", "independent"), False, False),
         ("D2 one anchor target", CORE, "epoch-manifest-envelope", mutate(manifest, "anchor_plan.targets", [target]), True, False),
+        ("D-76 verdict v2 rejected", VERDICT, "verdict-envelope", mutate(signed_verdict, "v", 2), False, False),
+        ("D-76 prior digest size", VERDICT, "verdict-envelope", mutate(signed_verdict, "trust_policy.prior_emissions_digest", bytes(31)), False, False),
         ("D4 custody partially_evidenced", VERDICT, "verdict-envelope", mutate(signed_verdict, "limits.custody_continuity", "partially_evidenced"), False, False),
         ("D4 custody not_established twin", VERDICT, "verdict-envelope", signed_verdict, True, False),
     ]
@@ -146,7 +148,8 @@ def probes() -> list[tuple[str, str, str, bytes, bool, bool]]:
 
 def main() -> int:
     exe = engine()
-    for label, schema, root, blob, expect_accept, self_test in probes():
+    checks = probes()
+    for label, schema, root, blob, expect_accept, self_test in checks:
         if accepts(exe, schema, root, blob) != expect_accept:
             print(f"FAIL {'engine unsupported: ' if self_test else ''}{label}: production={root} expected={'accept' if expect_accept else 'reject'}")
             return 1
@@ -156,7 +159,7 @@ def main() -> int:
         print(f"FAIL {label}: production={root} expected=accept path={narrow(exe, blob)}")
     if failures:
         return 1
-    print(f"schema oracle: cddl gem {ENGINE_VERSION}; {len(items)} corpus objects accepted, 20 probes matched")
+    print(f"schema oracle: cddl gem {ENGINE_VERSION}; {len(items)} corpus objects accepted, {len(checks)} probes matched")
     return 0
 
 

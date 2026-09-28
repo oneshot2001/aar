@@ -18,7 +18,7 @@
       "produced_code": "evidence/outcome-class-unsatisfied",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "e90739f9f9f6f8864cff7391bcda1a954f5ea20e246ed4e4dd94e3809f9850ff"
+      "verdict_sha256": "9d42cba80ee205d027704ab00b912e911a64aac953b590c2840780274991c44a"
     },
     {
       "deterministic": true,
@@ -32,7 +32,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "6c59454909e504f6e9a77ced05330806609ec99d417b5d7b0b4ac356beabd26a"
+      "verdict_sha256": "ad79b94c21e3c8ce78af59a4cfa35c39197221235e634d44ee937cb6a629266e"
     },
     {
       "deterministic": true,
@@ -46,7 +46,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "f9f65527f38aae8b336b4a1e93cafb106b14739b15604a19046445033c9e322b"
+      "verdict_sha256": "2c1d19fbcd09a5a579ee1f69a574c26f2f1af654786860885c0bbe8d8a6f6a9b"
     },
     {
       "deterministic": true,
@@ -60,7 +60,7 @@
       "produced_code": "evidence/provenance-class-unsatisfied",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "c6f7328ca313ce30c732b0d047f454392658947ed48d5183f4e915c261bf264d"
+      "verdict_sha256": "cee1e68c154bae72b6b0b0ebe7e482e18fd1a6d185472f251346d5cf65f8fca3"
     },
     {
       "deterministic": true,
@@ -74,7 +74,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "28e4bad917181b2f8061c105696ac63fa083eaf3c91d44db3536c49be839e5c1"
+      "verdict_sha256": "c48daddcaeba6c928677b39dccc67c7d8ec239eb20a831d719889337ce21a311"
     },
     {
       "deterministic": true,
@@ -88,7 +88,7 @@
       "produced_code": "evidence/provenance-class-unsatisfied",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "92d6d05054f98fff5d0358fccd4738a718e021955855d7cd87c33b48dc6b44af"
+      "verdict_sha256": "988f0f63862a20d159f6958cbca83c44e2b0365ee61c04dbfbae370eaf0ceac3"
     },
     {
       "deterministic": true,
@@ -102,7 +102,7 @@
       "produced_code": "evidence/time-class-unsatisfied",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3e52ab5b4b0b04add0058a172d132dd99724b72422a3cee2a7a1a6f9e54e224a"
+      "verdict_sha256": "18df7084d6d356ba1d67c16b196a86988620a0fe572afbe529a0d6e78c1dec28"
     },
     {
       "deterministic": true,
@@ -116,7 +116,7 @@
       "produced_code": "evidence/time-class-unsatisfied",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "1baca7d67fb32739667b0f31e480ec6c6a5e2150b70af55fabd848690addc45d"
+      "verdict_sha256": "89a91a9ff0f10848f80f00f237c99570fdb64069eb7d854bc63e975549d40439"
     },
     {
       "deterministic": true,
@@ -130,7 +130,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "aacfc98108f3a02ab2df0007725bc538c31d9e2951d050842d39db745caa813e"
+      "verdict_sha256": "f18337f6f5f2acdaae52d5d79336d048a2ce9116bd8f8f64f38c26b3ed12d7e3"
     },
     {
       "deterministic": true,
@@ -144,7 +144,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5292a4a834806ba5b7462874bd229de6bb3ab6fae0378c3af264936e5bf6a018"
+      "verdict_sha256": "c8f7dd5c5ee5a9614977d33276d331fd2a0fc6678990665c12f0669c0be7b3c4"
     },
     {
       "deterministic": true,
@@ -158,7 +158,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "ffa95ce2a97aeff44decb2febb3fbf63b27a8ce990ac8927ec6e76ee2ff22e10"
+      "verdict_sha256": "25f1226ee270e0f8b4c86fc31ac985ce145da287f3e660022e6561ca51b75b43"
     },
     {
       "deterministic": true,
@@ -172,7 +172,7 @@
       "produced_code": "countersign/digest-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4d0ff35d3b2d147701b2586d7fabed3b2f415fdf32951a1739257186fbfe01f8"
+      "verdict_sha256": "cf818cf99cbd84a850ddaa0e64fa8bb617aa3de96388d48025d85af6d8e7f104"
     },
     {
       "deterministic": true,
@@ -186,7 +186,7 @@
       "produced_code": "countersign/credential-invalid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "448a9830c4b44b091d2d6975a9102802986ed82c6dfb3a88995bfd425c9fb53a"
+      "verdict_sha256": "ad2dc6ef0eda7acc7533c64ad6923be805b288932873f6e0e515a93294b769aa"
     },
     {
       "deterministic": true,
@@ -209,7 +209,7 @@
       ],
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "e24363f0c31ae9344f9e88b353fef2bfc56debb9004d83471f1df1e03fe26274"
+      "verdict_sha256": "a469a928fdb2ef6c039ed249659f17c494c0c02f0fc51e5cec74bf779c8731c1"
     },
     {
       "deterministic": true,
@@ -223,7 +223,7 @@
       "produced_code": "journal/uncommitted-dispatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "d3a5b2b0926abb7c44cbbbac92e1d1319e5cc9af8dc4921ca5b7b66b56c4c594"
+      "verdict_sha256": "fa98ea4b8c0ec92628c3c6f4a83028e3651f40169ee435b5eae98329a6830dcb"
     },
     {
       "deterministic": true,
@@ -244,7 +244,7 @@
       ],
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4dec62be24469b9b7bea0eed0e361f7d1517716f5eaffe163c091f0e0b00ed55"
+      "verdict_sha256": "662447fa9c5b8ef8626d05e465d722084d8effab25cff4d088ae67429250528b"
     },
     {
       "deterministic": true,
@@ -258,7 +258,7 @@
       "produced_code": "receipt/hazard-class-unbound",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "d81e5203b9120b98a82f59bc9dced77af3ce27365e4340b5a5061587c08184f9"
+      "verdict_sha256": "e6576733e0c651f5354aaf34e315f6ae7df5ea27bf5934f185e2049dec90b6a5"
     },
     {
       "deterministic": true,
@@ -279,7 +279,7 @@
       ],
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "149dfee71f2be6c1371e04d865b880839b3614632407daf6df8ec39808829b04"
+      "verdict_sha256": "7e101d787ca3dbca978c523818a867a03406f7a2e4740f7be941fca1b5f9b0d1"
     },
     {
       "deterministic": true,
@@ -293,7 +293,7 @@
       "produced_code": "journal/uncommitted-dispatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "7ae4df15e0331be839d5c4121b024f6056b3743efbc9054d3923f73c06b44a54"
+      "verdict_sha256": "ad093ffc2dac11b4e1d5f90d4ec36edff7c3abd19b36401ebd1130159e02cff4"
     },
     {
       "deterministic": true,
@@ -315,7 +315,7 @@
       ],
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "a9371df30301718e500d3e76d5a2a845a4d7d063a8bf932d51425d1ebe88df88"
+      "verdict_sha256": "ce0d065beb508aa685c20359cc3dcb40199097535360dddd3dbbd7370afe2e9f"
     },
     {
       "deterministic": true,
@@ -329,7 +329,7 @@
       "produced_code": "anchor/consistency-invalid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "afc2613588128496feec7746f6e1d501e3df6deb0e0e885dca1b630212304586"
+      "verdict_sha256": "21b3cae54149bb1fcc07f4d7b364544d10aac466298691a9b802b70e0d3ee89d"
     },
     {
       "deterministic": true,
@@ -343,7 +343,7 @@
       "produced_code": "anchor/head-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "ea07643ac12bf99c9cf6d59082ad7def90813acadb0a47a2511d237b33df9b56"
+      "verdict_sha256": "1c0aa08293aaa4ffd40e217ac61e9bc0ef9d4e5c55ff9a424c05da461a755420"
     },
     {
       "deterministic": true,
@@ -357,7 +357,7 @@
       "produced_code": "anchor/head-missing",
       "produced_result": "indeterminate",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4ad8b0605b8fb1afdad06d1a99adb808964986b5d69224f555d3ef46b33816f4"
+      "verdict_sha256": "51ef4501352bf76a214ba176238a02077819139f1adae93cfccfd19973bc0afc"
     },
     {
       "deterministic": true,
@@ -371,7 +371,7 @@
       "produced_code": "anchor/head-stale",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "07799027f657ea82320444359b080dce81d010eb83dc256a1f2b3e555e49447c"
+      "verdict_sha256": "82c1e6e2750b7bdc5119e98e77a42d39c570ff428c3f6e3e086f8bb37faacfa2"
     },
     {
       "deterministic": true,
@@ -385,7 +385,7 @@
       "produced_code": "anchor/inclusion-invalid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "21b8d27db77e41b1f93a10e77bc9b2d77a6633f74324c6625cbc3bdd0c9b465a"
+      "verdict_sha256": "ff89f55b2593882ac4b955fa94486b9bd8aae3662e53335b4dc678aa7431d9d1"
     },
     {
       "deterministic": true,
@@ -399,7 +399,7 @@
       "produced_code": "anchor/independence-invalid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "c458ba4d97c20418a3dbe923b2ac5b7248efd38246b0540b2ee759abbab70b4f"
+      "verdict_sha256": "119027b333853a8c9de58d2857590089e682b81279583841844cc8cd557b8146"
     },
     {
       "deterministic": true,
@@ -413,7 +413,7 @@
       "produced_code": "anchor/manifest-binding",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "c9c3cc93549033310eee2ad980408f6490f2e357951be6158acaafcee475d195"
+      "verdict_sha256": "a574b16283d9e822121e8561dce2cda4f28e4345a693193a099d793a7691e8a5"
     },
     {
       "deterministic": true,
@@ -427,7 +427,7 @@
       "produced_code": "anchor/submission-late",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "cde2ede9e3609028fe1296e81cbc17ae61956fe7183079710843c13e95e2659c"
+      "verdict_sha256": "5cd37ea20cf81999faaa895a25a642980ba1dc9356f210a8e8ef203c8e53f7a9"
     },
     {
       "deterministic": true,
@@ -441,7 +441,7 @@
       "produced_code": "anchor/target-unplanned",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "6c13c75f7d6a17362c4e51370a427f3f6faf7ef3c851962727c7c419bf8808fb"
+      "verdict_sha256": "94399da6aaadb1e0270d510c515496d6a99de28220617aae92667bb47a38e319"
     },
     {
       "deterministic": true,
@@ -455,7 +455,7 @@
       "produced_code": "bundle/artifact-out-of-scope",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "c421414b251b3a37fafa226bbac41be3c332ad0d9581c4fbe9ded29ecf696267"
+      "verdict_sha256": "b00915c76f76f471337adb7bfba567bf6b18728aa090586d97c7f4bc10dcdd7d"
     },
     {
       "deterministic": true,
@@ -469,7 +469,7 @@
       "produced_code": "bundle/coverage-overclaim",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "ae847706a6b7c63ba3e93d7a5233266352243322de73b23e44591d3a465ebb85"
+      "verdict_sha256": "271041540e0d83df3413ea52192a6e631d41716058ae5eb04352a4b75635f777"
     },
     {
       "deterministic": true,
@@ -483,7 +483,7 @@
       "produced_code": "bundle/dependency-missing",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "7aa581033ee96c813334a2558ec406322595d0f5b62c7d0867432744d72cc15b"
+      "verdict_sha256": "6c58cf6c1637bea69ea8bbdad01fff8424b2c5432cc7fd625904a8fb0b21d167"
     },
     {
       "deterministic": true,
@@ -497,7 +497,7 @@
       "produced_code": "bundle/range-boundary",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3db08fde6cc203bba5f4e52281119d2661445b5b3f358061d6e6e985cd37d5ec"
+      "verdict_sha256": "78fb6ee8f1b1de4b5b4404d485440be3818d9b7c0c234dc7018d0fbcbe2da9d1"
     },
     {
       "deterministic": true,
@@ -511,7 +511,7 @@
       "produced_code": "bundle/range-manifest-missing",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "878add87fadd7a4b43ddff97b89c39a834f3d76063a88f396f3bcad876716297"
+      "verdict_sha256": "a0a9e6c7cd9eb26e122200584ddfc8b8d23005debccfe7062b941a97732af565"
     },
     {
       "deterministic": true,
@@ -525,7 +525,7 @@
       "produced_code": "bundle/range-noncontiguous",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "688bcd3a39c38fa6062d8843576ec964821e45d0d2ed3c3eff294efd4cdd6d36"
+      "verdict_sha256": "bc11df182f950132047bbef4dd0e58cac24f5b768641e1a604ce625685f2bea7"
     },
     {
       "deterministic": true,
@@ -539,7 +539,7 @@
       "produced_code": "bundle/range-proof-invalid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "9e47d16e40c71fdc55eaec552831a06aacd9c65986a2449de44f253b76249ffb"
+      "verdict_sha256": "ce5c6c05e2cd4e73fab7436516f1aed8e65e4660bbb7796a4858f1456c239a0a"
     },
     {
       "deterministic": true,
@@ -553,7 +553,7 @@
       "produced_code": "bundle/range-selector-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "1ea98033f61b205fb6d6a32a079f79634c7477f12a38460af4af8421bdc25cb4"
+      "verdict_sha256": "f4f8069d63282c0d5c5c5f9030f3675c394dd452b10f928431471c2ec4f082a8"
     },
     {
       "deterministic": true,
@@ -567,7 +567,7 @@
       "produced_code": "bundle/selected-receipt-missing",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "466c07823471d3d0f1e5fd3dcfb63e4305758594717c5a0bef694305d616997c"
+      "verdict_sha256": "9405b6f5b9d0bb78b846ff180413e27ca5528089006c189044ad9694cc77f588"
     },
     {
       "deterministic": true,
@@ -581,7 +581,7 @@
       "produced_code": "bundle/selector-commitment",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "fef903586331c07f8bc8cbce09a8d49bea0496a8066efbce5cb7a45250acdb04"
+      "verdict_sha256": "fa76ad80ae2ace1cf6101e918d7f7cb54a3b1ec9c2834df123c449aacd97ea71"
     },
     {
       "deterministic": true,
@@ -595,7 +595,7 @@
       "produced_code": "bundle/selector-interval",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "20699cdb7271a7f017766e858a088f6eb374b6caceaa71facb8013efd6355f6f"
+      "verdict_sha256": "b0347d0f4860631890746dc1d39807abd69f3b711ead90187524f4cd5fabf9e8"
     },
     {
       "deterministic": true,
@@ -609,7 +609,7 @@
       "produced_code": "cbor/duplicate-key",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "08b187265b1cb8acd7b607ed2fd1db4b850287b6abebff00cc9083ae72f0a8fd"
+      "verdict_sha256": "2bee1d32a2f6188745aac3c2a4ecf81d44dc17c9291273e86dee76039ee7884b"
     },
     {
       "deterministic": true,
@@ -623,7 +623,7 @@
       "produced_code": "cbor/float-forbidden",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "e72e09f812dc7fd8e15158e7381d74c7a1581d45477f142cb07001d63000e9d0"
+      "verdict_sha256": "8f19ce2a9b0a336eaa0c32eb3cc6b98238ee30868d84a4e91fea2b6dbbc8e5a6"
     },
     {
       "deterministic": true,
@@ -637,7 +637,7 @@
       "produced_code": "cbor/indefinite-length",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "37c1e4462e4ed05bd9d8011c6c7caedb06e3ec4540409b30b0bdd4976262753a"
+      "verdict_sha256": "a5f2cb32c357015774f59b6f233a0ad0d2fa2cf40d15a615aa188d088ab807b6"
     },
     {
       "deterministic": true,
@@ -651,7 +651,7 @@
       "produced_code": "cbor/invalid-utf8",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "aa40c14692de0e6608f5d832b01896e5b235e52a15ae33bdc42c5c344c549577"
+      "verdict_sha256": "073a29f60847a072cd47e080b0c357aaac5eef23436ddb9cb08ee953aaa4b68c"
     },
     {
       "deterministic": true,
@@ -665,7 +665,7 @@
       "produced_code": "cbor/malformed",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "968c7fee6459058ea89856210c95d9ae43364a7a5e77a94583026228d28eb814"
+      "verdict_sha256": "77d2dd203abf38f4171bb4e42371392ae763562c9afbf5299e49e7e0ea7399a5"
     },
     {
       "deterministic": true,
@@ -679,7 +679,7 @@
       "produced_code": "cbor/non-canonical",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "f2a210ee70cabfefc3784aab2b7d9884c4a4e45e89d433a162b4b971a7f9a1a1"
+      "verdict_sha256": "a91925278d4a7299c5fae972206ce5fb3386eb8e337587179304c96ef5477a9c"
     },
     {
       "deterministic": true,
@@ -693,7 +693,7 @@
       "produced_code": "cbor/tag-forbidden",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4aa299cda831c71c6de465ce43ef87d7409c34bbe61a434ae58e45c8a6fbfb69"
+      "verdict_sha256": "839cf1bd8c599b96d0367499d512dc89bb7e0f96114e9283bc91c596921aa16e"
     },
     {
       "deterministic": true,
@@ -707,7 +707,7 @@
       "produced_code": "cbor/trailing-bytes",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "ec634b937f44288ab291af3405573fcef91e32387562de0640a0d5a8826dc96f"
+      "verdict_sha256": "4ab3c1cc4ef32cb6a31208576a66533f5b5b30d022abeee5cc38c149cc88ecd7"
     },
     {
       "deterministic": true,
@@ -721,7 +721,7 @@
       "produced_code": "cose/alg-in-unprotected",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3908003d7d7924de6118e657c042340d591e5766a628c36b6208fbdf4184d797"
+      "verdict_sha256": "f9798f58c0d41feca380b642b8813285f4235865a5fde1547e6605586be5cb7e"
     },
     {
       "deterministic": true,
@@ -735,7 +735,7 @@
       "produced_code": "cose/alg-missing",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "dab378f0d2ec3b53e49442b41835e416b4cf6a63201896165640f57560a1fd54"
+      "verdict_sha256": "a34f540331c3484d941635e9def7b8cedf2e2c08c0e5c41063cf6a777698100b"
     },
     {
       "deterministic": true,
@@ -749,7 +749,7 @@
       "produced_code": "cose/alg-wrong",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "8607e4d4578889886056fb544689cee83338549d53dfbf8e2821e4f24390bde5"
+      "verdict_sha256": "b55957ee20b0e1859fef15a993dc2a81b8bb00b8b97937ac4cd2a4d498da2c13"
     },
     {
       "deterministic": true,
@@ -763,7 +763,7 @@
       "produced_code": "cose/bad-structure",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4328ed2f82af860bd69bc6fed8ed393e7222ece2ae831e453b425eb10ca538a7"
+      "verdict_sha256": "fd7251137d2e88405899764a6def5f414b9b82d3e17d9ff7b2fed3c547cd911c"
     },
     {
       "deterministic": true,
@@ -777,7 +777,7 @@
       "produced_code": "cose/content-type-missing",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "7532c59d861a6cfaa25c9217cc26b615ab5a06562cad5ec3bc5e4309138a8231"
+      "verdict_sha256": "05925eec8712cf86ac680de497eb614deb5b13590c473ff1b59baf369c2f0ee4"
     },
     {
       "deterministic": true,
@@ -791,7 +791,7 @@
       "produced_code": "cose/content-type-wrong",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "b9fa11978fe3b2342bc11a0d7e71f7530d2108d7f639c36b05340b7e5c418c63"
+      "verdict_sha256": "f35943595f69a39803f7d01a89d934688e101e4d661537aefd5fbe14ff7e5ce4"
     },
     {
       "deterministic": true,
@@ -805,7 +805,7 @@
       "produced_code": "cose/kid-missing",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "858035f7a1ae8707f55b8a8bb9201b31ea3409a5d029a4b53d2a1d4a9e0d90bd"
+      "verdict_sha256": "78105de681e2c6b2fa6513d254acca62526b3bee6c4cc996666714a1c275dc84"
     },
     {
       "deterministic": true,
@@ -819,7 +819,7 @@
       "produced_code": "cose/payload-not-detached",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "7470db3d6ad26596d0db02b8f23657514261327d29e881d0819d7eacb4575295"
+      "verdict_sha256": "11784aeb73dd59dd4cc87dd5eb5abf463e2715693d1d28eb1753bd60d6250ede"
     },
     {
       "deterministic": true,
@@ -833,7 +833,7 @@
       "produced_code": "cose/protected-label",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "7bbede065049d14da7a35b945b5e1a8c6dfaa69904e9977a20276f5e306a0688"
+      "verdict_sha256": "fe9ea872665a574f91df01f2f4629803d714cea5b0117b88883be30e5b442862"
     },
     {
       "deterministic": true,
@@ -847,7 +847,7 @@
       "produced_code": "cose/protected-not-map",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "598533b134b11ecb1597e94209b5b001c90316382f883c9867cf13e5eea69a6d"
+      "verdict_sha256": "ef1c81f07e6fd587772516fafb7a7e0065cfe2b5381b2ee0f2dae2b7b2b15d20"
     },
     {
       "deterministic": true,
@@ -861,7 +861,7 @@
       "produced_code": "cose/receipt-coordinate-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "dd5b43183254ea0c55ea8775f8352b2588e37428782221ae34d5816eab20fb82"
+      "verdict_sha256": "3a0c4b6c1f0bedf0d6cdd0967f2be181a2ecb866a376436e5813e92c9853a897"
     },
     {
       "deterministic": true,
@@ -875,7 +875,7 @@
       "produced_code": "cose/receipt-coordinate-missing",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "37d0d5804c82b8b6957e18f4ab0a23c80bdc6b6a5855cc43270b7ad833fa6676"
+      "verdict_sha256": "f9edf99e697e9de2fec39c537ca12b53ca6097e31029c4ea3d7268863ba6d209"
     },
     {
       "deterministic": true,
@@ -889,7 +889,7 @@
       "produced_code": "cose/tagged",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "b8fe8d9db78329dee4c23ef3456da67545baa4b5b4ae686180afa0c7081dd5aa"
+      "verdict_sha256": "428d736cf80ef4fe3fbe65b0e8f84d76d5eb61034d6864609ed7f9c358880d8f"
     },
     {
       "deterministic": true,
@@ -903,7 +903,7 @@
       "produced_code": "cose/unprotected-not-empty",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "e09b8e683ae9c4edc6a7a6e8199250112c8f29e08cc17e581f837373072c3bb2"
+      "verdict_sha256": "e70cc28ae0e556af25646a7ec75ad3bc13e4a91608fe7370c79c70085fc6450c"
     },
     {
       "deterministic": true,
@@ -917,7 +917,7 @@
       "produced_code": "credential/compromised",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3e5ee4b3a4afd47f920f31dbf8c54b7b19b099c5b08a2b956b356113139bcb52"
+      "verdict_sha256": "851f05e9c4d2494391939917b07b1261a3184b0cc6cd1f4643056fd76cde5467"
     },
     {
       "deterministic": true,
@@ -931,7 +931,7 @@
       "produced_code": "credential/expired",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "e0bd1d0898cbbbf33e53b20503afcf7f1e5d1c6264ec07d1ce604242660a31f1"
+      "verdict_sha256": "fb19cd3f4b35adc846733a946e85c41bd48f289f67aa51b1a0af489a2e9a7516"
     },
     {
       "deterministic": true,
@@ -945,7 +945,7 @@
       "produced_code": "credential/kid-key-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "92bf0136c04a7f7cad45f5eabeb6d8e955b6fe4dba9175c0cad2c81f5a02b1ad"
+      "verdict_sha256": "92ae604d3a579fb887ee075ec292b7d64cb121246e07c715c64c90611e55d15a"
     },
     {
       "deterministic": true,
@@ -959,7 +959,7 @@
       "produced_code": "credential/lease-expired",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4d93d9271793f799e44ef630f13422def74352377b3a28a9e234c73947f25bf3"
+      "verdict_sha256": "c0a7ce39ff196e2e3f9721f6774359ae89399f425a8ad8ed4aad2c6ba7199f1c"
     },
     {
       "deterministic": true,
@@ -973,7 +973,7 @@
       "produced_code": "credential/lease-too-long",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "1a7fe4ee61d563928f53290ea0c482cd0257e280eaf443acba4aeda263b100cb"
+      "verdict_sha256": "195b9faea3ce7c7a243d4524bf63f1bf8bb7f12b5ee0ed925f784bd32282935e"
     },
     {
       "deterministic": true,
@@ -987,7 +987,7 @@
       "produced_code": "credential/not-yet-valid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "f3f31ccde85d04bceea77468f615094096f273a2886d8488cd4fcded9269a265"
+      "verdict_sha256": "703295e8cb28b74797a8ee8afdf78648d330e270325abd69727525100a48075d"
     },
     {
       "deterministic": true,
@@ -1001,7 +1001,7 @@
       "produced_code": "credential/path-invalid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "ad6ce568e64e08eaca6bbd0e0c22977e8cda53247b187e2bef34c807cad59bd8"
+      "verdict_sha256": "4c2f616c8672e3c3c4c7140d2cf55e5b890badbadf90b5e7b6a27aef7aa017a7"
     },
     {
       "deterministic": true,
@@ -1015,7 +1015,7 @@
       "produced_code": "credential/revoked",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "bcb9aa1f6babd2749c0912ab7ceacaab0bce66cae84720cac589dc286fd1f3c5"
+      "verdict_sha256": "d79a84943c00bf8619f9cb131a38e912753972a18f1272eeceecb58211db7d95"
     },
     {
       "deterministic": true,
@@ -1029,7 +1029,7 @@
       "produced_code": "credential/role-key-reuse",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "ecc2276cb8141a139a3965e47aebd42d50189f56df5413096a0d375cf8c43722"
+      "verdict_sha256": "90d8c425a707ed561ab1787337e384b6945271f22b10736ff7af0f6b0a69172a"
     },
     {
       "deterministic": true,
@@ -1043,7 +1043,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "69553b71b6f7f8ef8119f2b21ae3b05b9cca66a1170b81fcf7ab017a3d7b9441"
+      "verdict_sha256": "d3ad236ad450728a1d7245dad90380b36515eb479a6b7f83c8483ebd468558f6"
     },
     {
       "deterministic": true,
@@ -1057,7 +1057,7 @@
       "produced_code": "credential/rotation-invalid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4c87d8749e76394e63877454425253994f5c67c6f7e07d192ec59ac37c73e7bc"
+      "verdict_sha256": "b07e5ac275a1060fd663df41a2a3b8d982508aa9bcf4062344bcb0063884f365"
     },
     {
       "deterministic": true,
@@ -1071,7 +1071,7 @@
       "produced_code": "credential/rotation-rollback",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "9d1c2f65787560d94d57ba315dc3209e683a1bd8d8c1d775f3cbf9405c617057"
+      "verdict_sha256": "7148c10cbd7e2ed607b06f2bd8be5e45cd774459c583b69ec462cb9dee1c80e1"
     },
     {
       "deterministic": true,
@@ -1085,7 +1085,7 @@
       "produced_code": "credential/status-missing",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "2ccac8d5b5d79aa1f70aeae268716ba5191762648204ee342ebfd88066d8dbd6"
+      "verdict_sha256": "24d0dae851b914bce920b4afa1412342d8ac0b9e8cf939d1ea164d2720d7fc4b"
     },
     {
       "deterministic": true,
@@ -1099,7 +1099,7 @@
       "produced_code": "credential/status-stale",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "2e6490b1e0744dfb6c355339f6a60a3e8282b28d55e8a1d0404ae0bef1097ca7"
+      "verdict_sha256": "9640e65459e7b0ddc1885aeff215e3934c31d1585860d41f9ba8ded79e77ff21"
     },
     {
       "deterministic": true,
@@ -1113,7 +1113,7 @@
       "produced_code": "credential/status-unknown",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "cea201d5268f99b86ccd15efe805ab875bb1ae698f63f8106854c2ba91665afa"
+      "verdict_sha256": "fce54a46e56424064a445bbf62753d9d7743be001768d1de0b6de6a6d6a87122"
     },
     {
       "deterministic": true,
@@ -1127,7 +1127,7 @@
       "produced_code": "credential/usage-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "75e2b0bf0bc1928c34f0cf378f8958cf979ed3c442ad344c2251bf2853b33775"
+      "verdict_sha256": "20db7ff488fe3263e60e70ecb884df7c62069a86ddce5fca7dde87f33ac5ea60"
     },
     {
       "deterministic": true,
@@ -1141,7 +1141,7 @@
       "produced_code": "delegation/chain-invalid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "af11e7f453a3dc94902cc27e4a0d2eafb3a11be6c40511763386d51baca6324b"
+      "verdict_sha256": "572c753739732d1b08b78dbd872b6b2e30d700ac5cace9808c06f6e33c641ec1"
     },
     {
       "deterministic": true,
@@ -1155,7 +1155,7 @@
       "produced_code": "delegation/expired",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "fa5cd885ed28c592d8087b9ccae4e70b213f8929edd85fb29154e5d87e5a0b2d"
+      "verdict_sha256": "4b6c4594096b33b7331184cdc663ae883788ae2e89ba1fa0ff560049e06a6ec1"
     },
     {
       "deterministic": true,
@@ -1169,7 +1169,7 @@
       "produced_code": "delegation/not-yet-valid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "f1a2342157bdac50ef4b0f69564cb337fd76c4058391a812b5805851e660a302"
+      "verdict_sha256": "2f1cb6446b1a1a5d0acc1da75910a519ccbe2f1b188d0a151f413e679e37e2c6"
     },
     {
       "deterministic": true,
@@ -1183,7 +1183,7 @@
       "produced_code": "delegation/scope",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "82de59e109b39d997b168f0cd04f8cb5cad4e180f59a0aa57078c107ab315028"
+      "verdict_sha256": "4172911810f23764e4cd6baeed50b2ac9482ef2bf7bf975ae56dfd9299a28185"
     },
     {
       "deterministic": true,
@@ -1197,7 +1197,7 @@
       "produced_code": "epoch/anchor-deadline",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3bc145dbf17d50fc11448504027a58076f93c23333468aa1730cae8541610653"
+      "verdict_sha256": "0ba0d5533879e4c06c2eee6c4fe4b1d6961b7de6cdf8dbee57362e6fbf8c9d5d"
     },
     {
       "deterministic": true,
@@ -1211,7 +1211,7 @@
       "produced_code": "epoch/duration-exceeded",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3838d5f81cb6fc29a21662c606536574180af562f8e1d839124b71acc634a51b"
+      "verdict_sha256": "5f9b15e5a6b80b3dcc864185fc288c0892990eaf99e4b42d31a51a072ed9d9d0"
     },
     {
       "deterministic": true,
@@ -1225,7 +1225,7 @@
       "produced_code": "epoch/event-chain",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "e620cee778dacaa8b4723b3ed27378219f3dec14026bcd1e9c712be4abed7799"
+      "verdict_sha256": "27e4d04b372e8c4df3e7e3c41353e9cdf0ae635d5a77da1f8152724b5165e7ff"
     },
     {
       "deterministic": true,
@@ -1239,7 +1239,7 @@
       "produced_code": "epoch/fork",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "c117a491f4098c81ff4c419bca762ca959be33f3b74445dc0dddd38d4a0a5e10"
+      "verdict_sha256": "1140b563b9259262bf62fd826e529f1420687bdac0b08cc1a9766c315cb55524"
     },
     {
       "deterministic": true,
@@ -1253,7 +1253,7 @@
       "produced_code": "epoch/id-nonmonotonic",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "bb55d827865e3359b8aad1c08734c1ccc2161caf8c66e9560c470c4792f25ffa"
+      "verdict_sha256": "504794c6ca05110d7dbfb65328bd0e4a42d304fbde91b123f6269f58d9a676a1"
     },
     {
       "deterministic": true,
@@ -1267,7 +1267,7 @@
       "produced_code": "epoch/late-insertion",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "f7a91e36ebd777caa1c433dcd248bf9aa11f8b0d32649fb19421491390e99b14"
+      "verdict_sha256": "418a043d5a43fd64b3b15a57e69b7788c0449b37bff9ea0e89d7e614d3650948"
     },
     {
       "deterministic": true,
@@ -1281,7 +1281,7 @@
       "produced_code": "epoch/open-close",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "13e2235a8d3b62b339c0f0d61ab78043693053b69c74e2ff118026e6fdd7b4f4"
+      "verdict_sha256": "ade3caf0a728ffdb6ef2512aa09f93371f6280e56781a8695255b474e1d7c85e"
     },
     {
       "deterministic": true,
@@ -1295,7 +1295,7 @@
       "produced_code": "epoch/predecessor-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "8938574b99904f61343101ab7768d441b542f5565fa373b32432846c6670ba65"
+      "verdict_sha256": "9faacbbf1b466a12a617d5e958d6561151e9d1741f75b2d8f666be87fc450afb"
     },
     {
       "deterministic": true,
@@ -1309,7 +1309,7 @@
       "produced_code": "epoch/span-count-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4cd097ee6aaae471bd3bcfd70845752fd4673196a627bd060fc51bfd920fd259"
+      "verdict_sha256": "4c1c18473b075ba76ff6d8845ddba4496bbac36e09b2fdcde7e54cb0a447b351"
     },
     {
       "deterministic": true,
@@ -1323,7 +1323,7 @@
       "produced_code": "evidence/observer-not-independent",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5532e8bf1134cee4d3a16cdd098fe662e721b6499fb8abfc8f3fca61c837e4ba"
+      "verdict_sha256": "a1c918436dafe128f37334237103ffca6e2f565bd075a66e06be7d9410665a69"
     },
     {
       "deterministic": true,
@@ -1337,7 +1337,7 @@
       "produced_code": "evidence/outcome-class-unsatisfied",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "e90739f9f9f6f8864cff7391bcda1a954f5ea20e246ed4e4dd94e3809f9850ff"
+      "verdict_sha256": "9d42cba80ee205d027704ab00b912e911a64aac953b590c2840780274991c44a"
     },
     {
       "deterministic": true,
@@ -1351,7 +1351,7 @@
       "produced_code": "evidence/provenance-class-unsatisfied",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "92d6d05054f98fff5d0358fccd4738a718e021955855d7cd87c33b48dc6b44af"
+      "verdict_sha256": "988f0f63862a20d159f6958cbca83c44e2b0365ee61c04dbfbae370eaf0ceac3"
     },
     {
       "deterministic": true,
@@ -1365,7 +1365,7 @@
       "produced_code": "evidence/time-class-unsatisfied",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3e52ab5b4b0b04add0058a172d132dd99724b72422a3cee2a7a1a6f9e54e224a"
+      "verdict_sha256": "18df7084d6d356ba1d67c16b196a86988620a0fe572afbe529a0d6e78c1dec28"
     },
     {
       "deterministic": true,
@@ -1379,7 +1379,7 @@
       "produced_code": "graph/cross-epoch-forbidden",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5acfb189bc012e49d3ba59e5617506b65cfb64304277f320b4ec460b5011d1ce"
+      "verdict_sha256": "dfb00fc99f71d9151ccd5541953de77470f0ddd0abe1a7be4bdc6215464b1480"
     },
     {
       "deterministic": true,
@@ -1393,7 +1393,7 @@
       "produced_code": "graph/cross-epoch-unanchored",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "09f05b13e654c9d63464243a587b5700782beb7b30f52be14a1bfa4f2ca2f83a"
+      "verdict_sha256": "e50a5ca7a0aa0a42b92986c35858ed54d3118eb9e8e800647e20b72d20164dbc"
     },
     {
       "deterministic": true,
@@ -1407,7 +1407,7 @@
       "produced_code": "graph/dangling-parent",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "e259eb7a1b57cdaa9f8a53695823b89eadcf751626012ccf32655f15b0d43070"
+      "verdict_sha256": "5922de46bc2478f4f1658cd4bcf0eef822617cc64621ac899a8d50ebb712f774"
     },
     {
       "deterministic": true,
@@ -1421,7 +1421,7 @@
       "produced_code": "graph/dominator-ambiguous",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "32c245e359b69d2e708b1f3f162893fdba8949c757c7123a2b8be34c6e383ab8"
+      "verdict_sha256": "d74efb6db0fce079e2c508ff0bbb1e26743d1466187cf56dea4b5ee1c95d68cc"
     },
     {
       "deterministic": true,
@@ -1435,7 +1435,7 @@
       "produced_code": "graph/dominator-missing",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "06e2350f1fb747a6e32ba3f9f4087241cc304b274d5e598a7c60e9607f86c08e"
+      "verdict_sha256": "dc2b7dad7e96aae809772ddfb03da0d323801b0e73e092df71b89be58e9f554f"
     },
     {
       "deterministic": true,
@@ -1449,7 +1449,7 @@
       "produced_code": "graph/dominator-missing",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "563741037fb069c6eaddd25b8b1863a97f2198a462a82260536e3e6174e44ec1"
+      "verdict_sha256": "0dd1ef60d71dc960ab2d8aaea4d885f813ac6a4a2383259fb452787ed9b7e68a"
     },
     {
       "deterministic": true,
@@ -1463,7 +1463,7 @@
       "produced_code": "graph/edge-illegal",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "636cdc4634e2fa043200a0d3ea4859971da80f4f10d08a5db67bf533db4f9464"
+      "verdict_sha256": "da1c8441f8c28aca224ed4d2bed7cdab4ac5c2d1421b37b990207fb5a7d7c601"
     },
     {
       "deterministic": true,
@@ -1477,7 +1477,7 @@
       "produced_code": "graph/parent-metadata-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "005dc732e7f4505d93195ea766d54fc23c857bc96244baeeedc9245aec9942da"
+      "verdict_sha256": "db83a3b09383f11e9cc80d5921358b8a7c84e6363eb2060d10da1cc17db57151"
     },
     {
       "deterministic": true,
@@ -1491,7 +1491,7 @@
       "produced_code": "graph/root-forbidden",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3e1b8841655e415f5abd0f6fe390e9b2c39ee33149dd5c3c6ceab48a74c2ff54"
+      "verdict_sha256": "b0d5c808d411a1367c8b35e0506bdcbfbe0e4424570feed09f10b6eb430bc255"
     },
     {
       "deterministic": true,
@@ -1505,7 +1505,7 @@
       "produced_code": "graph/root-missing",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "d39e3fc6f544806ad6d3cb3e9d48b1770d1bb32a34c9b31750f56eb5cec4b7a0"
+      "verdict_sha256": "0988c9fc2bb51d70da90826b956b54104a8291d719b47caaba661b92635bfecc"
     },
     {
       "deterministic": true,
@@ -1519,7 +1519,7 @@
       "produced_code": "graph/tenant-site-splice",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4b74ef2c8320c566de8f6d4d4b866517593c74bb5c894265a227b1fd157ceba5"
+      "verdict_sha256": "d2030baf77cb540ad6e56b12a88ea9d3169e45549b601bad237dfbeb3753aecd"
     },
     {
       "deterministic": true,
@@ -1533,7 +1533,7 @@
       "produced_code": "hash/mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "9e17d2a5730620fbbb3276c7c646fbb7dc8eff3dea63e86eb1d5f91de6f83a22"
+      "verdict_sha256": "051eeba394ff14daf098e23204fbc63ea369daad7ee4dfd2401eba493ccb86f4"
     },
     {
       "deterministic": true,
@@ -1547,7 +1547,7 @@
       "produced_code": "identity/artifact-id-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "da92d27b5f0a98f166702c7ad3f635233163caeb2dec5103f191773ef2dfd7a2"
+      "verdict_sha256": "6a771c1d2b8238739562c133d1efc80f2d279902265af2437e6b2dd005627e75"
     },
     {
       "deterministic": true,
@@ -1561,7 +1561,7 @@
       "produced_code": "identity/coordinate-equivocation",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "007994b8cda1751d5fcdd6052ade35b48ee9c5ab79c2dc6aba287900d68d2bf6"
+      "verdict_sha256": "9f2ec1c06d1ab5a16cd5d0a43fc9c1fdbc39a7a6fc607444441359024cb08a3f"
     },
     {
       "deterministic": true,
@@ -1575,7 +1575,7 @@
       "produced_code": "identity/receipt-id-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "703b5250ec0921d20fdeb0ee33198a27a51536f9841377004ae0a681fca05441"
+      "verdict_sha256": "3d5db3509b067a8de1d7f97e28d699d9ffc26455149eca32f75d060bdc4de7ca"
     },
     {
       "deterministic": true,
@@ -1589,7 +1589,7 @@
       "produced_code": "key/not-found",
       "produced_result": "indeterminate",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3d2862d554a7a5452d8bf845f1adca50a6a47aad1029a76602cef9903542ace6"
+      "verdict_sha256": "50d47be1da9583814fc000a0824f552415ac2409f700564553490cd52ab5b331"
     },
     {
       "deterministic": true,
@@ -1603,7 +1603,7 @@
       "produced_code": "key/not-p256",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "1e6d4c92d784f6ef6ee54bdc0d723b72af4bf9757c5b21d44a3f9ffa8684f58f"
+      "verdict_sha256": "05b10c96a61236846a9fd0f5f081b472fabdf10918d77f742560429acf8c479e"
     },
     {
       "deterministic": true,
@@ -1617,7 +1617,7 @@
       "produced_code": "manifest/index-duplicate",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "cb8a403d87d5c1b1af5e8624dc63a4b9dd6ad313adc25ef1ad7b3bee8d7ffc51"
+      "verdict_sha256": "ed38c310a6ac3df09ee8282bb69dfd654023f790ce8b0d19d9c28ec8ab518c42"
     },
     {
       "deterministic": true,
@@ -1631,7 +1631,7 @@
       "produced_code": "manifest/index-gap",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "67cc33d933d4275b0f49bb8ae953a7b8c6757b2449396ed2b14a2965f0393d40"
+      "verdict_sha256": "17e561559053ca63134174dfb59eafcd3c563daae2be3d8c90be281e105cb4e3"
     },
     {
       "deterministic": true,
@@ -1645,7 +1645,7 @@
       "produced_code": "manifest/index-order",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "a4204c0117e468ff1fe6e61293c26c113d76f419a928830504799eb14257d201"
+      "verdict_sha256": "c427e2cd017823a5ddfb9c3336e9b0ce421d3e61d83d19ccc32da80e44d38360"
     },
     {
       "deterministic": true,
@@ -1659,7 +1659,7 @@
       "produced_code": "manifest/index-receipt-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "0fddf7f9c9a0c8da0c6d1db0d839e24f3f263f53284eb1bc20d5fd04f00cc58d"
+      "verdict_sha256": "63ae0c15029aab622440d55782571f21406d3273664014372bbc45a7ef8520c0"
     },
     {
       "deterministic": true,
@@ -1673,7 +1673,7 @@
       "produced_code": "manifest/index-root-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5360f3322c5154471eedfd6b2833532cb9b88a57f0d99db3b90e4560a3a055ba"
+      "verdict_sha256": "2ec7681a0132efcd5c96fa1619674a91760fc83235494688b1d47beacf9ffeb6"
     },
     {
       "deterministic": true,
@@ -1687,7 +1687,7 @@
       "produced_code": "manifest/media-type-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "9bbf4da7d4c14787491b02af19e357a4f97861aa531e632670797633ee40ba58"
+      "verdict_sha256": "5ad22f17651371b9250e3cca2b70917eb8f6f34b426b1151721300eb8408345c"
     },
     {
       "deterministic": true,
@@ -1701,7 +1701,7 @@
       "produced_code": "manifest/payload-missing",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "fb2736efbea56b8b70d1f84ea12208c3b30282b01a779098423372363771b2e1"
+      "verdict_sha256": "f7822dce87c49ac00a8394ec0c8862814dcded283404d02646ecf4dff619ac3b"
     },
     {
       "deterministic": true,
@@ -1715,7 +1715,7 @@
       "produced_code": "merkle/batch-binding",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "fc27ce6e3d7eb50dda0e0face97a3a1b037bef351c8124c20d9de0f77d07c632"
+      "verdict_sha256": "14f0aab254212cf04452f13ab5b4d24261305f6aa4750bb056b94a9984fa5bb3"
     },
     {
       "deterministic": true,
@@ -1729,7 +1729,7 @@
       "produced_code": "merkle/duplicate-leaf",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3adb708f1030c7fe0723d53697aa8c8343c5a9d21254f802bff92da4178d0bf3"
+      "verdict_sha256": "76c50c09c96a6f37155beeafbf1d1dd1e0f1c67ab176005b0cbcbce4b682e4c0"
     },
     {
       "deterministic": true,
@@ -1743,7 +1743,7 @@
       "produced_code": "merkle/path-length",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "248f22a05d029d39ec49c93edd11ab8c3f45744af63f393ef217ed47ed4e5d9e"
+      "verdict_sha256": "56ea946d0970977a77c612eb34371012a83d7f6df5f5ecddcf310c691cbcf06c"
     },
     {
       "deterministic": true,
@@ -1757,7 +1757,7 @@
       "produced_code": "merkle/root-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "6b7f05f17c7fb407b2b29fe7a8c9ee23509b31005d6ff9c034247115a908c662"
+      "verdict_sha256": "21b2169a058f009d3b181f3f1bcb3798d3cae8b8b5275352e4f5d65fcb48b941"
     },
     {
       "deterministic": true,
@@ -1771,7 +1771,7 @@
       "produced_code": "receipt/action-command-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "9e95d508d508c9f977e1b2f17a20c9503bc762f638e43e3c187e52ead3040bae"
+      "verdict_sha256": "1178abaa7bd793b32ce953dfdf7b653a7ca1b5f5393cc383b7f64ea786d1c5a9"
     },
     {
       "deterministic": true,
@@ -1785,7 +1785,7 @@
       "produced_code": "receipt/attempt-disposition",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "2a08e7d2628568dc770da9c8ae482eba25816ab8afab0400b3e3b5de4bd9f022"
+      "verdict_sha256": "8c357949d444b44dd16a38580133cfb13f186cdbd9126cd1b9be7801706effa7"
     },
     {
       "deterministic": true,
@@ -1799,7 +1799,7 @@
       "produced_code": "receipt/consumption-ref-unresolved",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "dc62e9b379c4cd4f7ff1e4213b9eb868197f58d24d57aef16c774721db4cec17"
+      "verdict_sha256": "a4ff53722206811913902bd2a51c2018777d34cdef7a77a4a0bc0d79474c66e4"
     },
     {
       "deterministic": true,
@@ -1813,7 +1813,7 @@
       "produced_code": "receipt/decision-presentation",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "0d1aa4f60ebc20134a800491ff2db1f1e278dc8174aa889d6032bd69866f2ec6"
+      "verdict_sha256": "30908bab76f2137efbae33bdb527888a7bdde398a151da3980144475bb1475c9"
     },
     {
       "deterministic": true,
@@ -1827,7 +1827,7 @@
       "produced_code": "receipt/dispatch-attempt-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "46e503281ae40c0e6d654ecb71a489760377ddc4640102eebfb7f6a4f3e199a3"
+      "verdict_sha256": "e44c0d8b756c50de449b76eedf786702c7f0382e00307ea8e3534443e47e753e"
     },
     {
       "deterministic": true,
@@ -1841,7 +1841,7 @@
       "produced_code": "receipt/kind-body-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5db06727ddc1ef91224abbf2eb8ab04b82ac12c5f545b49b3a52e02744475d1c"
+      "verdict_sha256": "19db505c3a67545a4820c3414ab19403a10ddb21c1bc7d542632a77e15fa3291"
     },
     {
       "deterministic": true,
@@ -1855,7 +1855,7 @@
       "produced_code": "receipt/manifest-inconsistent",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "fc49ace46c7ba2625739aa2c9f79a7989dae6e620fbcb9c8e37d7d04efb8c5ca"
+      "verdict_sha256": "2d895e7202be32cfa519c52393cda81981d57a1705d3627a81fde6849eac576e"
     },
     {
       "deterministic": true,
@@ -1869,7 +1869,7 @@
       "produced_code": "receipt/outcome-subject-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "249f07bc373fc7b16caea7d2409814f117b9439047634862bc68f8e95cbf401f"
+      "verdict_sha256": "ba2c70931051df804b3b3b8f619923f261bcb28660046fe0cd30dc3a6cffd8cd"
     },
     {
       "deterministic": true,
@@ -1883,7 +1883,7 @@
       "produced_code": "receipt/signer-role-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "cf0b980fff208fe0802a19d23d415eae168d9bfcf99951b35d701f3b5236018e"
+      "verdict_sha256": "ae85bdbbcee439e8cc5f8abf86e7c9e47241d022aefc22da2a8160bd96a8945c"
     },
     {
       "deterministic": true,
@@ -1897,7 +1897,7 @@
       "produced_code": "schema/enum-unknown",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "9448148d4f23d27239140dad2522883dad8b83219071a9a2863eff93bed53a12"
+      "verdict_sha256": "6e4517a97dc335c08483f376fde7140508a643d01da5772c7ad323012e997456"
     },
     {
       "deterministic": true,
@@ -1911,7 +1911,7 @@
       "produced_code": "schema/enum-unknown",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "7d473370700f2c7738ed1c9b8ecd2a4e714ef9db27ec64f45498dd5dc08ed0ea"
+      "verdict_sha256": "ec66099ef8d90dec35193f722c8e93a7fac37d232eb1d78079a938f844f3ce7d"
     },
     {
       "deterministic": true,
@@ -1925,7 +1925,7 @@
       "produced_code": "schema/bad-type",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "f42b4cd6243944705aff93a62aec7cd1d2fbbde2f62d2fe227783b14f0bee059"
+      "verdict_sha256": "18cefd4af4538d6995406fbfc66c3156080696c032224ef4f81659a5ee78ef9e"
     },
     {
       "deterministic": true,
@@ -1939,7 +1939,7 @@
       "produced_code": "schema/enum-unknown",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4ab4e4f51cd5b8acbce3aeeef687f9cae1d78a0e69b42543027895b3cd9ac78f"
+      "verdict_sha256": "f1d21c9cb2cdf7504f66a1d15401c4c5e13a16e53870a2201c180b1f59ba7185"
     },
     {
       "deterministic": true,
@@ -1953,7 +1953,7 @@
       "produced_code": "schema/out-of-range",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "181254f344619ab260ec702ecb86167951b14fff46563b23ccd4869141cf3525"
+      "verdict_sha256": "f24edf4f3b1a1351cfbeb934978f2bd4b7d714f67403d847af1d2145f01b2c24"
     },
     {
       "deterministic": true,
@@ -1967,7 +1967,7 @@
       "produced_code": "schema/out-of-range",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "2171d339dc2c0a202b80dbdc4ed5f75b2c61aba0d2deb40c5227d9dcdf6f3429"
+      "verdict_sha256": "23c05587fad756ea9f427f3cb143f9a6876beaff3b3c7d16109abd63012731de"
     },
     {
       "deterministic": true,
@@ -1981,7 +1981,7 @@
       "produced_code": "schema/missing-field",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "57f8747b72da391ed9ba1c1fb7b787ecd34ca2fa768d640ba904f0c6afecc9bd"
+      "verdict_sha256": "8d3a2d789747c7a7894528b87dcb8f42196a4b3026d8df178b999ec3ed24ffd6"
     },
     {
       "deterministic": true,
@@ -1995,7 +1995,7 @@
       "produced_code": "schema/enum-unknown",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "373b1f846f928f590074a16210f126d7d8db9737dd14791113c2a7c59c3d15e5"
+      "verdict_sha256": "788c04a04d63ac30af8f88d661c10fc3c0970aa2a1f4bed285f40b48e411beb8"
     },
     {
       "deterministic": true,
@@ -2009,7 +2009,7 @@
       "produced_code": "anchor/independence-invalid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "b607c2660c41c35f5730fdf13c4ed28aa65457cec681766127f7ec2459b29832"
+      "verdict_sha256": "dd1e4d1cbc327f7b53e50e8a29c968ef977ea27a1038117cb9bd87c8b78bab54"
     },
     {
       "deterministic": true,
@@ -2023,7 +2023,7 @@
       "produced_code": "schema/out-of-range",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "980a7580175349e79534062a1a9089dc08d10974b76019aef3da69096cc2403c"
+      "verdict_sha256": "72d3b89e91fab6d36ca275b8b3d0676ab803512de9e9c59933489d3b9a819c25"
     },
     {
       "deterministic": true,
@@ -2037,7 +2037,7 @@
       "produced_code": "schema/out-of-range",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "16b2de4cc150a20fb051354fba822cba92013dd059d853d303ad4a026884684d"
+      "verdict_sha256": "29a0bc11e8f021895e8f3615759edd3b20c9ccffc36d09cf87a45ed3fb439936"
     },
     {
       "deterministic": true,
@@ -2051,7 +2051,7 @@
       "produced_code": "receipt/action-command-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "11b81e6d4373a5a2f8b6a83ebc6c689e8ad59549ccad7222d541d43960a20542"
+      "verdict_sha256": "3fcd015037ef1b2c7e22f61bf43153b6fc84407fe61badd00d610a52f93c76ef"
     },
     {
       "deterministic": true,
@@ -2065,7 +2065,7 @@
       "produced_code": "receipt/action-command-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "496fdb842bc5e94cc37699cd9f80f02ec5def26325912202b33d78ae01425f37"
+      "verdict_sha256": "a02fcc4b60e4143a490519177f2f89c8c34550d50ecf903904345ba271be08f6"
     },
     {
       "deterministic": true,
@@ -2079,7 +2079,7 @@
       "produced_code": "receipt/action-command-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "0d12716cecacde58b8b6d2d025815051f1c2d53158ff23e7ce44ac566085e8a7"
+      "verdict_sha256": "bd9d14052897b8f1ba39fcd597c142a81feca6618f90328aa7a7629e7c653aa8"
     },
     {
       "deterministic": true,
@@ -2093,7 +2093,7 @@
       "produced_code": "schema/bad-type",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "088b2bd7cd44b3ccf9d59de01192b7e80d235be10887b61e81da5c485cfe028f"
+      "verdict_sha256": "62bb9e2d56dc538d8efbe6c6813e3cc00b792d212cd3bf2a48a559fefdbcef0c"
     },
     {
       "deterministic": true,
@@ -2107,7 +2107,7 @@
       "produced_code": "schema/enum-unknown",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "79ce473f614f1a2fe86979d7d5b0a200224e02c65708f7029e339e06bfaa9778"
+      "verdict_sha256": "58817dcb206917aaedc8b42bd8d518292f6a1af921c82b0e43023bd676681023"
     },
     {
       "deterministic": true,
@@ -2121,7 +2121,7 @@
       "produced_code": "epoch/open-close",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "e26aceee65407972cd597aaf8eefd0f731b8834fb76ab78ae84c1df1632fde92"
+      "verdict_sha256": "29052a9a1ed4bf56667c676d02e1cf999172ef892fd8912166178ebcd4f27038"
     },
     {
       "deterministic": true,
@@ -2135,7 +2135,7 @@
       "produced_code": "replay/expired",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "b624e8aa1971eb3b9f435ed8f7030a33f8a2f8138f4299b3c2e144f2bca4c8d7"
+      "verdict_sha256": "a67ebbb357be2bfe445d6f94dc42eddfbfa934c00fc75a963bc0c5dc12fee659"
     },
     {
       "deterministic": true,
@@ -2149,7 +2149,7 @@
       "produced_code": "replay/invocation-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "fb6d83bc2e142890082bfffc869cdadd55c5d0102db0248030d1da95d49edac4"
+      "verdict_sha256": "418dec7d36c2a73ae25da362fd2e61c5fcdee109ccb60c449a4b4f1909c1bb57"
     },
     {
       "deterministic": true,
@@ -2163,7 +2163,7 @@
       "produced_code": "replay/not-yet-valid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "ee92a57c8f8b869d0f0547133bedd73dedfe2e60f6e1c581f91bf6baea30e09d"
+      "verdict_sha256": "69ba2a718584abb8a69f55425949d8bec08a871b221707dd185df9e55294cf3f"
     },
     {
       "deterministic": true,
@@ -2177,7 +2177,7 @@
       "produced_code": "replay/one-time-reused",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "1ac100c9012698fa82fc989717c8f83928c981f9cf207197236b3d45ae00a46d"
+      "verdict_sha256": "93e4a2848267f99ece3592bdfbb12fa7c6f47288c0bd3fea2f02723d3dea8362"
     },
     {
       "deterministic": true,
@@ -2191,7 +2191,7 @@
       "produced_code": "replay/parent-binding",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "af31dfae5ae4aedc6508e3598c0002d587a0ff5a143fbe8fbfb66864f67488b4"
+      "verdict_sha256": "3d6703b7a83e7bca0a3bbc306180fd026f6625f79090cfab7e37de5641da0c54"
     },
     {
       "deterministic": true,
@@ -2205,7 +2205,7 @@
       "produced_code": "request/commitment-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5ca006b79cf383732e6d69b837fd5bc5444da5709a586cd91b8e0b060e3514f1"
+      "verdict_sha256": "90355b14876dd544c709990f3a643386de61fdf2ee94d888df40766a71b05f4a"
     },
     {
       "deterministic": true,
@@ -2219,7 +2219,7 @@
       "produced_code": "request/coordinate-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "304b7e2917fe1bfd887c66addb7ed35b79ccf5f1ef600e41d72e632f5e588682"
+      "verdict_sha256": "0ca61f0f087100747f74f03a9baf22890bf3a1a885debd3f772e31f2601833b8"
     },
     {
       "deterministic": true,
@@ -2233,7 +2233,7 @@
       "produced_code": "resource/bundle-too-large",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "801435546a4ef436621a44b16072deeaa99288ae599d6ae5f2d9028729dd01c8"
+      "verdict_sha256": "386de192a73011ea820944a27922eec8198186a654ab62bf0390d72f40157ce6"
     },
     {
       "deterministic": true,
@@ -2247,7 +2247,7 @@
       "produced_code": "resource/cbor-depth",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "dcf4ffcc429a304c29515e3700ff26b2c2cd7cae400690c0c7d79943ba69ef44"
+      "verdict_sha256": "665c51a3eacd2b2192a9f5199759a68126fac72caf1ebbb4891a320e8d67e2d3"
     },
     {
       "deterministic": true,
@@ -2261,7 +2261,7 @@
       "produced_code": "resource/dag-depth",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "264d1cd909efc68d9f908964cb5c7ba450997021f8c95150e7d8fb55e9de9da2"
+      "verdict_sha256": "8f5ed452a631ada46ddedae46350000cc1c5e0f6ee326a9fef56d74d28350c73"
     },
     {
       "deterministic": true,
@@ -2275,7 +2275,7 @@
       "produced_code": "resource/dag-width",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "6e5f9cb7788b401c25dcb439ae1bc223307cb5f0b2a4cbbc79ac6a84f5fca796"
+      "verdict_sha256": "2be4ad2966f12fd0deaa8cabecf2b7d44f12787bc4f4a5406ec53917dbaa4c45"
     },
     {
       "deterministic": true,
@@ -2289,7 +2289,7 @@
       "produced_code": "resource/edge-count",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "693d8aa8d8999a662ada3dc6b1ce142df805e2cb4771438ee03cad49be2e50cf"
+      "verdict_sha256": "9c609cc394e0030196817aa54de04bc3183dffef596e3029ae9104b1d87d1aa3"
     },
     {
       "deterministic": true,
@@ -2303,7 +2303,7 @@
       "produced_code": "resource/node-count",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "f5f0cef09c051bf3d9aee8d68149ff898ff42336ca3140e16da3c37baca1acf2"
+      "verdict_sha256": "4acfa2796c076adc4b47affd064c8e5e71c01854c3fa782b20169131b9303cb4"
     },
     {
       "deterministic": true,
@@ -2317,7 +2317,7 @@
       "produced_code": "resource/parent-count",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "c0564d1d80fc9cbd3a3307d9e79ddbb8cba1481680d833d415c8086a58b2dcd5"
+      "verdict_sha256": "9c96d763e78ca7db86aeda18c771c6fd1967de61e62e440ddd20842efbb230b1"
     },
     {
       "deterministic": true,
@@ -2331,7 +2331,7 @@
       "produced_code": "resource/proof-too-large",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "cbf7a99ac558e6c3ee20b48b072a9e161bf1369739f7a901b8f114b2c4d29a00"
+      "verdict_sha256": "903bcd94cef2382e711b8b448eb7f8611db91214fd06d5fee2c3997929f622e6"
     },
     {
       "deterministic": true,
@@ -2345,7 +2345,7 @@
       "produced_code": "resource/proofs-too-large",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3aabffa12d1ef73b233847ad8da94d348b92bf828bc9c0964edd92c7ef94f1c1"
+      "verdict_sha256": "1030e2822d472eef49d8e85287ec949400003cb0f0a79bc0c6bea81b0f6bc64c"
     },
     {
       "deterministic": true,
@@ -2359,7 +2359,7 @@
       "produced_code": "schema/bad-type",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "e2454b32fe08d014fdf013bb4eca1087a5b013aeb0504cbdacbe7a03f2c9124c"
+      "verdict_sha256": "4b4e3fad5cecd743b9ccd9686d6d9b24f1f72644e0bfd3239c47cafd70a767cc"
     },
     {
       "deterministic": true,
@@ -2373,7 +2373,7 @@
       "produced_code": "schema/digest-size",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "2d6d6ab70c595ff287420ae5a5ee7493db799b78483959df667c6597cd9358a6"
+      "verdict_sha256": "bd0b709e92fa0465d62757a665351879b91fbc8d1fbfc55677e7aebaf778b353"
     },
     {
       "deterministic": true,
@@ -2387,7 +2387,7 @@
       "produced_code": "schema/duplicate-entry",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "85bd008c0bcbc8488c6ec7294f0172d47121796e7aefb99906f16fb1f8ccd6d3"
+      "verdict_sha256": "a428f3a3b8bf97afa8a9884297da4611769e073d95066abb49967f83b0c35e45"
     },
     {
       "deterministic": true,
@@ -2401,7 +2401,7 @@
       "produced_code": "schema/enum-unknown",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4df6f71bb71a1b057a27681621e53ae25cef04894bafbca7b1d57b523d8f9ba1"
+      "verdict_sha256": "b29ee51ab3d141dc815d2297515d1f7b12e909edce95ddf300c7f9d3e8cf35b0"
     },
     {
       "deterministic": true,
@@ -2415,7 +2415,7 @@
       "produced_code": "schema/missing-field",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "d82519d4e9f1e0407afff8947bf62fffa36125cb143930c0589f75257822d1fe"
+      "verdict_sha256": "79e62af85df6b4886a1c93abe77e0a7f869359569792aeb8f40464aad92f4825"
     },
     {
       "deterministic": true,
@@ -2429,7 +2429,7 @@
       "produced_code": "schema/out-of-range",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "6a70078109cb2e4c70160f0d3076c0d6868f86008ead16d6310e09450fb5e818"
+      "verdict_sha256": "fda9ad387c431b4619125d495f932d0890c75ed2ee58744ddb5a879b4a4a2361"
     },
     {
       "deterministic": true,
@@ -2443,7 +2443,7 @@
       "produced_code": "schema/string-size",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "8f157c2337b6ed4926061afb09b703492f08d41237c468507d451e640878f9aa"
+      "verdict_sha256": "3e3e4fbbe26cf1be5d63038f4d7323b1c9a177e4d993e4df31509849375522d3"
     },
     {
       "deterministic": true,
@@ -2457,7 +2457,7 @@
       "produced_code": "schema/unknown-field",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "ac0b635a4d6027037e1b45999603f0f9b5d8fe6b97f9488ee0689f12e1f921a9"
+      "verdict_sha256": "bbd218cb4379c2e5925192b92b326d92805342f53be6b18b275a84bdde63bc9d"
     },
     {
       "deterministic": true,
@@ -2471,7 +2471,7 @@
       "produced_code": "schema/unsorted-set",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "88d160fc48aab785bd305e2170235b88570f464e11429bffaaaa03199beea8d7"
+      "verdict_sha256": "1f298a2708f5f9f99a3920d5bb0cf32a02b261db97826c1eda2d22288ad0e485"
     },
     {
       "deterministic": true,
@@ -2485,7 +2485,7 @@
       "produced_code": "schema/version-wrong",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5deb30e7ec25fbb4b4578110760da44f73e433d360c2f9e33b15790a323fc8c4"
+      "verdict_sha256": "3418e08d8cd90950059ed592cb538b6a79b1f570de1d371db16b9c505fb86bda"
     },
     {
       "deterministic": true,
@@ -2499,7 +2499,7 @@
       "produced_code": "sig/bad-length",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5d9446ba6af737f8801e4fc0453d64d906432843819f234fba7b19775dcb62ca"
+      "verdict_sha256": "f4f1c8a7b748355c4eed543d9bbe15064a2ea3d188ba3988ab3e7990b860bdec"
     },
     {
       "deterministic": true,
@@ -2513,7 +2513,7 @@
       "produced_code": "sig/der-encoding",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "855922f48302bd443d73a5a1f2b41b89b21f010e5f11512ac2da13eaf10348b6"
+      "verdict_sha256": "c0d3e05666f930aec37c734b7344142057748123b0c6ff136be82de802e1a5fe"
     },
     {
       "deterministic": true,
@@ -2527,7 +2527,7 @@
       "produced_code": "sig/high-s",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "e28b76d1e00a39f45755722227c6f751bc87d6d663499548f3791a6726ae76e0"
+      "verdict_sha256": "ec24efecba91f50ecdf494f60d3df30a5a852d25426549153553f7eec75eff9f"
     },
     {
       "deterministic": true,
@@ -2541,7 +2541,7 @@
       "produced_code": "sig/verify-failed",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "16d0ac4ca60df86d8c599c28f9068514158e7544987ddb870cbe24fcbbbbbd53"
+      "verdict_sha256": "2ae01acf4b331763650c674d61f897fb207c4f370faf3c1d6ec5287d32fb54fe"
     },
     {
       "deterministic": true,
@@ -2555,7 +2555,7 @@
       "produced_code": "sig/zero-rs",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "b1605e878209cfba05203b08977700f8e3ee53215a067c5fdf0f2d30bec8fcfc"
+      "verdict_sha256": "a5f21002260e9508ba6c104d9f60b5a7f09d71c17c7596024f17024a823a13db"
     },
     {
       "deterministic": true,
@@ -2569,7 +2569,7 @@
       "produced_code": "identity/epoch-sequence-rollback",
       "produced_result": "nonconformant",
       "stateful_properties": "evaluated",
-      "verdict_sha256": "6fec1c32cc72762e7a7e00d9974dc6997e2619705df92b556649ce090792e4b8"
+      "verdict_sha256": "6c2683252a4c04f462dde2cff9115ce563ba72c105829ae7621bf3d826e2d995"
     },
     {
       "deterministic": true,
@@ -2583,7 +2583,7 @@
       "produced_code": "identity/issuer-sequence-rollback",
       "produced_result": "nonconformant",
       "stateful_properties": "evaluated",
-      "verdict_sha256": "a8f143fa41946bc9a66e84527394d4584550c2f75fef6e1e9e2358b44028afad"
+      "verdict_sha256": "8917998022caebe1f504b337eb00dd74ec604dc3f0600d62921a25e1cea3091f"
     },
     {
       "deterministic": true,
@@ -2597,7 +2597,7 @@
       "produced_code": "identity/reuse",
       "produced_result": "nonconformant",
       "stateful_properties": "evaluated",
-      "verdict_sha256": "7db79575e6b46a7955e476368ae582e697fd7277ca32ac605100a55ac2d21d87"
+      "verdict_sha256": "660fae966ab702a29074968431a3e82e8f8a831e4e3230120f54879b86959a4b"
     },
     {
       "deterministic": true,
@@ -2611,7 +2611,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5a73051173b2edebc343e1de00ac14279a3d109d46f768cab33c56c8dea84436"
+      "verdict_sha256": "7c91e3fe329c0111e0118c98ec9efadd087929c4658ad82b54321384249dbae4"
     },
     {
       "deterministic": true,
@@ -2625,7 +2625,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "ffa95ce2a97aeff44decb2febb3fbf63b27a8ce990ac8927ec6e76ee2ff22e10"
+      "verdict_sha256": "25f1226ee270e0f8b4c86fc31ac985ce145da287f3e660022e6561ca51b75b43"
     },
     {
       "deterministic": true,
@@ -2639,7 +2639,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "6a53d31c44e463672c044cde87ebe46ec3bd1dbb7c8a49727abb05376dc1e3f8"
+      "verdict_sha256": "409a7af07ff6df762d0fe0caafcbd3e80e98dfa9caa451e257702fec472b3df4"
     },
     {
       "deterministic": true,
@@ -2653,7 +2653,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3950dfbe9c093c37b0d272b14eda7cec69cfce5baad2d86f973355afb9d9e84a"
+      "verdict_sha256": "5eb1c6f5b9aa8a7ada811d2a41252bbd8665b35ca41c0fde5af53e69beb7ad4c"
     },
     {
       "deterministic": true,
@@ -2667,7 +2667,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "bd3c6e997fbbc9e7e823a45986ac5d99bfa2125bbcc94fcd9879789eec375889"
+      "verdict_sha256": "c6fe36feb3d17aec091815435fc6a61cef60653916d28e2bd916f8432748f394"
     },
     {
       "deterministic": true,
@@ -2681,7 +2681,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "2d28b3d7cc926338161ade9116948f5d5e5cec0f10be3db1839382ca07f1d00f"
+      "verdict_sha256": "e456dfa5e10278a052ccf11bff6e05b33ada522ec4ef852338334e81cf33bb61"
     },
     {
       "deterministic": true,
@@ -2695,7 +2695,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "cc97c04f37935436889e348437cdbec9839c9b94cf58aa77b87d9a4c4653c8ee"
+      "verdict_sha256": "4cdf822eba842889171a564e3a05e32c32084af9e20fbd6bdda6d4173b7446d7"
     },
     {
       "deterministic": true,
@@ -2709,7 +2709,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "fb5dce96bfad66921088035b34c697fd4c2e9d0999bf2d7eac1fb371fb47c42a"
+      "verdict_sha256": "a25099cc1ad65fd9e0e827187f7075e6bc89e4bac844aa771e2723cb41fbbdc4"
     },
     {
       "deterministic": true,
@@ -2723,7 +2723,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "f006ecbd3ce6e4305d7ea5444799d8ded18b0c9b4c3764118f097e0b0a7fac6d"
+      "verdict_sha256": "47f0e9ddb4e76dbddc140f78425661bed1c9b31d050ce9c87f395149778a1879"
     },
     {
       "deterministic": true,
@@ -2737,7 +2737,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5dbab3ae543178ba08ed8105f6c9c9108472a7fcd11f84af56517aa166df2a5c"
+      "verdict_sha256": "a4f8f4b2616aae75d5487c212d660f9f93c56eab1da241d42aa64bd6791babbb"
     },
     {
       "deterministic": true,
@@ -2751,7 +2751,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4392e732677eda962e50ad0bf21a5fd1f43b0710be65782078f4f81d50d1bedd"
+      "verdict_sha256": "f9c5d6006820c68e08ead0e8c38969208ee0f19f85d7cf3c6104fea51bf7c25d"
     },
     {
       "deterministic": true,
@@ -2765,7 +2765,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5a2634589c163a9c3fef19f7fd9e5bec3b79f4673f9a140654d19faf7bb0333a"
+      "verdict_sha256": "25c909edd74c6e826e003708674f3acaaeb7e10cd439fe05647673d8a1deff7f"
     },
     {
       "deterministic": true,
@@ -2779,7 +2779,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "67c4f73574bcdc1ca18a759d4659c2eaf1e8b54c968bc85cb2033c76ff527db8"
+      "verdict_sha256": "dac0f834a9671040186c085de380e34805392b4ad4a1b8f8d934ef58066f955f"
     },
     {
       "deterministic": true,
@@ -2793,7 +2793,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5c4df3ad5fb102353b9ad36b2ac3ffecc91da010985e1d095dba632dfe1e650c"
+      "verdict_sha256": "a90e4edfbc0adc69109b81832a424e79c70de60de857792cf66311e8be7bb5c8"
     },
     {
       "deterministic": true,
@@ -2807,7 +2807,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "127d4118872d868c74c955b071b8200c42cfb198cd6b4aa2cf7ab176462467b3"
+      "verdict_sha256": "b89c260c5d921a0dcddcbad56ad9cda33ce2a7922a982e90907060cef5c0f8f3"
     },
     {
       "deterministic": true,
@@ -2821,7 +2821,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3aec3b5074030471256fd3c621c7a3c19dc6d525fde716eefd3a42942fa5ba65"
+      "verdict_sha256": "0bdef786730d1a3883fdfe99b305f08359e5f66174194c11f4e95349fa3f7505"
     },
     {
       "deterministic": true,
@@ -2835,7 +2835,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "b66d6cbe4c359acd6387e472d4bd8ff97574470e1e243255467ffa52acf02bef"
+      "verdict_sha256": "191b5d3b4f5c666b93f8a55ff35385e88cab09bdfabaa8cc00823f3b7624655c"
     },
     {
       "deterministic": true,
@@ -2849,7 +2849,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "82f35c05a5f454d1432a6bd81595d5ee7b36829e05a5a373075eefec726f2c62"
+      "verdict_sha256": "bd07284ac4ee9d1427557ec36cc6616fafaba130595f06a32f0519e375544afc"
     },
     {
       "deterministic": true,
@@ -2863,7 +2863,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "0730bce28800f22eb553f80e7b8a065fc3ea41545fbe961372f19ebdb5420abc"
+      "verdict_sha256": "c5d4660917d29cf0dde284a79be1163ca839e4d94f26031bf2acc09adb66e846"
     },
     {
       "deterministic": true,
@@ -2877,7 +2877,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "89963699ef3b1817c702c8e416fab2c490d98b0ef6628bc78d9a394daa67a376"
+      "verdict_sha256": "38842d94cc503c8be5f654dd312f97d87ea23b754d9edfde14f994480e12aaf4"
     },
     {
       "deterministic": true,
@@ -2891,7 +2891,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "1a5e3f7f241fc5924c33d7e5ddb1457aaa88f456ddf1b50be95d842a224f63db"
+      "verdict_sha256": "0a17f6382860b12e9eeab4298d7de13cabb8d520f03fae72a6e9ce9e3781e846"
     },
     {
       "deterministic": true,
@@ -2905,7 +2905,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "99abad6ea253b45c2a28fc21af4aa2e6b519bc9d0271e1e243cd7cb71d295b5b"
+      "verdict_sha256": "f6349d069494e4fed6e0b9b2a69fc45a1b0e7be58f37521ed7518974110b39d9"
     },
     {
       "deterministic": true,
@@ -2919,7 +2919,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "cfad0cbf49bfb418db0d23a5faa1aece9b00c1e1ad35ec2c04a6d41d5ef67599"
+      "verdict_sha256": "dea17d88d3bcc251d42ec66caaa024a75d6ee9b53713db428bc567a694e020e2"
     },
     {
       "deterministic": true,
@@ -2933,7 +2933,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "9c4e4790c43278df574e011179cf5a581912c367c9ebe8deb085a071c751cc5b"
+      "verdict_sha256": "b4419a54f014a2f9a558239077d025d7e325964f66a16656c6a7352ebf8d8545"
     },
     {
       "deterministic": true,
@@ -2947,7 +2947,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "bf0d9161cf3025bf1bff2fc675f50fca08ef2623918dd9d25bcd14532be560a2"
+      "verdict_sha256": "d25516eb59f69e3e876e17b9d64eed46eb93729f3e5e03202147aa27743dd0b7"
     },
     {
       "deterministic": true,
@@ -2961,7 +2961,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5cdf4251bf0cc61e522b9bc7c28e35977ee49b8edde61a048d6e28aad65799d4"
+      "verdict_sha256": "342a0b6865b531897de31f4fa360111c979d81e5fe76008461f720552a03d837"
     },
     {
       "deterministic": true,
@@ -2975,7 +2975,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "9526056e66ffa4d71b077cfb83402826b2c74be87de545f8bb73c69265ba16a3"
+      "verdict_sha256": "87c0d48bba232a3c541b223cef6b05299be3e2481b54122139ad02da3183af72"
     },
     {
       "deterministic": true,
@@ -2989,7 +2989,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "7707a1a5a5e53da45833383d2f6dce4c3550a5b0a8b5ca3884fd52efc8f4f9a6"
+      "verdict_sha256": "78719be1ec135b611b4e0d7fdd31899ba3776d9efbd8ae7f1280c0ab55f09f2c"
     },
     {
       "deterministic": true,
@@ -3003,7 +3003,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "9e9c4ab2160668be8a6a507cd043f8a3d1b1bc05ab9dde8b9770fa009f6f2f74"
+      "verdict_sha256": "0a5b1e114544157710d496bcc78ab7be180fc64d9f6d1230dac826222379a5de"
     },
     {
       "deterministic": true,
@@ -3017,7 +3017,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "1f3c95947037cbd6c4976cf65b36c3f286ad4b604287b4c550ec527a7954402e"
+      "verdict_sha256": "5b86c0cbfef169e90221efb458b8dc6880de6268d596d4bb9d20376e6b6fa727"
     },
     {
       "deterministic": true,
@@ -3031,7 +3031,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "f212761087deb2c24c9b6851282d5acdfa2e108b030128f169d578faedba5b01"
+      "verdict_sha256": "ddaddc32ae9883191760a1a54f28324f973e15beebb22b19f5630127b022ff54"
     },
     {
       "deterministic": true,
@@ -3045,7 +3045,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "76961bf2deb1f889013fd2dd2015f79b7f502b8da9c470a55ba704be032eac7b"
+      "verdict_sha256": "f5f28ed9b8437fb44ebce592cfb67c728d425c627865f96dc68be8e90b300001"
     },
     {
       "deterministic": true,
@@ -3059,7 +3059,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "a5a8d4620514ffdcb672663b5862206ad4d70efe5a0e82066a992e017d4c6b72"
+      "verdict_sha256": "b692843149fb4ea66d30f8d52ee84eaa40e39a9045f8d5cdf484c3aa31bb3418"
     },
     {
       "deterministic": true,
@@ -3073,7 +3073,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "7f472112ca0f54378274e2c64f6b204a645efc7fa6eccfb64285a3e8459d4bf5"
+      "verdict_sha256": "267b90667b5c650123d7e3999776a4a6048a4ea0def4b3ac06ac53389993cc27"
     },
     {
       "deterministic": true,
@@ -3087,7 +3087,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "8ae76db2f2d467a946f98dab5f3ab15236764e1b7a075b72ba41fae0503370c0"
+      "verdict_sha256": "8cca8d530f251e7a30293d25b844012e8ca538d8b97dae06a93bfc6864274cf8"
     },
     {
       "deterministic": true,
@@ -3101,7 +3101,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "434b148cee1173633616299b58ba7e0ba1a758e22d54cbfed635c6827a7b9e7c"
+      "verdict_sha256": "ec243ad25aa29301ab94bd3646b14101868613232d7e1daff0530c1408599a17"
     }
   ],
   "fixtures_evaluated": 219,

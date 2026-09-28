@@ -1246,3 +1246,26 @@ fixture change. The same-operator demo precedent (D-69) went the other way
 because that enum value carried an independence claim the demo had to state
 explicitly; an empty snapshot list claims nothing. Proposed by the reviewer
 (D5 oracle, headline finding) and accepted by the gate 2026-09-09.
+
+## D-76 — Prior-emission history is committed into the signed verdict
+
+**Decision.** Extend D-51, without replacing its existing preimages, with
+`prior_emissions_digest = SHA-256(deterministic-CBOR(["AAR-VERDICT-PRIOR-v1",
+prior-emissions-map]))` in `verdict-trust-policy`. Section 5 of CONFORMANCE.md
+freezes the closed `{ entries: [...] }` map, entry fields, and strict unique
+ordering. An empty or absent `prior_emissions` array in a supplied file binds
+the empty entries map; no supplied prior state uses a zero digest. Absence of
+prior state uses 32 zero bytes, and duplicate or unsorted supplied entries are
+a usage error. The required key raises the verdict version from 2 to 3 and the
+declared spec to v0.2.1; the protected v0.2 content type and receipt fixtures
+are unchanged.
+
+**Why.** A read-only external review on 2026-09-27 demonstrated that the
+issuer-sequence-rollback fixture evaluated with empty prior history and with
+unrelated prior history (a different issuer kid) produced byte-identical
+signed verdicts. The real rollback history flipped the result while every
+trust-policy digest stayed unchanged. `prior_emissions` governs
+`identity/reuse`, `identity/issuer-sequence-rollback`, and
+`identity/epoch-sequence-rollback`, but D-51's `replay_state_digest` covers only
+replay entries. A verdict that flips on an input it does not commit to is not
+a complete signed statement of its own evaluation.
