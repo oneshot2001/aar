@@ -96,7 +96,7 @@ test.skip("every corpus fixture has identical result, reason, and signed verdict
   const proc = Bun.spawnSync(["python3", "-B", "-c", PYREF_CORPUS], { cwd: root });
   expect(proc.exitCode, proc.stderr.toString()).toBe(0);
   const rows = JSON.parse(proc.stdout.toString());
-  expect(rows).toHaveLength(232);
+  expect(rows).toHaveLength(241);
   for (const row of rows) {
     const ts = verifyBundle(row.context ? fromHex(row.context) : readFileSync(row.path), {
       evaluationTime: AT, replayState: [], priorEmissions: row.prior ? parseStatefulPrior(row.prior) : undefined,

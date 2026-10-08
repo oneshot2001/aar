@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-embedded-delegation-issuer-forged",
+  "expected_code": "credential/usage-mismatch",
+  "mutation_description": "Authority B signs only the embedded delegation naming authority A, in a valid authorization-only subset.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

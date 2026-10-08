@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-root-subject-clause",
+  "expected_code": "credential/usage-mismatch",
+  "mutation_description": "The real root signs an empty-path credential whose issuer is that root but whose subject is a different key.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

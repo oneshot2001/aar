@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-delegation-issuer-forged",
+  "expected_code": "credential/usage-mismatch",
+  "mutation_description": "Authority B signs the unchanged top-level delegation naming authority A as issuer.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

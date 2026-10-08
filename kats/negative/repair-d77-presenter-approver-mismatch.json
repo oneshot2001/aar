@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-presenter-approver-mismatch",
+  "expected_code": "receipt/decision-presentation",
+  "mutation_description": "Presenter A validly signs its presentation, but the decision names approver B; repair commitments in an authorization-only subset.",
+  "expected_result": "nonconformant",
+  "expected_step": 10
+}

@@ -431,7 +431,6 @@ def _trust_policy_checks(state: State) -> None:
         _fail("hash/mismatch", 5)
     if not _uint(store["created_at"]) or not isinstance(store["roots"], list) or not store["roots"]:
         _fail("schema/bad-type", 5)
-    selector = state.bundle["selector"]
     for root in store["roots"]:
         _closed_map(root, {"root_id", "root_kid", "tenant_id", "allowed_sites", "allowed_key_usages"})
         for name, size in (("root_id", 32), ("root_kid", 32), ("tenant_id", 16)):
@@ -481,7 +480,7 @@ def _preparse_payloads(state: State) -> None:
                 kid = payload.get("subject_kid")
                 credential_id = payload.get("credential_id")
                 if isinstance(kid, bytes):
-                    state.credentials_by_kid[kid] = placeholder
+                    state.credentials_by_kid.setdefault(kid, placeholder)
                 if isinstance(credential_id, bytes):
                     state.credentials_by_id[credential_id] = placeholder
 
@@ -545,6 +544,8 @@ def _schema_payload(content_type: str, payload: Any) -> dict[str, Any]:
             _fail("schema/bad-type", 6)
         if payload["cose_alg"] != -7 or payload["curve"] != "P-256":
             _fail("schema/enum-unknown", 6)
+        if not isinstance(payload["path"], list):
+            _fail("schema/bad-type", 6)
     for field, size in PAYLOAD_FIXED_FIELDS[content_type]:
         value = payload.get(field)
         if not isinstance(value, bytes):
@@ -648,7 +649,8 @@ def _required_usage(category: str, payload: dict[str, Any]) -> str:
     return roles.get(payload.get("issuer_role"), "")
 
 
-def _validate_envelope(state: State, category: str, index: int, value: Any) -> Envelope:
+def _validate_envelope(state: State, category: str, index: int, value: Any,
+                       enclosing_kid: bytes | None = None) -> Envelope:
     expected_type = CONTENT_TYPES[category]
     if not (isinstance(value, list) and len(value) == 2 and isinstance(value[0], bytes) and isinstance(value[1], bytes)):
         _fail("schema/bad-type", 6)
@@ -730,6 +732,15 @@ def _validate_envelope(state: State, category: str, index: int, value: Any) -> E
         target = payload.get("target")
         if protected[4] != (target.get("anchor_kid") if isinstance(target, dict) else None):
             _fail("credential/usage-mismatch", 6)
+    elif category == "delegations" or (category == "presentations" and payload.get("signer_mode") == "approver_originated"):
+        field = "issuer_credential_id" if category == "delegations" else "presenter_credential_id"
+        credential_id = payload.get(field)
+        declared = state.credentials_by_id.get(credential_id) if isinstance(credential_id, bytes) else None
+        if declared is None or protected[4] != declared.payload.get("subject_kid"):
+            _fail("credential/usage-mismatch", 6)
+    elif category == "presentations" and payload.get("signer_mode") == "ep_authenticated_session":
+        if protected[4] != enclosing_kid:
+            _fail("credential/usage-mismatch", 6)
     elif category in {"epoch_events", "epoch_manifests", "merkle_batches"}:
         if protected[4] != payload.get("epoch_owner_kid"):
             _fail("credential/usage-mismatch", 6)
@@ -786,7 +797,6 @@ def _envelope_checks(state: State) -> None:
                 raise
             state.envelopes[category].append(envelope)
             if category == "credentials":
-                state.credentials_by_kid[envelope.payload["subject_kid"]] = envelope
                 state.credentials_by_id[envelope.payload["credential_id"]] = envelope
             elif category == "receipts":
                 state.receipts_by_id[envelope.payload["receipt_id"]] = envelope
@@ -797,7 +807,7 @@ def _envelope_checks(state: State) -> None:
                         state.embedded_delegations[envelope.payload["receipt_id"]] = nested
                 presentation = envelope.payload.get("body", {}).get("presentation")
                 if presentation is not None:
-                    nested = _validate_envelope(state, "presentations", index, presentation)
+                    nested = _validate_envelope(state, "presentations", index, presentation, envelope.protected[4])
                     state.envelopes["presentations"].append(nested)
         field = PRIMARY_IDS[category]
         ids = [envelope.payload[field] for envelope in state.envelopes[category]]
@@ -964,6 +974,8 @@ def _credential_lifecycle(state: State) -> None:
             _fail("countersign/credential-invalid" if mediator_credential else "schema/bad-type", 8 if mediator_credential else 6)
         if len(path) > LIMITS["credential_path_length"]:
             _fail("countersign/credential-invalid" if mediator_credential else "schema/out-of-range", 8 if mediator_credential else 6)
+        if path and credential["subject_kid"] in roots:
+            _fail("countersign/credential-invalid" if mediator_credential else "credential/path-invalid", 8)
         seen = {credential["credential_id"]}
         expected_issuer = credential["issuer_kid"]
         for credential_id in path:

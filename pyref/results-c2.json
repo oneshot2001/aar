@@ -1,6 +1,6 @@
 {
   "deterministic": true,
-  "deterministic_fixtures": 232,
+  "deterministic_fixtures": 241,
   "divergence_count": 0,
   "divergences": [],
   "entry_point_findings": 1,
@@ -2135,7 +2135,7 @@
       "produced_code": "credential/usage-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "0ad7fa7c2199f3818e998b55ecf1cc6e642d5a8e84dfd97eaac44d244af09cef"
+      "verdict_sha256": "4bf260565b0855ef764d296cc32c44784d561bad661bcb4368a20cd51b894cfc"
     },
     {
       "deterministic": true,
@@ -2168,6 +2168,34 @@
     {
       "deterministic": true,
       "expected_class": null,
+      "expected_code": "schema/bad-type",
+      "expected_result": "nonconformant",
+      "first_failure_step": 6,
+      "fixture": "kats/negative/repair-d77-credential-path-null.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "schema/bad-type",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "db0e19a214fe718e3729e33113871345b58ec289d344b44f26f4d6dbf9519d1e"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "credential/usage-mismatch",
+      "expected_result": "nonconformant",
+      "first_failure_step": 6,
+      "fixture": "kats/negative/repair-d77-delegation-issuer-forged.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "credential/usage-mismatch",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "5f1d267e1d6382fbdf94cc59ca84ccafa32ad91ad1b170745fdc6590590595c8"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
       "expected_code": "schema/duplicate-entry",
       "expected_result": "nonconformant",
       "first_failure_step": 5,
@@ -2178,6 +2206,34 @@
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
       "verdict_sha256": "a4074e2684e07f840ef02aec4f1234368502c64719725f1e6ec19806b2008389"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "credential/expired",
+      "expected_result": "nonconformant",
+      "first_failure_step": 6,
+      "fixture": "kats/negative/repair-d77-duplicate-subject-find-first.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "credential/expired",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "5b002f1c25873cca98c26fa80f92243d067a5fdb431eb718d4d05d02a90a1178"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "credential/usage-mismatch",
+      "expected_result": "nonconformant",
+      "first_failure_step": 6,
+      "fixture": "kats/negative/repair-d77-embedded-delegation-issuer-forged.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "credential/usage-mismatch",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "5d3fca19fed691a2ab69b2f0d9f4f3f69321005aa958d458470c72afe061c8b7"
     },
     {
       "deterministic": true,
@@ -2238,6 +2294,48 @@
     {
       "deterministic": true,
       "expected_class": null,
+      "expected_code": "credential/usage-mismatch",
+      "expected_result": "nonconformant",
+      "first_failure_step": 6,
+      "fixture": "kats/negative/repair-d77-presentation-ep-session-signer-mismatch.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "credential/usage-mismatch",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "21f8098effe54f8a6136b50fd3c72e2a1e4d579c1390afee28650940b4dbd0c1"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "credential/usage-mismatch",
+      "expected_result": "nonconformant",
+      "first_failure_step": 6,
+      "fixture": "kats/negative/repair-d77-presentation-signer-forged.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "credential/usage-mismatch",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "aa7a39d1e4efb916960528f36e47aee2bbd6bc02c6cacfce8098a5cbfe21a6fa"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "receipt/decision-presentation",
+      "expected_result": "nonconformant",
+      "first_failure_step": 10,
+      "fixture": "kats/negative/repair-d77-presenter-approver-mismatch.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "receipt/decision-presentation",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "a5266e2b4a98df9a559b216ac7ee0a504f782c82585ab843927d10106be04131"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
       "expected_code": "credential/expired",
       "expected_result": "nonconformant",
       "first_failure_step": 6,
@@ -2252,6 +2350,20 @@
     {
       "deterministic": true,
       "expected_class": null,
+      "expected_code": "credential/path-invalid",
+      "expected_result": "nonconformant",
+      "first_failure_step": 8,
+      "fixture": "kats/negative/repair-d77-root-key-reissued.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "credential/path-invalid",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "95b6ccaeb5b15783cf91f411b21c38e5dfb20d3a771a0db8e8e883cbe992f3b9"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
       "expected_code": "credential/usage-mismatch",
       "expected_result": "nonconformant",
       "first_failure_step": 6,
@@ -2262,6 +2374,20 @@
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
       "verdict_sha256": "19043bc8606a51d3597be9476bf4164dbffcc159e2f9b2ff37ef2c49034cea1f"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "credential/usage-mismatch",
+      "expected_result": "nonconformant",
+      "first_failure_step": 6,
+      "fixture": "kats/negative/repair-d77-root-subject-clause.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "credential/usage-mismatch",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "6152cdc27b54d4d83ad59eb50cb7f676a8fdbb4f17aff840f41deb8a86af355e"
     },
     {
       "deterministic": true,
@@ -2289,7 +2415,7 @@
       "produced_code": "credential/usage-mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "2ee4b7a879d5e38ae5f3ac4219d59569ec8a44857347b1401d8256779876f306"
+      "verdict_sha256": "9dbf7432f89c56052735dc3ff356101758f45add64420668cc60f2ee9a27151d"
     },
     {
       "deterministic": true,
@@ -3286,8 +3412,8 @@
       "verdict_sha256": "e022cbf76e9c35de3c99a1ad268b82f84ad252683cc46e8bf44122eb8bfa006e"
     }
   ],
-  "fixtures_evaluated": 232,
-  "matches": 232,
+  "fixtures_evaluated": 241,
+  "matches": 241,
   "mismatches": 0,
   "schema_version": 1,
   "slice": "C2"

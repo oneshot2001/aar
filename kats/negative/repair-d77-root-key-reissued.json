@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-root-key-reissued",
+  "expected_code": "credential/path-invalid",
+  "mutation_description": "A valid intermediate credential_issuing key issues a second credential for the accepted root key with a non-empty path.",
+  "expected_result": "nonconformant",
+  "expected_step": 8
+}

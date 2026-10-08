@@ -1,7 +1,7 @@
 {
   "name": "repair-d77-anchor-signer-mismatch",
   "expected_code": "credential/usage-mismatch",
-  "mutation_description": "Keep the valid anchor_signing signature while declaring a different target.anchor_kid.",
+  "mutation_description": "Keep the anchor payload and planned target byte-identical and sign the record with a second valid anchor_signing key.",
   "expected_result": "nonconformant",
   "expected_step": 6
 }

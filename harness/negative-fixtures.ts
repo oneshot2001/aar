@@ -635,7 +635,7 @@ function addSecondEpoch(bundle: Obj, epochId: number, predecessorDigest: Uint8Ar
 }
 
 // D-77 fixtures use genuine signatures and valid content IDs unless step 6
-// deliberately fires before content validation. O has no root-issued credential.
+// deliberately fires before content validation.
 function d77Credential(bundle: Obj, key: TestKeyName, usage: string, issuer: TestKeyName, path: CborValue[], signer: TestKeyName): Obj {
   const template = (artifacts(bundle).credentials as CborValue[]).map(payload).find((p) => p.key_usage === usage)!;
   const claims: Obj = { ...clone(template), subject_kid: TEST_KEYS[key].kid, public_key: TEST_KEYS[key].spki,
@@ -648,6 +648,18 @@ function d77Credential(bundle: Obj, key: TestKeyName, usage: string, issuer: Tes
 
 function d77Root(bundle: Obj): Obj {
   return (artifacts(bundle).credentials as CborValue[]).map(payload).find((p) => (p.path as CborValue[]).length === 0)!;
+}
+
+function d77Authorization(bundle: Obj, mutation: (body: Obj) => void): void {
+  // A parentless authorization is a valid subset on its own; no action needs a journal.
+  keepReceipts(bundle, (p) => p.kind === "authorization" && (p.parents as CborValue[]).length === 0);
+  clearJournal(bundle);
+  mutateReceipt(bundle, "authorization", (p) => {
+    const body = p.body as Obj;
+    mutation(body);
+    const decision = body.decision as Obj;
+    decision.decision_commitment = domainHash("AAR-DECISION-RECORD-v1", withoutField(decision, "decision_commitment"));
+  });
 }
 
 function d77OmitUsage(bundle: Obj, usage: string): void {
@@ -752,11 +764,68 @@ export function buildNegativeFixtures(): NegativeFixture[] {
     ["root-not-self-signed", "credential/usage-mismatch", 6, "Carry an empty-path credential naming itself as issuer and subject but signed by the accepted credential_issuing key.", (bundle) => {
       d77Credential(bundle, "d77_outsider", "credential_issuing", "d77_outsider", [], "credential_issuing");
     }],
-    ["status-issuer-mismatch", "credential/usage-mismatch", 6, "Keep the valid status_signing signature while declaring a different issuer_kid.", (bundle) => {
-      mutateArtifact(bundle, "status_snapshots", () => true, (p) => { p.issuer_kid = TEST_KEYS.credential_issuing.kid; });
+    ["status-issuer-mismatch", "credential/usage-mismatch", 6, "Keep the status payload byte-identical and sign it with a second valid status_signing key.", (bundle) => {
+      d77Credential(bundle, "d77_outsider", "status_signing", "credential_issuing", [d77Root(bundle).credential_id!], "credential_issuing");
+      const list = artifacts(bundle).status_snapshots as CborValue[];
+      list[0] = signDetached(payload(list[0]!), contentType(list[0]!), "d77_outsider").envelope;
     }],
-    ["anchor-signer-mismatch", "credential/usage-mismatch", 6, "Keep the valid anchor_signing signature while declaring a different target.anchor_kid.", (bundle) => {
-      mutateArtifact(bundle, "anchors", () => true, (p) => { (p.target as Obj).anchor_kid = TEST_KEYS.credential_issuing.kid; });
+    ["anchor-signer-mismatch", "credential/usage-mismatch", 6, "Keep the anchor payload and planned target byte-identical and sign the record with a second valid anchor_signing key.", (bundle) => {
+      d77Credential(bundle, "d77_outsider", "anchor_signing", "credential_issuing", [d77Root(bundle).credential_id!], "credential_issuing");
+      const list = artifacts(bundle).anchors as CborValue[];
+      list[0] = signDetached(payload(list[0]!), contentType(list[0]!), "d77_outsider").envelope;
+    }],
+    ["root-subject-clause", "credential/usage-mismatch", 6, "The real root signs an empty-path credential whose issuer is that root but whose subject is a different key.", (bundle) => {
+      d77Credential(bundle, "d77_outsider", "credential_issuing", "credential_issuing", [], "credential_issuing");
+    }],
+    ["delegation-issuer-forged", "credential/usage-mismatch", 6, "Authority B signs the unchanged top-level delegation naming authority A as issuer.", (bundle) => {
+      d77Credential(bundle, "d77_outsider", "authority_signing", "credential_issuing", [d77Root(bundle).credential_id!], "credential_issuing");
+      const list = artifacts(bundle).delegations as CborValue[];
+      list[0] = signDetached(payload(list[0]!), contentType(list[0]!), "d77_outsider").envelope;
+    }],
+    ["embedded-delegation-issuer-forged", "credential/usage-mismatch", 6, "Authority B signs only the embedded delegation naming authority A, in a valid authorization-only subset.", (bundle) => {
+      d77Credential(bundle, "d77_outsider", "authority_signing", "credential_issuing", [d77Root(bundle).credential_id!], "credential_issuing");
+      artifacts(bundle).delegations = [];
+      d77Authorization(bundle, (body) => {
+        body.delegation = signDetached(payload(body.delegation!), contentType(body.delegation!), "d77_outsider").envelope;
+      });
+    }],
+    ["presentation-signer-forged", "credential/usage-mismatch", 6, "Approver B signs a presentation naming approver A; decision and enclosing commitments remain consistent in an authorization-only subset.", (bundle) => {
+      d77Credential(bundle, "d77_outsider", "approver_signing", "credential_issuing", [d77Root(bundle).credential_id!], "credential_issuing");
+      d77Authorization(bundle, (body) => {
+        body.presentation = signDetached(payload(body.presentation!), contentType(body.presentation!), "d77_outsider").envelope;
+      });
+    }],
+    ["presentation-ep-session-signer-mismatch", "credential/usage-mismatch", 6, "An EP-session presentation is signed by a second valid ep_signing key, while the enclosing authorization retains the original EP signer.", (bundle) => {
+      d77Credential(bundle, "d77_outsider", "ep_signing", "credential_issuing", [d77Root(bundle).credential_id!], "credential_issuing");
+      d77Authorization(bundle, (body) => {
+        const p = payload(body.presentation!);
+        p.signer_mode = "ep_authenticated_session";
+        p.presentation_id = domainHash("AAR-PRESENTATION-MANIFEST-v1", withoutField(p, "presentation_id"));
+        body.presentation = signDetached(p, contentType(body.presentation!), "d77_outsider").envelope;
+      });
+    }],
+    ["presenter-approver-mismatch", "receipt/decision-presentation", 10, "Presenter A validly signs its presentation, but the decision names approver B; repair commitments in an authorization-only subset.", (bundle) => {
+      const approver = d77Credential(bundle, "d77_outsider", "approver_signing", "credential_issuing", [d77Root(bundle).credential_id!], "credential_issuing");
+      d77Authorization(bundle, (body) => { (body.decision as Obj).approver_credential_id = approver.credential_id!; });
+    }],
+    ["duplicate-subject-find-first", "credential/expired", 6, "Carry an expired self-signed root credential sorted before the valid credential for the same root key.", (bundle) => {
+      const root = d77Root(bundle);
+      const expired = clone(root);
+      expired.valid_until = ((bundle.trust_inputs as Obj).evaluation_time as number) - 1;
+      do {
+        expired.valid_until = (expired.valid_until as number) - 1;
+        expired.credential_id = domainHash("AAR-CREDENTIAL-ID-v1", withoutField(expired, "credential_id"));
+      } while (compare(expired.credential_id, root.credential_id!) >= 0);
+      (artifacts(bundle).credentials as CborValue[]).push(signDetached(expired, "application/aar-credential+cbor;v=0.2", "credential_issuing").envelope);
+      sortArtifacts(bundle, "credentials");
+    }],
+    ["root-key-reissued", "credential/path-invalid", 8, "A valid intermediate credential_issuing key issues a second credential for the accepted root key with a non-empty path.", (bundle) => {
+      const root = d77Root(bundle);
+      const intermediate = d77Credential(bundle, "d77_outsider", "credential_issuing", "credential_issuing", [root.credential_id!], "credential_issuing");
+      d77Credential(bundle, "credential_issuing", "credential_issuing", "d77_outsider", [intermediate.credential_id!, root.credential_id!], "d77_outsider");
+    }],
+    ["credential-path-null", "schema/bad-type", 6, "Set the self-signed root credential path to null, retaining its ID so schema validation must precede content-ID validation.", (bundle) => {
+      mutateArtifact(bundle, "credentials", (p) => (p.path as CborValue[]).length === 0, (p) => { p.path = null; }, false);
     }],
     ["countersigned-subject-issuer-forged", "countersign/credential-invalid", 6, "Sign the mediator subject credential with a valid outsider issuing key while it still claims issuance by the accepted root.", (bundle) => {
       const countersigned = decodeCbor(buildCountersignFixtures()[0]!.bytes, { strict: true }) as Obj;

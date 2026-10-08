@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-presentation-signer-forged",
+  "expected_code": "credential/usage-mismatch",
+  "mutation_description": "Approver B signs a presentation naming approver A; decision and enclosing commitments remain consistent in an authorization-only subset.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-duplicate-subject-find-first",
+  "expected_code": "credential/expired",
+  "mutation_description": "Carry an expired self-signed root credential sorted before the valid credential for the same root key.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

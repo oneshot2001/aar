@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-presentation-ep-session-signer-mismatch",
+  "expected_code": "credential/usage-mismatch",
+  "mutation_description": "An EP-session presentation is signed by a second valid ep_signing key, while the enclosing authorization retains the original EP signer.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

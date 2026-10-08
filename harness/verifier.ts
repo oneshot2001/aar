@@ -468,6 +468,7 @@ type ParsedEnvelope = {
   protectedMap: Map<CborScalar, CborValue>;
   signature: Uint8Array;
   kid: Uint8Array;
+  enclosingKid?: Uint8Array;
 };
 
 const CONTENT_TYPE: Record<ArtifactKind, string> = {
@@ -557,6 +558,7 @@ function parseEnvelope(entry: CborValue, kind: ArtifactKind, path: string): Pars
     if (!["human", "service", "workload_instance", "model_endpoint"].includes(payloadValue.principal_type)) return failure(6, "schema/enum-unknown", `${path}.payload.principal_type`);
     if (typeof payloadValue.cose_alg !== "number" || typeof payloadValue.curve !== "string") return failure(6, "schema/bad-type", `${path}.payload.algorithm`);
     if (payloadValue.cose_alg !== -7 || payloadValue.curve !== "P-256") return failure(6, "schema/enum-unknown", `${path}.payload.algorithm`);
+    if (!Array.isArray(payloadValue.path)) return failure(6, "schema/bad-type", `${path}.payload.path`);
   }
   for (const [field, size] of payloadFixedFields(kind)) if ((issue = fixed(payloadValue[field], size, 6, `${path}.payload.${field}`))) return issue;
   if (kind === "receipt") {
@@ -660,6 +662,7 @@ function parseAll(bundle: Obj): Parsed | B1Failure {
         if (presentation !== undefined) {
           const nested = parseEnvelope(presentation, "presentation", `bundle.artifacts.${String(field)}[${index}].payload.body.presentation`);
           if (isFailure(nested)) return nested;
+          nested.enclosingKid = result.kid;
           parsed.presentation.push(nested);
         }
         const delegation = result.payload.body.delegation;
@@ -698,7 +701,11 @@ function spkiPublicKey(spki: Uint8Array): Uint8Array | undefined {
 }
 
 function validateMechanics(bundle: Obj, parsed: Parsed): B1Failure | undefined {
-  const credentialsByKid = new Map(parsed.credential.map((entry) => [toHex(entry.payload.subject_kid as Uint8Array), entry]));
+  const credentialsByKid = new Map<string, ParsedEnvelope>();
+  for (const entry of parsed.credential) {
+    const kid = toHex(entry.payload.subject_kid as Uint8Array);
+    if (!credentialsByKid.has(kid)) credentialsByKid.set(kid, entry);
+  }
   const mediatorKids = new Set(parsed.mediator_countersignature.map((entry) => toHex(entry.kid)));
   const evaluationTime = ((bundle.trust_inputs as Obj).evaluation_time as number);
   const order: ArtifactKind[] = ["credential", "rotation", "status", "request", "delegation", "epoch_event", "epoch_manifest", "anchor", "merkle_batch", "mediator_countersignature", "receipt", "presentation"];
@@ -716,8 +723,12 @@ function validateMechanics(bundle: Obj, parsed: Parsed): B1Failure | undefined {
     if (credential.payload.key_usage !== requiredUsage || (kind === "mediator_countersignature" && credential.payload.principal_role !== "outcome_observer")) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : kind === "receipt" ? "receipt/signer-role-mismatch" : "credential/usage-mismatch", `${kind}.kid`);
     const declaredSigner = kind === "credential" || kind === "status" ? entry.payload.issuer_kid
       : kind === "anchor" ? (object(entry.payload.target) ? entry.payload.target.anchor_kid : undefined)
+      : kind === "delegation" ? parsed.credential.find((credential) => same(credential.payload.credential_id, entry.payload.issuer_credential_id))?.payload.subject_kid
+      : kind === "presentation" && entry.payload.signer_mode === "approver_originated" ? parsed.credential.find((credential) => same(credential.payload.credential_id, entry.payload.presenter_credential_id))?.payload.subject_kid
+      : kind === "presentation" && entry.payload.signer_mode === "ep_authenticated_session" ? entry.enclosingKid
       : ["epoch_event", "epoch_manifest", "merkle_batch"].includes(kind) ? entry.payload.epoch_owner_kid : undefined;
-    const declaresSigner = ["credential", "status", "anchor", "epoch_event", "epoch_manifest", "merkle_batch"].includes(kind);
+    const declaresSigner = ["credential", "status", "anchor", "delegation", "epoch_event", "epoch_manifest", "merkle_batch"].includes(kind)
+      || (kind === "presentation" && ["approver_originated", "ep_authenticated_session"].includes(entry.payload.signer_mode as string));
     if ((declaresSigner && !same(entry.kid, declaredSigner))
       || (kind === "credential" && (entry.payload.path as CborValue[]).length === 0 && !same(entry.kid, entry.payload.subject_kid))
       || (kind === "merkle_batch" && !same(entry.payload.signer_kid, entry.payload.epoch_owner_kid))) {
@@ -884,6 +895,7 @@ function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | u
     const mediatorCredential = mediatorKids.has(toHex(payload.subject_kid as Uint8Array));
     const path = payload.path;
     if (!Array.isArray(path) || path.length > 8) return failure(8, mediatorCredential ? "countersign/credential-invalid" : "schema/out-of-range", "credential.path");
+    if (path.length > 0 && roots.some((root) => same(root.root_kid, payload.subject_kid))) return failure(8, mediatorCredential ? "countersign/credential-invalid" : "credential/path-invalid", "credential.path");
     const seen = new Set([toHex(payload.credential_id as Uint8Array)]);
     let expectedIssuer = payload.issuer_kid as Uint8Array;
     for (const id of path) {
@@ -1047,6 +1059,10 @@ function validateReceiptSemantics(bundle: Obj, parsed: Parsed): B1Failure | unde
       const decision = body.decision;
       const hasPresentation = body.presentation !== undefined;
       if ((decision.decision === "permit_with_approval") !== hasPresentation || (decision.decision === "permit_with_approval") !== (decision.approver_credential_id !== undefined)) return failure(10, "receipt/decision-presentation", "receipt.body");
+      if (hasPresentation) {
+        const presentation = parsed.presentation.find((entry) => same(entry.envelope, body.presentation));
+        if (presentation === undefined || !same(presentation.payload.presenter_credential_id, decision.approver_credential_id)) return failure(10, "receipt/decision-presentation", "receipt.body.presentation");
+      }
     }
     if (payload.kind === "action_attempt") {
       if ((body.disposition === "not_dispatched") !== (body.refusal_reason !== undefined)) return failure(10, "receipt/attempt-disposition", "receipt.body.disposition");
