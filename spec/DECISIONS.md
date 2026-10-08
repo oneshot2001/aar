@@ -1330,8 +1330,12 @@ anchor records, delegations, and presentations had the same unbound field.
 A producer could sign an anchor record for a target it declared
 independent, any authority key could sign a delegation naming another
 authority as issuer, and any approver key could sign a presentation naming
-another approver. That last one was reproduced as `conformant` in both
-verifiers by the second D-77 review. Attribution, the
+another approver. That last one is pinned by
+`repair-d77-presentation-signer-forged`, which both pre-D-77 verifiers
+accepted as `conformant`. A presentation with an unknown `signer_mode`
+escaped the binding entirely, because neither verifier validated that
+closed enum (or the presentation `state` enum) as step 6.6 already
+requires. Both now do. Attribution, the
 product's core claim, rests on this check. (2) and (4) The reference
 implementations disagreed (pyref checked usage for signers, the harness
 only for mediator credentials; pyref kept the last duplicate root, the
@@ -1365,9 +1369,10 @@ build preimages move to v0.2.2.
 `credential/issuer-mismatch` or `anchor/signer-mismatch`: rejected, because
 the epoch-owner precedent already maps a declared-signer mismatch to
 `credential/usage-mismatch`, and reason codes are wire surface. Rejecting duplicate `subject_kid`
-outright: rejected, because that is the `credential/role-key-reuse` case,
-which keeps its own step-8 code. Find-first makes resolution deterministic
-instead. Checking
+outright: rejected, because the corpus's `credential/role-key-reuse`
+fixture carries one key under two roles and must keep its own step-8 code.
+Find-first makes resolution deterministic without taking that code
+away. Checking
 root usage for every carried credential: rejected, because the corpus
 carries a `verifier_signing` credential whose root does not list that
 usage, and usage matters only for keys that sign. Evaluation-time validity
