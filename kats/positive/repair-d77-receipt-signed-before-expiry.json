@@ -1,0 +1,8 @@
+{
+  "name": "repair-d77-receipt-signed-before-expiry",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "Expire the receipt-only outcome signing credential after committed_at but before evaluation time; recompute its ID and signature."
+}

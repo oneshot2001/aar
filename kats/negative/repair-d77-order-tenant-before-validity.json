@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-order-tenant-before-validity",
+  "expected_code": "credential/usage-mismatch",
+  "mutation_description": "Give the status signer both a foreign site and expired validity; scope must fail first.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

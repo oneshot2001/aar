@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-duplicate-root-kid",
+  "expected_code": "schema/duplicate-entry",
+  "mutation_description": "Repeat a root_kid in a second root record and recompute the trust digest.",
+  "expected_result": "nonconformant",
+  "expected_step": 5
+}

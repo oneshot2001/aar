@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-root-usage-not-allowed",
+  "expected_code": "credential/root-not-accepted",
+  "mutation_description": "Remove ep_signing from the accepted root's usages and recompute the trust digest.",
+  "expected_result": "nonconformant",
+  "expected_step": 8
+}

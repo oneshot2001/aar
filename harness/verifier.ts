@@ -679,6 +679,8 @@ function validateTrustInputs(bundle: Obj, evaluationTime: number): B1Failure | u
   const trust = bundle.trust_inputs as Obj;
   const store = trust.trust_store as Obj;
   if (!equalBytes(store.digest as Uint8Array, domainHash("AAR-TRUST-STORE-v1", without(store, "digest")))) return failure(5, "hash/mismatch", "bundle.trust_inputs.trust_store.digest");
+  const rootKids = (store.roots as Obj[]).map((root) => toHex(root.root_kid as Uint8Array));
+  if (new Set(rootKids).size !== rootKids.length) return failure(5, "schema/duplicate-entry", "bundle.trust_inputs.trust_store.roots");
   for (const rootValue of store.roots as CborValue[]) {
     if (!object(rootValue)) return failure(5, "schema/bad-type", "bundle.trust_inputs.trust_store.roots");
     if (!same(rootValue.tenant_id, selector.tenant_id) || !Array.isArray(rootValue.allowed_sites) || !(rootValue.allowed_sites as CborValue[]).some((site) => same(site, selector.site_id))) return failure(5, "credential/root-not-accepted", "bundle.trust_inputs.trust_store.roots");
@@ -698,7 +700,6 @@ function spkiPublicKey(spki: Uint8Array): Uint8Array | undefined {
 function validateMechanics(bundle: Obj, parsed: Parsed): B1Failure | undefined {
   const credentialsByKid = new Map(parsed.credential.map((entry) => [toHex(entry.payload.subject_kid as Uint8Array), entry]));
   const mediatorKids = new Set(parsed.mediator_countersignature.map((entry) => toHex(entry.kid)));
-  const roots = ((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[];
   const evaluationTime = ((bundle.trust_inputs as Obj).evaluation_time as number);
   const order: ArtifactKind[] = ["credential", "rotation", "status", "request", "delegation", "epoch_event", "epoch_manifest", "anchor", "merkle_batch", "mediator_countersignature", "receipt", "presentation"];
   for (const kind of order) for (const entry of kind === "delegation" ? [...parsed.delegation, ...parsed.embeddedDelegations.map((value) => value.delegation)] : parsed[kind]) {
@@ -713,9 +714,19 @@ function validateMechanics(bundle: Obj, parsed: Parsed): B1Failure | undefined {
     if (publicKey === undefined) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "key/not-p256", "credential.public_key");
     const requiredUsage = usageFor(entry);
     if (credential.payload.key_usage !== requiredUsage || (kind === "mediator_countersignature" && credential.payload.principal_role !== "outcome_observer")) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : kind === "receipt" ? "receipt/signer-role-mismatch" : "credential/usage-mismatch", `${kind}.kid`);
-    if (["epoch_event", "epoch_manifest", "merkle_batch"].includes(kind) && !same(entry.kid, entry.payload.epoch_owner_kid)) return failure(6, "credential/usage-mismatch", `${kind}.epoch_owner_kid`);
-    if (kind === "merkle_batch" && !same(entry.payload.signer_kid, entry.payload.epoch_owner_kid)) return failure(6, "credential/usage-mismatch", "merkle_batch.signer_kid");
-    const signingTime = kind === "receipt" && object(entry.payload.emission) && uint(entry.payload.emission.committed_at) ? entry.payload.emission.committed_at : evaluationTime;
+    const declaredSigner = kind === "credential" || kind === "status" ? entry.payload.issuer_kid
+      : kind === "anchor" ? (object(entry.payload.target) ? entry.payload.target.anchor_kid : undefined)
+      : ["epoch_event", "epoch_manifest", "merkle_batch"].includes(kind) ? entry.payload.epoch_owner_kid : undefined;
+    const declaresSigner = ["credential", "status", "anchor", "epoch_event", "epoch_manifest", "merkle_batch"].includes(kind);
+    if ((declaresSigner && !same(entry.kid, declaredSigner))
+      || (kind === "credential" && (entry.payload.path as CborValue[]).length === 0 && !same(entry.kid, entry.payload.subject_kid))
+      || (kind === "merkle_batch" && !same(entry.payload.signer_kid, entry.payload.epoch_owner_kid))) {
+      return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "credential/usage-mismatch", `${kind}.signer`);
+    }
+    const selector = bundle.selector as Obj;
+    if (!same(credential.payload.tenant_id, selector.tenant_id) || !same(credential.payload.site_id, selector.site_id)) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "credential/usage-mismatch", "credential.scope");
+    const signingTime = kind === "receipt" ? (entry.payload.emission as Obj).committed_at as number : evaluationTime;
+    if (!uint(signingTime)) return failure(6, "schema/bad-type", "receipt.emission.committed_at");
     if (!uint(credential.payload.valid_from) || !uint(credential.payload.valid_until)) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "schema/bad-type", "credential.validity");
     if (signingTime < credential.payload.valid_from) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "credential/not-yet-valid", "credential.valid_from");
     if (signingTime >= credential.payload.valid_until) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "credential/expired", "credential.valid_until");
@@ -727,9 +738,6 @@ function validateMechanics(bundle: Obj, parsed: Parsed): B1Failure | undefined {
     }
     const sigStructure = encodeCbor(["Signature1", entry.protectedBytes, new Uint8Array(), entry.payloadBytes]);
     if (!p256.verify(entry.signature, hash(sigStructure), publicKey, { prehash: false, lowS: true, format: "compact" })) return failure(6, kind === "mediator_countersignature" ? "countersign/invalid" : mediatorCredentialEnvelope ? "countersign/credential-invalid" : "sig/verify-failed", `${kind}.signature`);
-    if (kind === "credential" && (entry.payload.path as CborValue[]).length === 0) {
-      if (!roots.some((root) => same(root.root_kid, entry.payload.subject_kid))) return failure(6, mediatorCredentialEnvelope ? "countersign/credential-invalid" : "credential/root-not-accepted", "credential.path");
-    }
   }
   return undefined;
 }
@@ -858,6 +866,8 @@ function receiptHashes(payload: Obj): B1Failure | undefined {
 function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | undefined {
   const credentials = new Map(parsed.credential.map((entry) => [toHex(entry.payload.credential_id as Uint8Array), entry]));
   const mediatorKids = new Set(parsed.mediator_countersignature.map((entry) => toHex(entry.kid)));
+  const usedKids = new Set(Object.values(parsed).flatMap((entries) => entries.map((entry) =>
+    toHex("delegation" in entry ? entry.delegation.kid : entry.kid))));
   const roots = ((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[];
   const evaluation = (bundle.trust_inputs as Obj).evaluation_time as number;
   const roleKids = new Map<string, string>();
@@ -892,7 +902,7 @@ function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | u
     if (last === undefined || !roots.some((root) => same(root.root_kid, last.subject_kid)
       && same(root.tenant_id, payload.tenant_id)
       && Array.isArray(root.allowed_sites) && root.allowed_sites.some((site) => same(site, payload.site_id))
-      && (!mediatorCredential || (Array.isArray(root.allowed_key_usages) && payload.key_usage !== undefined && root.allowed_key_usages.includes(payload.key_usage))))) {
+      && (!usedKids.has(toHex(payload.subject_kid as Uint8Array)) || (Array.isArray(root.allowed_key_usages) && payload.key_usage !== undefined && root.allowed_key_usages.includes(payload.key_usage))))) {
       return failure(8, mediatorCredential ? "countersign/credential-invalid" : "credential/root-not-accepted", "credential.path");
     }
   }
@@ -1621,10 +1631,9 @@ const VERDICT_LIMITS: Obj = {
   credential_path_length: 8,
 };
 
-// Stable reference-harness identity preimages for release 0.2.1-b1. The
-// deterministicId helper hashes UTF-8 "AAR-KAT-OPAQUE-ID:" plus these labels.
-const DEFAULT_VERSION = "0.2.1-b1";
-const DEFAULT_BUILD_DIGEST = deterministicId("verifier-build:aar-reference-verifier@0.2.1-b1");
+// D-77 build identity hashes the literal UTF-8 preimage; config identity is unchanged.
+const DEFAULT_VERSION = "v0.2.2";
+const DEFAULT_BUILD_DIGEST = hash(new TextEncoder().encode("harness-aar-v0.2.2-d77-signer-binding-build-v1"));
 const DEFAULT_CONFIG_DIGEST = deterministicId("verifier-config:aar-reference-verifier@0.2.0-default");
 const ZERO_DIGEST = new Uint8Array(32);
 

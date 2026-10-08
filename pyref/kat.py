@@ -910,7 +910,7 @@ def run_c2() -> dict[str, Any]:
         if sidecar.get("object_type") and sidecar.get("object_type") != "bundle":
             context = _context_for_standalone(raw, sidecar, base_raw)
         expected_code = sidecar.get("expected_code")
-        expected_result = _expected_result(expected_code)
+        expected_result = sidecar.get("expected_result", _expected_result(expected_code))
         expected_observations = sidecar.get("expected_observations", [])
         try:
             first = evaluate(
@@ -932,6 +932,7 @@ def run_c2() -> dict[str, Any]:
                 first.result == expected_result and produced_code == expected_code
                 and deterministic and (expected_class is None or expected_class == produced_class)
                 and observations_matched
+                and ("expected_step" not in sidecar or first.report["first_failure_step"] == sidecar["expected_step"])
             )
             fixture = {
                 "fixture": str(path.relative_to(ROOT)),

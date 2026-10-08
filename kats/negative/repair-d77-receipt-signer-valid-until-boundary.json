@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-receipt-signer-valid-until-boundary",
+  "expected_code": "credential/expired",
+  "mutation_description": "Set the receipt-only outcome signing credential valid_until to its receipt committed_at.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

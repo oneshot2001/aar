@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-embedded-delegation-usage",
+  "expected_code": "credential/root-not-accepted",
+  "mutation_description": "Remove the top-level delegation so authority_signing is used only by embedded delegations, and remove its root permission.",
+  "expected_result": "nonconformant",
+  "expected_step": 8
+}

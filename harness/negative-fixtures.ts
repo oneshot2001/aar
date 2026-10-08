@@ -1,6 +1,7 @@
 import { CborScalar, CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
 import { deterministicId, domainHash, hash, id16, P256_HALF_ORDER, signDetached } from "./crypto";
 import { buildFixtures } from "./fixtures";
+import { buildCountersignFixtures } from "./countersign-fixtures";
 import { promotedProofWithDomain, promotedRoot, rfc6962Leaf } from "./merkle";
 import { TEST_KEYS, TestKeyName } from "./testkeys";
 
@@ -9,6 +10,8 @@ type Obj = Record<string, CborValue>;
 export interface NegativeDescriptor {
   name: string;
   expected_code: string;
+  expected_result?: "nonconformant" | "indeterminate";
+  expected_step?: number;
   mutation_description: string;
 }
 
@@ -237,6 +240,8 @@ export function buildMalformedTypeVariants(): { label: string; bytes: Uint8Array
     // verification on a non-map receipt binding.
     { label: "receipt binding non-map", code: "schema/bad-type", step: 6, build: (bundle) => swapPayload(bundle, "receipts", (value) => { value.binding = 5; }) },
     { label: "request_id array", code: "schema/bad-type", step: 6, build: (bundle) => swapPayload(bundle, "requests", (value) => { value.request_id = [...(value.request_id as Uint8Array)]; }) },
+    { label: "receipt committed_at non-uint", code: "schema/bad-type", step: 6, build: (bundle) => swapPayload(bundle, "receipts", (value) => { (value.emission as Obj).committed_at = "soon"; }) },
+    { label: "receipt committed_at missing", code: "schema/bad-type", step: 6, build: (bundle) => swapPayload(bundle, "receipts", (value) => { delete (value.emission as Obj).committed_at; }) },
     { label: "credential subject_kid array", code: "schema/bad-type", step: 6, build: (bundle) => swapPayload(bundle, "credentials", (value) => { value.subject_kid = [...(value.subject_kid as Uint8Array)]; }) },
     // Post-signature classes: re-signed so the guarded step is actually reached.
     { label: "canonical_command non-bstr", code: "schema/bad-type", step: 7, build: (bundle) => mutateReceipt(bundle, "action_attempt", (value) => { ((value.body as Obj).command as Obj).canonical_command = "not-bytes"; }) },
@@ -629,6 +634,39 @@ function addSecondEpoch(bundle: Obj, epochId: number, predecessorDigest: Uint8Ar
   artifacts(bundle).anchors = [];
 }
 
+// D-77 fixtures use genuine signatures and valid content IDs unless step 6
+// deliberately fires before content validation. O has no root-issued credential.
+function d77Credential(bundle: Obj, key: TestKeyName, usage: string, issuer: TestKeyName, path: CborValue[], signer: TestKeyName): Obj {
+  const template = (artifacts(bundle).credentials as CborValue[]).map(payload).find((p) => p.key_usage === usage)!;
+  const claims: Obj = { ...clone(template), subject_kid: TEST_KEYS[key].kid, public_key: TEST_KEYS[key].spki,
+    issuer_kid: TEST_KEYS[issuer].kid, path };
+  claims.credential_id = domainHash("AAR-CREDENTIAL-ID-v1", withoutField(claims, "credential_id"));
+  (artifacts(bundle).credentials as CborValue[]).push(signDetached(claims, "application/aar-credential+cbor;v=0.2", signer).envelope);
+  sortArtifacts(bundle, "credentials");
+  return claims;
+}
+
+function d77Root(bundle: Obj): Obj {
+  return (artifacts(bundle).credentials as CborValue[]).map(payload).find((p) => (p.path as CborValue[]).length === 0)!;
+}
+
+function d77OmitUsage(bundle: Obj, usage: string): void {
+  const root = (((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[])[0]!;
+  root.allowed_key_usages = (root.allowed_key_usages as CborValue[]).filter((value) => value !== usage);
+  recalcTrust(bundle);
+}
+
+export function buildD77PositiveFixtures() {
+  const bundle = baseBundle();
+  // outcome_signing signs only its outcome receipt and has no ID references.
+  mutateArtifact(bundle, "credentials", (p) => same(p.subject_kid, TEST_KEYS.outcome_signing.kid),
+    (p) => { p.valid_until = ((bundle.trust_inputs as Obj).evaluation_time as number) - 1; });
+  const filename = "repair-d77-receipt-signed-before-expiry";
+  return [{ filename, bytes: encodeCbor(bundle), descriptor: { name: filename, object_type: "bundle",
+    expectation: "conformant", expected_result: "conformant", expected_code: null,
+    mutation_description: "Expire the receipt-only outcome signing credential after committed_at but before evaluation time; recompute its ID and signature." } }];
+}
+
 export function buildNegativeFixtures(): NegativeFixture[] {
   const result: NegativeFixture[] = [];
   const add = (value: NegativeFixture): void => { result.push(value); };
@@ -703,6 +741,61 @@ export function buildNegativeFixtures(): NegativeFixture[] {
   for (const [name, code, description, mutate] of releaseRepairs) {
     const item = bundleFixture(code, description, mutate);
     add({ ...item, filename: name, descriptor: { ...item.descriptor, name } });
+  }
+
+  const d77Repairs: [string, string, number, string, (bundle: Obj) => void][] = [
+    ["credential-issuer-forged", "credential/usage-mismatch", 6, "Outsider O self-signs a credential_issuing credential claiming the accepted root as issuer, then issues an agent leaf under O and that root.", (bundle) => {
+      const root = d77Root(bundle);
+      const outsider = d77Credential(bundle, "d77_outsider", "credential_issuing", "credential_issuing", [root.credential_id!], "d77_outsider");
+      d77Credential(bundle, "d77_leaf", "agent_signing", "d77_outsider", [outsider.credential_id!, root.credential_id!], "d77_outsider");
+    }],
+    ["root-not-self-signed", "credential/usage-mismatch", 6, "Carry an empty-path credential naming itself as issuer and subject but signed by the accepted credential_issuing key.", (bundle) => {
+      d77Credential(bundle, "d77_outsider", "credential_issuing", "d77_outsider", [], "credential_issuing");
+    }],
+    ["status-issuer-mismatch", "credential/usage-mismatch", 6, "Keep the valid status_signing signature while declaring a different issuer_kid.", (bundle) => {
+      mutateArtifact(bundle, "status_snapshots", () => true, (p) => { p.issuer_kid = TEST_KEYS.credential_issuing.kid; });
+    }],
+    ["anchor-signer-mismatch", "credential/usage-mismatch", 6, "Keep the valid anchor_signing signature while declaring a different target.anchor_kid.", (bundle) => {
+      mutateArtifact(bundle, "anchors", () => true, (p) => { (p.target as Obj).anchor_kid = TEST_KEYS.credential_issuing.kid; });
+    }],
+    ["countersigned-subject-issuer-forged", "countersign/credential-invalid", 6, "Sign the mediator subject credential with a valid outsider issuing key while it still claims issuance by the accepted root.", (bundle) => {
+      const countersigned = decodeCbor(buildCountersignFixtures()[0]!.bytes, { strict: true }) as Obj;
+      Object.assign(bundle, countersigned);
+      d77Credential(bundle, "d77_outsider", "credential_issuing", "credential_issuing", [d77Root(bundle).credential_id!], "credential_issuing");
+      const credentials = artifacts(bundle).credentials as CborValue[];
+      const index = credentials.findIndex((entry) => same(payload(entry).subject_kid, TEST_KEYS.mediator_outcome_signing.kid));
+      credentials[index] = signDetached(payload(credentials[index]!), "application/aar-credential+cbor;v=0.2", "d77_outsider").envelope;
+    }],
+    ["root-usage-not-allowed", "credential/root-not-accepted", 8, "Remove ep_signing from the accepted root's usages and recompute the trust digest.", (bundle) => { d77OmitUsage(bundle, "ep_signing"); }],
+    ["embedded-delegation-usage", "credential/root-not-accepted", 8, "Remove the top-level delegation so authority_signing is used only by embedded delegations, and remove its root permission.", (bundle) => {
+      artifacts(bundle).delegations = []; d77OmitUsage(bundle, "authority_signing");
+    }],
+    ["duplicate-root-kid", "schema/duplicate-entry", 5, "Repeat a root_kid in a second root record and recompute the trust digest.", (bundle) => {
+      const roots = (((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[]);
+      roots.push({ ...clone(roots[0]!), root_id: deterministicId("d77-duplicate-root-record") }); recalcTrust(bundle);
+    }],
+    ["receipt-signer-valid-until-boundary", "credential/expired", 6, "Set the receipt-only outcome signing credential valid_until to its receipt committed_at.", (bundle) => {
+      const receipt = (artifacts(bundle).receipts as CborValue[]).map(payload).find((p) => p.kind === "outcome_observation")!;
+      mutateArtifact(bundle, "credentials", (p) => same(p.subject_kid, TEST_KEYS.outcome_signing.kid), (p) => { p.valid_until = (receipt.emission as Obj).committed_at!; });
+    }],
+    ["nonreceipt-signer-valid-until-boundary", "credential/expired", 6, "Set status_signing valid_until to evaluation time; its status snapshot is a non-receipt.", (bundle) => {
+      mutateArtifact(bundle, "credentials", (p) => p.key_usage === "status_signing", (p) => { p.valid_until = (bundle.trust_inputs as Obj).evaluation_time!; });
+    }],
+    ["order-tenant-before-validity", "credential/usage-mismatch", 6, "Give the status signer both a foreign site and expired validity; scope must fail first.", (bundle) => {
+      mutateArtifact(bundle, "credentials", (p) => p.key_usage === "status_signing", (p) => { p.site_id = id16("d77-foreign-site"); p.valid_until = ((bundle.trust_inputs as Obj).evaluation_time as number) - 1; });
+    }],
+    ["order-key-before-coordinates", "key/not-found", 6, "Give a receipt an unknown protected kid and a mismatching protected site; key resolution must fail first.", (bundle) => {
+      modifyCose(bundle, "receipts", 0, (value) => {
+        const protectedValue = decodeCbor(value[0] as Uint8Array, { strict: true }) as Map<CborScalar, CborValue>;
+        protectedValue.set(4, TEST_KEYS.d77_outsider.kid); protectedValue.set(-70002, id16("d77-foreign-site")); value[0] = encodeCbor(protectedValue);
+      });
+    }],
+  ];
+  for (const [suffix, code, step, description, mutate] of d77Repairs) {
+    const item = bundleFixture(code, description, mutate);
+    const name = `repair-d77-${suffix}`;
+    add({ ...item, filename: name, descriptor: { ...item.descriptor, name,
+      expected_result: code === "key/not-found" ? "indeterminate" : "nonconformant", expected_step: step } });
   }
 
   add(fixture("resource/bundle-too-large", "Append bytes until the exact input exceeds the fixed bundle limit.", concat(validBytes, new Uint8Array(16_777_217 - validBytes.length))));

@@ -107,17 +107,18 @@ describe("B2 reference verifier", () => {
     for (const fixture of negativeFixtures) {
       const result = verifyBundle(fixture.bytes, { evaluationTime: AT });
       expect(result.ok, fixture.filename).toBe(false);
+      if (fixture.descriptor.expected_result) expect(result.result, fixture.filename).toBe(fixture.descriptor.expected_result);
       if (!result.ok) expect(result.reason, fixture.filename).toBe(fixture.descriptor.expected_code);
     }
   }, 180_000);
 
-  test("release-repair fixtures fail at their schema step, not a later hash step (D-68..D-73)", () => {
+  test("release-repair fixtures fail at their specified step, not a later hash step (D-68..D-77)", () => {
     const repairs = negativeFixtures.filter((fixture) => fixture.filename.startsWith("repair-"));
-    expect(repairs).toHaveLength(17);
+    expect(repairs).toHaveLength(29);
     for (const fixture of repairs) {
       const result = verifyBundle(fixture.bytes, { evaluationTime: AT });
       expect(result.ok, fixture.filename).toBe(false);
-      if (!result.ok) expect(result.step, fixture.filename).toBe(repairStep(fixture.filename));
+      if (!result.ok) expect(result.step, fixture.filename).toBe(fixture.descriptor.expected_step ?? repairStep(fixture.filename));
     }
   });
 

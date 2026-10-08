@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-status-issuer-mismatch",
+  "expected_code": "credential/usage-mismatch",
+  "mutation_description": "Keep the valid status_signing signature while declaring a different issuer_kid.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

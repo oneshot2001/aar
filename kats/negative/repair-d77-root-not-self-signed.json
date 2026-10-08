@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-root-not-self-signed",
+  "expected_code": "credential/usage-mismatch",
+  "mutation_description": "Carry an empty-path credential naming itself as issuer and subject but signed by the accepted credential_issuing key.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

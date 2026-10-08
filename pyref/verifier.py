@@ -436,6 +436,8 @@ def _trust_policy_checks(state: State) -> None:
         _closed_map(root, {"root_id", "root_kid", "tenant_id", "allowed_sites", "allowed_key_usages"})
         for name, size in (("root_id", 32), ("root_kid", 32), ("tenant_id", 16)):
             _check_fixed(root[name], size)
+    if len({root["root_kid"] for root in store["roots"]}) != len(store["roots"]):
+        _fail("schema/duplicate-entry", 5)
     selector = state.bundle["selector"]
     for root in store["roots"]:
         if root["tenant_id"] != selector["tenant_id"] or selector["site_id"] not in root["allowed_sites"]:
@@ -700,6 +702,52 @@ def _validate_envelope(state: State, category: str, index: int, value: Any) -> E
     payload = _schema_payload(expected_type, _parse_embedded(payload_bytes))
     envelope = Envelope(category, index, value, dumps(value), payload_bytes, payload,
                         cose_bytes, cose, protected_bytes, protected)
+    credential = state.credentials_by_kid.get(protected[4])
+    if credential is None:
+        _fail("key/not-found", 6, indeterminate=True)
+    claims = credential.payload
+    public_key = claims.get("public_key")
+    if not isinstance(public_key, bytes):
+        _fail("countersign/credential-invalid" if category == "mediator_countersignatures" else "schema/bad-type", 6)
+    if hashes.sha256(public_key) != claims.get("subject_kid"):
+        _fail("credential/kid-key-mismatch", 6)
+    try:
+        parse_p256_spki(public_key)
+    except ValueError:
+        _fail("key/not-p256", 6)
+    usage = _required_usage(category, payload)
+    if claims.get("key_usage") != usage or (category == "mediator_countersignatures" and claims.get("principal_role") != "outcome_observer"):
+        if category == "receipts":
+            _fail("receipt/signer-role-mismatch", 6)
+        _fail("credential/usage-mismatch", 6)
+    if category == "credentials":
+        if protected[4] != payload.get("issuer_kid") or (not payload.get("path") and protected[4] != payload.get("subject_kid")):
+            _fail("credential/usage-mismatch", 6)
+    elif category == "status_snapshots":
+        if protected[4] != payload.get("issuer_kid"):
+            _fail("credential/usage-mismatch", 6)
+    elif category == "anchors":
+        target = payload.get("target")
+        if protected[4] != (target.get("anchor_kid") if isinstance(target, dict) else None):
+            _fail("credential/usage-mismatch", 6)
+    elif category in {"epoch_events", "epoch_manifests", "merkle_batches"}:
+        if protected[4] != payload.get("epoch_owner_kid"):
+            _fail("credential/usage-mismatch", 6)
+        if category == "merkle_batches" and payload.get("signer_kid") != payload.get("epoch_owner_kid"):
+            _fail("credential/usage-mismatch", 6)
+    if state.bundle is not None:
+        selector = state.bundle["selector"]
+        if claims.get("tenant_id") != selector["tenant_id"] or claims.get("site_id") != selector["site_id"]:
+            _fail("credential/usage-mismatch", 6)
+    signing_time = payload["emission"].get("committed_at") if category == "receipts" else state.evaluated_at
+    if not _uint(signing_time):
+        _fail("schema/bad-type", 6)
+    if not _uint(claims.get("valid_from")) or not _uint(claims.get("valid_until")):
+        _fail("countersign/credential-invalid" if category == "mediator_countersignatures" else "schema/bad-type", 6)
+    if signing_time < claims["valid_from"]:
+        _fail("credential/not-yet-valid", 6)
+    if signing_time >= claims["valid_until"]:
+        _fail("credential/expired", 6)
     if category == "receipts":
         binding = payload.get("binding", {})
         emission = payload.get("emission", {})
@@ -712,35 +760,6 @@ def _validate_envelope(state: State, category: str, index: int, value: Any) -> E
         if any(protected[label] != coordinate for label, coordinate in coordinates.items()):
             _fail("cose/receipt-coordinate-mismatch", 6)
 
-    credential = state.credentials_by_kid.get(protected[4])
-    if credential is None:
-        _fail("key/not-found", 6, indeterminate=True)
-    claims = credential.payload
-    public_key = claims.get("public_key")
-    if not isinstance(public_key, bytes):
-        _fail("schema/bad-type", 6)
-    if hashes.sha256(public_key) != claims.get("subject_kid"):
-        _fail("credential/kid-key-mismatch", 6)
-    try:
-        parse_p256_spki(public_key)
-    except ValueError:
-        _fail("key/not-p256", 6)
-    usage = _required_usage(category, payload)
-    if claims.get("key_usage") != usage or (category == "mediator_countersignatures" and claims.get("principal_role") != "outcome_observer"):
-        if category == "receipts":
-            _fail("receipt/signer-role-mismatch", 10)
-        _fail("credential/usage-mismatch", 6)
-    if not (claims.get("valid_from", MAX_U53 + 1) <= state.evaluated_at <= claims.get("valid_until", -1)):
-        _fail("credential/not-yet-valid" if state.evaluated_at < claims.get("valid_from", 0) else "credential/expired", 6)
-    if state.bundle is not None:
-        selector = state.bundle["selector"]
-        if claims.get("tenant_id") != selector["tenant_id"] or claims.get("site_id") != selector["site_id"]:
-            _fail("credential/usage-mismatch", 6)
-    if category in {"epoch_events", "epoch_manifests", "merkle_batches"}:
-        if protected[4] != payload.get("epoch_owner_kid"):
-            _fail("credential/usage-mismatch", 6)
-        if category == "merkle_batches" and payload.get("signer_kid") != payload.get("epoch_owner_kid"):
-            _fail("credential/usage-mismatch", 6)
     sig_structure = dumps(["Signature1", protected_bytes, b"", payload_bytes])
     if not verify_es256(public_key, sig_structure, signature):
         _fail("sig/verify-failed", 6)
@@ -757,7 +776,7 @@ def _envelope_checks(state: State) -> None:
                 envelope = _validate_envelope(state, category, index, value)
             except ValidationError as exc:
                 if category == "mediator_countersignatures":
-                    credential_error = exc.code.startswith("credential/") or exc.code.startswith("key/")
+                    credential_error = exc.code.startswith("credential/") or exc.code.startswith("key/") or exc.code == "countersign/credential-invalid"
                     _fail("countersign/credential-invalid" if credential_error else "countersign/invalid", 6)
                 if category == "credentials":
                     payload = _loose_payload(value)
@@ -922,6 +941,7 @@ def _credential_lifecycle(state: State) -> None:
     used_kids = {envelope.protected[4] for category in ARTIFACT_ORDER
                  for envelope in state.envelopes[category]}
     used_kids.update(envelope.protected[4] for envelope in state.envelopes["presentations"])
+    used_kids.update(envelope.protected[4] for envelope in state.embedded_delegations.values())
     mediator_kids = {envelope.protected[4] for envelope in state.envelopes["mediator_countersignatures"]}
 
     role_kids: dict[str, set[bytes]] = defaultdict(set)
@@ -1994,7 +2014,7 @@ def _limits_digest() -> bytes:
     return hashes.domain_hash("AAR-VERDICT-LIMITS-v1", LIMITS)
 
 
-BUILD_DIGEST = hashes.sha256(b"pyref-aar-v0.2.1-prior-emissions-digest-build-v1")
+BUILD_DIGEST = hashes.sha256(b"pyref-aar-v0.2.2-d77-signer-binding-build-v1")
 CONFIG_DIGEST = hashes.sha256(b"pyref-aar-v0.2-gate4-c2-fixed-conformance-config-v1")
 
 
@@ -2128,7 +2148,7 @@ def _verdict_fields(state: State, result: str, reason: str | None, step: int) ->
         "bundle_digest": hashes.sha256(state.raw),
         "selector_commitment": selector_commitment,
         "verifier": {
-            "product": "pyref", "version": "0.2-gate4-c2",
+            "product": "pyref", "version": "v0.2.2",
             "build_digest": BUILD_DIGEST, "config_digest": CONFIG_DIGEST,
             "limits_digest": _limits_digest(),
         },

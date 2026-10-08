@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { decodeCbor, encodeCbor, equalBytes } from "./cbor";
 import { verifySigned } from "./crypto";
 import { buildFixtures } from "./fixtures";
-import { buildClassBoundaryFixtures, buildEvidenceCommitFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
+import { buildD77PositiveFixtures, buildClassBoundaryFixtures, buildEvidenceCommitFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
 import { buildCountersignFixtures } from "./countersign-fixtures";
 import { TEST_KEYS } from "./testkeys";
 import { verifyBundle } from "./verifier";
@@ -23,6 +23,16 @@ describe("positive KAT harness", () => {
     for (let index = 0; index < first.kats.length; index += 1) {
       expect(equalBytes(first.kats[index]!.bytes, second.kats[index]!.bytes)).toBe(true);
       expect(first.kats[index]!.descriptor).toEqual(second.kats[index]!.descriptor);
+    }
+  });
+
+  test("D-77 receipts remain valid after the signing credential expires", () => {
+    const first = buildD77PositiveFixtures(); const second = buildD77PositiveFixtures();
+    for (const [index, fixture] of first.entries()) {
+      expect(equalBytes(fixture.bytes, second[index]!.bytes)).toBe(true);
+      expect(equalBytes(fixture.bytes, readFileSync(join(root, "kats", "positive", `${fixture.filename}.cbor`)))).toBe(true);
+      expect(JSON.parse(readFileSync(join(root, "kats", "positive", `${fixture.filename}.json`), "utf8"))).toEqual(fixture.descriptor);
+      expect(verifyBundle(fixture.bytes, { evaluationTime: AT }).result).toBe(fixture.descriptor.expected_result);
     }
   });
 

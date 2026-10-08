@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-nonreceipt-signer-valid-until-boundary",
+  "expected_code": "credential/expired",
+  "mutation_description": "Set status_signing valid_until to evaluation time; its status snapshot is a non-receipt.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

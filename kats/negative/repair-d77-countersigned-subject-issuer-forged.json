@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-countersigned-subject-issuer-forged",
+  "expected_code": "countersign/credential-invalid",
+  "mutation_description": "Sign the mediator subject credential with a valid outsider issuing key while it still claims issuance by the accepted root.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}
