@@ -26,7 +26,7 @@ describe("positive KAT harness", () => {
     }
   });
 
-  test("D-77 receipts remain valid after the signing credential expires", () => {
+  test("D-77 positive repairs remain conformant and deterministic", () => {
     const first = buildD77PositiveFixtures(); const second = buildD77PositiveFixtures();
     for (const [index, fixture] of first.entries()) {
       expect(equalBytes(fixture.bytes, second[index]!.bytes)).toBe(true);

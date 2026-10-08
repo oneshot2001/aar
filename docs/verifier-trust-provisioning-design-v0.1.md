@@ -8,8 +8,9 @@ entry, a v0.3 wire change (verdict `v: 4`), and a build packet.
 **Closes, if ratified:** BACKLOG freeze blocker "Verifier identity / trust
 provisioning for an unrelated verifier (CONFORMANCE.md:322, D-58)" and the
 first half of crosswalk gap G-C (`docs/admissibility-crosswalk-v0.1.md:371`).
-**Depends on:** fixes X-1 to X-4 (section 0), which are defects in v0.2.1
-as shipped.
+**Depends on:** fixes X-1 to X-4 (section 0). They were defects in v0.2.1
+as shipped and are fixed by D-77 (v0.2.2, 2026-10-08), together with the
+same signer-binding gap in delegations and presentations.
 **Design reference:** the Lean FRO Comparator and how the `openai/math`
 release (2026-10-06) used it. See section 2.
 
@@ -18,10 +19,11 @@ release (2026-10-06) used it. See section 2.
 The review found four defects in the current verifiers. A relying-party
 ceiling is a rule about credential chains, so it would inherit all four.
 They need their own decision and KATs, and they ship before this proposal.
+**Status: fixed by D-77 (v0.2.2).**
 
 | ID | Defect | Evidence | Severity |
 |---|---|---|---|
-| X-1 | A credential's issuance is not tied to its issuer's signature. Each credential envelope is verified with the key named in its own protected header. Nothing requires that key to equal the payload's `issuer_kid`. Path construction checks only that the declared `issuer_kid` and `subject_kid` values line up, so a credential can declare a path to an accepted root that never signed it. CONFORMANCE step 6.7 ("resolve ... through the accepted credential path") does not state the equality either. | `pyref/verifier.py:715`, `:948-956`; `harness/verifier.ts:707`, `:878-884`. Reproduced 2026-10-08 against `kats/positive/bundle-valid-subset`: both verifiers return `conformant` with credentials the root never signed. Controls reject as expected (self-declared root → `credential/root-not-accepted`; corrupted signature → `sig/verify-failed`). The repro script is held outside the repo until the fix lands. | P1, spec + both verifiers |
+| X-1 | A credential's issuance is not tied to its issuer's signature. Each credential envelope is verified with the key named in its own protected header. Nothing requires that key to equal the payload's `issuer_kid`. Path construction checks only that the declared `issuer_kid` and `subject_kid` values line up, so a credential can declare a path to an accepted root that never signed it. CONFORMANCE step 6.7 ("resolve ... through the accepted credential path") does not state the equality either. | `pyref/verifier.py:715`, `:948-956`; `harness/verifier.ts:707`, `:878-884`. Reproduced 2026-10-08 against `kats/positive/bundle-valid-subset`: both verifiers return `conformant` with credentials the root never signed. Controls reject as expected (self-declared root → `credential/root-not-accepted`; corrupted signature → `sig/verify-failed`). The forgery is now KAT `repair-d77-credential-issuer-forged`. | P1, spec + both verifiers |
 | X-2 | Root `allowed_key_usages` is enforced differently. pyref checks it for credentials whose kid signs a top-level envelope or presentation; its `used_kids` omits embedded delegations (`:777`). The harness checks it only for mediator credentials. | `pyref/verifier.py:967-969`; `harness/verifier.ts:892-895`. Confirmed by code read; Codex reproduced the divergent verdicts. | P1, cross-implementation |
 | X-3 | Validity of the credential that verifies each envelope is checked differently. pyref uses evaluation time with `valid_until` inclusive. The harness uses the receipt's `committed_at` for receipts (evaluation time otherwise) with `valid_until` exclusive. | `pyref/verifier.py:733`; `harness/verifier.ts:718-721` | P2, cross-implementation |
 | X-4 | Duplicate producer `root_kid` records are handled differently at step-8 acceptance. pyref keeps the last record; the harness accepts any matching record. Both still check every record's scope at step 5. | `pyref/verifier.py:920`; `harness/verifier.ts:892` | P2, cross-implementation |

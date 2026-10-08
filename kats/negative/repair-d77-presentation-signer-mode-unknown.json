@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-presentation-signer-mode-unknown",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "A presentation with signer_mode bogus_mode is signed by a second valid ep_signing key; presenter and decision name approver A, with all commitments repaired.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

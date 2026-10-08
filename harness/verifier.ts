@@ -560,6 +560,12 @@ function parseEnvelope(entry: CborValue, kind: ArtifactKind, path: string): Pars
     if (payloadValue.cose_alg !== -7 || payloadValue.curve !== "P-256") return failure(6, "schema/enum-unknown", `${path}.payload.algorithm`);
     if (!Array.isArray(payloadValue.path)) return failure(6, "schema/bad-type", `${path}.payload.path`);
   }
+  if (kind === "presentation") {
+    if (typeof payloadValue.signer_mode !== "string") return failure(6, "schema/bad-type", `${path}.payload.signer_mode`);
+    if (!["approver_originated", "ep_authenticated_session"].includes(payloadValue.signer_mode)) return failure(6, "schema/enum-unknown", `${path}.payload.signer_mode`);
+    if (typeof payloadValue.state !== "string") return failure(6, "schema/bad-type", `${path}.payload.state`);
+    if (!["assembled", "delivered", "rendered", "human_approved"].includes(payloadValue.state)) return failure(6, "schema/enum-unknown", `${path}.payload.state`);
+  }
   for (const [field, size] of payloadFixedFields(kind)) if ((issue = fixed(payloadValue[field], size, 6, `${path}.payload.${field}`))) return issue;
   if (kind === "receipt") {
     if (typeof payloadValue.kind !== "string" || !KINDS.includes(payloadValue.kind)) return failure(6, "schema/enum-unknown", `${path}.payload.kind`);

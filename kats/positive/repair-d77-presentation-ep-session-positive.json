@@ -1,0 +1,8 @@
+{
+  "name": "repair-d77-presentation-ep-session-positive",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "An EP-session presentation is signed by the enclosing authorization receipt's EP key; presenter and decision name the same approver."
+}

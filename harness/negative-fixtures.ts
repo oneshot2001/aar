@@ -668,15 +668,49 @@ function d77OmitUsage(bundle: Obj, usage: string): void {
   recalcTrust(bundle);
 }
 
+export function buildPresentationEnumVariants() {
+  const cases: [string, Obj, string][] = [];
+  for (const field of ["signer_mode", "state"]) {
+    for (const [index, value] of [0, false, null, [], {}, new Uint8Array()].entries()) {
+      cases.push([`${field}-nontext-${index}`, { [field]: value }, "schema/bad-type"]);
+    }
+  }
+  cases.push(["mode-before-state", { signer_mode: "bogus_mode", state: 0 }, "schema/enum-unknown"]);
+  cases.push(["state-before-id", { state: "bogus_state", presentation_id: new Uint8Array(31) }, "schema/enum-unknown"]);
+  return cases.map(([name, fields, code]) => {
+    const bundle = baseBundle();
+    d77Authorization(bundle, (body) => {
+      const presentation = body.presentation as CborValue[];
+      // Leave the nested signature/ID stale: schema validation must precede both.
+      presentation[0] = encodeCbor({ ...payload(presentation), ...fields });
+    });
+    return { name, bytes: encodeCbor(bundle), code, step: 6 };
+  });
+}
+
 export function buildD77PositiveFixtures() {
   const bundle = baseBundle();
   // outcome_signing signs only its outcome receipt and has no ID references.
   mutateArtifact(bundle, "credentials", (p) => same(p.subject_kid, TEST_KEYS.outcome_signing.kid),
     (p) => { p.valid_until = ((bundle.trust_inputs as Obj).evaluation_time as number) - 1; });
   const filename = "repair-d77-receipt-signed-before-expiry";
+  const epSession = baseBundle();
+  const inference = receiptBy(epSession, (p) => p.kind === "inference" && (p.parents as CborValue[]).length === 0);
+  d77Authorization(epSession, (body) => {
+    const p = payload(body.presentation!);
+    p.signer_mode = "ep_authenticated_session";
+    p.presentation_id = domainHash("AAR-PRESENTATION-MANIFEST-v1", withoutField(p, "presentation_id"));
+    body.presentation = signDetached(p, contentType(body.presentation!), "ep_signing").envelope;
+  });
+  receiptList(epSession).push(inference);
+  sortArtifacts(epSession, "receipts");
+  const epSessionName = "repair-d77-presentation-ep-session-positive";
   return [{ filename, bytes: encodeCbor(bundle), descriptor: { name: filename, object_type: "bundle",
     expectation: "conformant", expected_result: "conformant", expected_code: null,
-    mutation_description: "Expire the receipt-only outcome signing credential after committed_at but before evaluation time; recompute its ID and signature." } }];
+    mutation_description: "Expire the receipt-only outcome signing credential after committed_at but before evaluation time; recompute its ID and signature." } },
+  { filename: epSessionName, bytes: encodeCbor(epSession), descriptor: { name: epSessionName, object_type: "bundle",
+    expectation: "conformant", expected_result: "conformant", expected_code: null,
+    mutation_description: "An EP-session presentation is signed by the enclosing authorization receipt's EP key; presenter and decision name the same approver." } }];
 }
 
 export function buildNegativeFixtures(): NegativeFixture[] {
@@ -802,6 +836,23 @@ export function buildNegativeFixtures(): NegativeFixture[] {
         p.signer_mode = "ep_authenticated_session";
         p.presentation_id = domainHash("AAR-PRESENTATION-MANIFEST-v1", withoutField(p, "presentation_id"));
         body.presentation = signDetached(p, contentType(body.presentation!), "d77_outsider").envelope;
+      });
+    }],
+    ["presentation-signer-mode-unknown", "schema/enum-unknown", 6, "A presentation with signer_mode bogus_mode is signed by a second valid ep_signing key; presenter and decision name approver A, with all commitments repaired.", (bundle) => {
+      d77Credential(bundle, "d77_outsider", "ep_signing", "credential_issuing", [d77Root(bundle).credential_id!], "credential_issuing");
+      d77Authorization(bundle, (body) => {
+        const p = payload(body.presentation!);
+        p.signer_mode = "bogus_mode";
+        p.presentation_id = domainHash("AAR-PRESENTATION-MANIFEST-v1", withoutField(p, "presentation_id"));
+        body.presentation = signDetached(p, contentType(body.presentation!), "d77_outsider").envelope;
+      });
+    }],
+    ["presentation-state-unknown", "schema/enum-unknown", 6, "An otherwise valid approver-originated presentation has state bogus_state, with its content ID and enclosing commitments repaired.", (bundle) => {
+      d77Authorization(bundle, (body) => {
+        const p = payload(body.presentation!);
+        p.state = "bogus_state";
+        p.presentation_id = domainHash("AAR-PRESENTATION-MANIFEST-v1", withoutField(p, "presentation_id"));
+        body.presentation = signDetached(p, contentType(body.presentation!), "approver_signing").envelope;
       });
     }],
     ["presenter-approver-mismatch", "receipt/decision-presentation", 10, "Presenter A validly signs its presentation, but the decision names approver B; repair commitments in an authorization-only subset.", (bundle) => {

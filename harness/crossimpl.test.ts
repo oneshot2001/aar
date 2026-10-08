@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
-import { buildD77PositiveFixtures, buildEvidenceCommitFixtures, buildNegativeFixtures } from "./negative-fixtures";
+import { buildD77PositiveFixtures, buildEvidenceCommitFixtures, buildNegativeFixtures, buildPresentationEnumVariants } from "./negative-fixtures";
 import { verifyBundle } from "./verifier";
 import { parseStatefulPrior } from "./stateful-fixtures";
 
@@ -37,6 +37,7 @@ function cases(): Case[] {
     { name: "caller-before", bytes: base, at: AT - 1, code: "schema/out-of-range", step: 5 },
     { name: "caller-after", bytes: base, at: AT + 1, code: "schema/out-of-range", step: 5 },
     ...buildD77PositiveFixtures().map((fixture) => ({ name: fixture.filename, bytes: fixture.bytes, at: AT, code: null, step: null })),
+    ...buildPresentationEnumVariants().map((fixture) => ({ ...fixture, at: AT })),
     ...buildNegativeFixtures().filter((fixture) => fixture.filename.startsWith("repair-")).map((fixture) => ({
       name: fixture.filename, bytes: fixture.bytes, at: AT, code: fixture.descriptor.expected_code, step: fixture.descriptor.expected_step ?? repairStep(fixture.filename),
     })),
@@ -96,7 +97,7 @@ test.skip("every corpus fixture has identical result, reason, and signed verdict
   const proc = Bun.spawnSync(["python3", "-B", "-c", PYREF_CORPUS], { cwd: root });
   expect(proc.exitCode, proc.stderr.toString()).toBe(0);
   const rows = JSON.parse(proc.stdout.toString());
-  expect(rows).toHaveLength(241);
+  expect(rows).toHaveLength(244);
   for (const row of rows) {
     const ts = verifyBundle(row.context ? fromHex(row.context) : readFileSync(row.path), {
       evaluationTime: AT, replayState: [], priorEmissions: row.prior ? parseStatefulPrior(row.prior) : undefined,

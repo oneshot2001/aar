@@ -1,6 +1,6 @@
 {
   "deterministic": true,
-  "deterministic_fixtures": 241,
+  "deterministic_fixtures": 244,
   "divergence_count": 0,
   "divergences": [],
   "entry_point_findings": 1,
@@ -2322,6 +2322,34 @@
     {
       "deterministic": true,
       "expected_class": null,
+      "expected_code": "schema/enum-unknown",
+      "expected_result": "nonconformant",
+      "first_failure_step": 6,
+      "fixture": "kats/negative/repair-d77-presentation-signer-mode-unknown.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "schema/enum-unknown",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "04b879bec586881ffebdde1310efb4cd05571a79abb905077a5d4179b13625ea"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "schema/enum-unknown",
+      "expected_result": "nonconformant",
+      "first_failure_step": 6,
+      "fixture": "kats/negative/repair-d77-presentation-state-unknown.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "schema/enum-unknown",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "f09578691e6184296b6e58118d2c10206b22ddd99fcc37100f99c3b643c7c862"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
       "expected_code": "receipt/decision-presentation",
       "expected_result": "nonconformant",
       "first_failure_step": 10,
@@ -3319,6 +3347,20 @@
       "expected_code": null,
       "expected_result": "conformant",
       "first_failure_step": null,
+      "fixture": "kats/positive/repair-d77-presentation-ep-session-positive.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": null,
+      "produced_result": "conformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "278533b2c795c75d5ad33db13af3439d9ab68b4de10d29a26195ac6cd179d162"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": null,
+      "expected_result": "conformant",
+      "first_failure_step": null,
       "fixture": "kats/positive/repair-d77-receipt-signed-before-expiry.cbor",
       "matched": true,
       "produced_class": null,
@@ -3412,8 +3454,8 @@
       "verdict_sha256": "e022cbf76e9c35de3c99a1ad268b82f84ad252683cc46e8bf44122eb8bfa006e"
     }
   ],
-  "fixtures_evaluated": 241,
-  "matches": 241,
+  "fixtures_evaluated": 244,
+  "matches": 244,
   "mismatches": 0,
   "schema_version": 1,
   "slice": "C2"

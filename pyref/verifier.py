@@ -546,6 +546,15 @@ def _schema_payload(content_type: str, payload: Any) -> dict[str, Any]:
             _fail("schema/enum-unknown", 6)
         if not isinstance(payload["path"], list):
             _fail("schema/bad-type", 6)
+    if content_type == CONTENT_TYPES["presentations"]:
+        if not isinstance(payload["signer_mode"], str):
+            _fail("schema/bad-type", 6)
+        if payload["signer_mode"] not in ("approver_originated", "ep_authenticated_session"):
+            _fail("schema/enum-unknown", 6)
+        if not isinstance(payload["state"], str):
+            _fail("schema/bad-type", 6)
+        if payload["state"] not in ("assembled", "delivered", "rendered", "human_approved"):
+            _fail("schema/enum-unknown", 6)
     for field, size in PAYLOAD_FIXED_FIELDS[content_type]:
         value = payload.get(field)
         if not isinstance(value, bytes):

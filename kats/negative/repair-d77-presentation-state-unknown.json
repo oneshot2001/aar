@@ -1,0 +1,7 @@
+{
+  "name": "repair-d77-presentation-state-unknown",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "An otherwise valid approver-originated presentation has state bogus_state, with its content ID and enclosing commitments repaired.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}
