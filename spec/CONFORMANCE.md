@@ -86,7 +86,8 @@ normative as the step order itself (D-54).
    5. classify signature encoding length-first, require 64-byte P1363, nonzero
       `r,s`, and low-S;
    6. decode the detached payload bytes under step 2's CBOR rules, then validate
-      its selected closed schema;
+      its selected closed schema (a credential `path` that is not an array
+      is `schema/bad-type`, D-77);
       this includes nested productions and closed scalar enums, including
       a credential's `principal_type`, and its `cose_alg`/`curve` (integer
       `-7` and text `P-256` only; wrong type is `schema/bad-type`, wrong
@@ -96,7 +97,9 @@ normative as the step order itself (D-54).
    7. resolve a P-256 verification key through the accepted credential path
       and check the resolved signer, in this order (D-77):
       1. a carried credential whose `subject_kid` equals the protected kid
-         exists, else `key/not-found`;
+         exists, else `key/not-found`; when several carry that kid, the
+         first in `credentials` array order is the resolved credential
+         (D-73's find-first rule);
       2. `SHA-256(public_key) == subject_kid`, else
          `credential/kid-key-mismatch`; the carried SPKI is the verification
          key;
@@ -109,8 +112,13 @@ normative as the step order itself (D-54).
          declares one: a credential's `issuer_kid` (for an empty path, its
          `issuer_kid` and `subject_kid` both); a status snapshot's
          `issuer_kid`; an anchor record's `target.anchor_kid`; an epoch
-         event's, epoch manifest's, or Merkle batch's `epoch_owner_kid`; and
-         a Merkle batch's `signer_kid` MUST equal its `epoch_owner_kid`; else
+         event's, epoch manifest's, or Merkle batch's `epoch_owner_kid`; the
+         `subject_kid` of the carried credential named by a delegation's
+         `issuer_credential_id` or by an approver-originated presentation's
+         `presenter_credential_id` (no such carried credential fails this
+         check); for an EP-authenticated-session presentation, the protected
+         kid of its enclosing authorization receipt; and a Merkle batch's
+         `signer_kid` MUST equal its `epoch_owner_kid`; else
          `credential/usage-mismatch`;
       6. the resolved credential's `tenant_id` and `site_id` equal the
          selector's, else `credential/usage-mismatch`;
@@ -120,7 +128,8 @@ normative as the step order itself (D-54).
          `emission.committed_at`, and the evaluation time for every other
          object.
 
-      Status snapshots are evaluated at step 8;
+      Status-snapshot content (lease, freshness, revocation) is evaluated at
+      step 8; status envelopes pass sub-step 7 like every other envelope;
    8. after all of sub-step 7, compare protected receipt coordinates to
       payload coordinates;
    9. reconstruct COSE `Sig_structure` from the received protected and payload
@@ -168,7 +177,10 @@ normative as the step order itself (D-54).
    disagreement is `countersign/digest-mismatch`.
 8. **Credential lifecycle.** Enforce role-key separation; path construction;
    tenant-scoped roots; and rotation predecessor/successor continuity and monotonic
-   sequence. Root acceptance (D-77) checks every carried credential: its
+   sequence. In path construction, a credential whose `subject_kid` equals a
+   trust-store `root_kid` MUST have an empty path, else `credential/path-invalid`
+   (D-77): only the root's self-signed credential may speak for a root key.
+   Root acceptance (D-77) checks every carried credential: its
    terminal credential's `subject_kid` equals a root record's `root_kid`, that
    record's `tenant_id` equals the credential's, and the credential's `site_id`
    is in the record's `allowed_sites`. When the credential's `subject_kid` is
@@ -204,7 +216,9 @@ normative as the step order itself (D-54).
     parent observation or the `digest` of a bundle
     `canonical-manifest-payload`, rejecting an unresolved reference with
     `receipt/consumption-ref-unresolved`;
-    decision/presentation conditional fields and presentation signer mode;
+    decision/presentation conditional fields and presentation signer mode
+    (a presentation's `presenter_credential_id` MUST equal the decision's
+    `approver_credential_id`, else `receipt/decision-presentation`);
     action-attempt/refusal conditional fields; reject an unknown `hazard_class`
     enum with `schema/enum-unknown`; require every
     `hazard_class="life_safety"` marker's normalized `action_name` to occur in
@@ -503,7 +517,7 @@ one input has several defects, section 2 selects the first verifier code.
 | `credential/root-not-accepted` | Credential path ends at a root not accepted for the bound tenant/site, or a credential that signs a verified envelope has a key usage its root does not allow (D-77). |
 | `credential/path-invalid` | Path within its schema length is not a contiguous issuer/subject chain or contains a loop. |
 | `credential/kid-key-mismatch` | SHA-256 of the credential's carried DER SubjectPublicKeyInfo differs from `subject_kid`. |
-| `credential/usage-mismatch` | Credential key usage does not authorize the signed object/role, including an epoch event, epoch manifest, or Merkle batch not signed by its `epoch_owner_kid` with `ep_signing`, or a Merkle batch whose `signer_kid` differs from `epoch_owner_kid`., or an envelope whose protected kid differs from the signer its payload declares, or a signing credential whose tenant/site differs from the selector's (D-77). |
+| `credential/usage-mismatch` | Credential key usage does not authorize the signed object/role, including an epoch event, epoch manifest, or Merkle batch not signed by its `epoch_owner_kid` with `ep_signing`, or a Merkle batch whose `signer_kid` differs from `epoch_owner_kid`, or an envelope whose protected kid differs from the signer its payload declares, or a signing credential whose tenant/site differs from the selector's (D-77). |
 | `credential/not-yet-valid` | Signing time (step 6.7) precedes credential `valid_from`, or use precedes the status lease window (step 8). |
 | `credential/expired` | Signing time (step 6.7) is at or after credential `valid_until`. |
 | `credential/status-missing` | A required stapled snapshot for the decision/key is absent. |

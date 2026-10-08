@@ -1279,9 +1279,22 @@ while reviewing the D-58 trust-provisioning proposal
 1. **Declared signer (X-1).** An envelope's protected kid MUST equal the
    signer its payload declares: a credential's `issuer_kid` (a self-signed
    root has `issuer_kid == subject_kid ==` protected kid), a status
-   snapshot's `issuer_kid`, and an anchor record's `target.anchor_kid`. The
-   existing epoch-owner and Merkle-signer checks are the same rule and move
-   to the same position. A failure is `credential/usage-mismatch` at
+   snapshot's `issuer_kid`, an anchor record's `target.anchor_kid`, the
+   subject kid of the credential a delegation names as
+   `issuer_credential_id`, the subject kid of the credential an
+   approver-originated presentation names as `presenter_credential_id`, and
+   for an EP-authenticated-session presentation the signer of its enclosing
+   authorization receipt. The existing epoch-owner and Merkle-signer checks
+   are the same rule and move to the same position. Two supporting rules
+   keep the binding deterministic. First, when several carried credentials
+   share a `subject_kid`, the first in array order is the resolved
+   credential (D-73's find-first rule). Second, a credential for a
+   trust-store root key MUST have an empty path (`credential/path-invalid`),
+   so only the root's self-signed credential can stand in for the root.
+   A non-array credential `path` is `schema/bad-type` at step 6. A
+   presentation's `presenter_credential_id` MUST equal the decision's
+   `approver_credential_id` (`receipt/decision-presentation`, which pyref
+   already enforced and the harness did not). A failure is `credential/usage-mismatch` at
    CONFORMANCE step 6.7.5, the code the epoch-owner check already uses, or
    `countersign/credential-invalid` for a countersigned subject.
 2. **Root usage (X-2).** At step 8, a credential whose `subject_kid` is the
@@ -1312,32 +1325,49 @@ construction followed the declared `issuer_kid`. Anyone holding a key could
 therefore mint a credential claiming issuance by an accepted root, and both
 verifiers returned `conformant`. This was reproduced on
 `kats/positive/bundle-valid-subset` on 2026-10-08; a self-declared root and a
-corrupted signature were still rejected as controls. Status snapshots and
-anchor records had the same unbound field, so a producer could sign an
-anchor record for a target it declared independent. Attribution, the
+corrupted signature were still rejected as controls. Status snapshots,
+anchor records, delegations, and presentations had the same unbound field.
+A producer could sign an anchor record for a target it declared
+independent, any authority key could sign a delegation naming another
+authority as issuer, and any approver key could sign a presentation naming
+another approver. That last one was reproduced as `conformant` in both
+verifiers by the second D-77 review. Attribution, the
 product's core claim, rests on this check. (2) and (4) The reference
 implementations disagreed (pyref checked usage for signers, the harness
 only for mediator credentials; pyref kept the last duplicate root, the
 harness accepted any match), and no corpus case exercised the difference,
-so the cross-implementation byte gate passed. (3) Half-open matches every
-other AAR interval: delegation `not_after`, replay `expires_at`, selector
-`committed_until`. Signing time matches the revocation and compromise
-rules, which already judge "signing/use" time, and keeps a receipt
-verifiable after the key that signed it has expired. A receipt's
-`committed_at` is only as trustworthy as its time class, which the
-verdict's `maximum_time_class` already reports.
+so the cross-implementation byte gate passed. (3) Half-open matches the
+delegation `not_after`, replay `expires_at`, and selector
+`committed_until` intervals. Signing time matches the reason-code table's
+"signing/use" wording for revocation and compromise. Neither reference
+implementation yet judges revocation or compromise at signing time; that
+gap is backlogged. It keeps a receipt verifiable after its signing key
+expires, for keys that sign only receipts (agent, outcome observer), and
+within status freshness. Backdating is bounded by the EP-signed manifest
+index, which must commit the same `committed_at`, so a forged early time
+needs the EP's key. A receipt's `committed_at` is otherwise only as
+trustworthy as its time class, which the verdict's `maximum_time_class`
+reports.
 
 **Evidence.** A corpus scan before the change found that all 1,771
 credential, 176 status-snapshot, and 128 anchor-record envelopes in `kats/`
-satisfy rule 1, and no bundle repeats a `root_kid`. Existing KAT outcomes
-are unchanged. New negative KATs cover each rule, including the X-1
+satisfy rule 1. So do all 523 delegations and 166 presentations (every
+presentation in the corpus is approver-originated). No bundle repeats a
+`root_kid` or carries a root-key credential with a non-empty path.
+Existing KAT results and reasons are unchanged. pyref's reported step for
+`receipt-signer-role-mismatch` moves from 10 to 6, and pyref's mediator
+mapping for a non-bytes `public_key` or non-uint validity (unreachable after
+schema validation) now matches the harness. New negative KATs cover each rule, including the X-1
 forgery. Verdict bytes change only through verifier identity, because the
 build preimages move to v0.2.2.
 
 **Alternatives considered.** New reason codes such as
 `credential/issuer-mismatch` or `anchor/signer-mismatch`: rejected, because
 the epoch-owner precedent already maps a declared-signer mismatch to
-`credential/usage-mismatch`, and reason codes are wire surface. Checking
+`credential/usage-mismatch`, and reason codes are wire surface. Rejecting duplicate `subject_kid`
+outright: rejected, because that is the `credential/role-key-reuse` case,
+which keeps its own step-8 code. Find-first makes resolution deterministic
+instead. Checking
 root usage for every carried credential: rejected, because the corpus
 carries a `verifier_signing` credential whose root does not list that
 usage, and usage matters only for keys that sign. Evaluation-time validity
