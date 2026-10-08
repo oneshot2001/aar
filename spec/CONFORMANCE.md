@@ -63,7 +63,9 @@ normative as the step order itself (D-54).
 4. **Static resource counts.** Check artifact counts, parent counts, total edge
    count, individual proof byte lengths, and aggregate proof bytes in that order.
 5. **Trust-policy input.** Validate the trust-store snapshot digest, root records,
-   tenant/site scopes, evaluation time, expected anchor heads, and policy digest.
+   root-key uniqueness, tenant/site scopes, evaluation time, expected anchor
+   heads, and policy digest. No two root records may share a `root_kid`; a
+   repeat is `schema/duplicate-entry` (D-77).
    At the evaluation-time check, require the bundle's `evaluation_time` to
    equal the explicitly supplied verifier evaluation time; then require that
    time to be at least the trust-store snapshot's `created_at`. Either failure
@@ -91,11 +93,36 @@ normative as the step order itself (D-54).
       value `schema/enum-unknown`, in that order after `principal_type`,
       D-73). Unknown principal-type text is
       `schema/enum-unknown` at step 6, before content-ID validation.
-   7. resolve a P-256 verification key through the accepted credential path,
-      require `SHA-256(public_key) == subject_kid`, use that carried SPKI for
-      verification, and enforce key usage, tenant/site scope, validity, and
-      status; a request envelope requires `agent_signing` usage;
-   8. compare protected receipt coordinates to payload coordinates;
+   7. resolve a P-256 verification key through the accepted credential path
+      and check the resolved signer, in this order (D-77):
+      1. a carried credential whose `subject_kid` equals the protected kid
+         exists, else `key/not-found`;
+      2. `SHA-256(public_key) == subject_kid`, else
+         `credential/kid-key-mismatch`; the carried SPKI is the verification
+         key;
+      3. the key is P-256, else `key/not-p256`;
+      4. the credential's key usage (and, for a mediator countersignature,
+         its role) authorizes the object; a request envelope requires
+         `agent_signing` usage; else `credential/usage-mismatch`
+         (`receipt/signer-role-mismatch` for a receipt);
+      5. the protected kid equals the signer the payload declares, where it
+         declares one: a credential's `issuer_kid` (for an empty path, its
+         `issuer_kid` and `subject_kid` both); a status snapshot's
+         `issuer_kid`; an anchor record's `target.anchor_kid`; an epoch
+         event's, epoch manifest's, or Merkle batch's `epoch_owner_kid`; and
+         a Merkle batch's `signer_kid` MUST equal its `epoch_owner_kid`; else
+         `credential/usage-mismatch`;
+      6. the resolved credential's `tenant_id` and `site_id` equal the
+         selector's, else `credential/usage-mismatch`;
+      7. the signing time lies in the half-open interval
+         `[valid_from, valid_until)`, else `credential/not-yet-valid` or
+         `credential/expired`. The signing time is a receipt's
+         `emission.committed_at`, and the evaluation time for every other
+         object.
+
+      Status snapshots are evaluated at step 8;
+   8. after all of sub-step 7, compare protected receipt coordinates to
+      payload coordinates;
    9. reconstruct COSE `Sig_structure` from the received protected and payload
       bytes and verify ES256.
 
@@ -141,7 +168,14 @@ normative as the step order itself (D-54).
    disagreement is `countersign/digest-mismatch`.
 8. **Credential lifecycle.** Enforce role-key separation; path construction;
    tenant-scoped roots; and rotation predecessor/successor continuity and monotonic
-   sequence. Then, for EVERY carried status snapshot — whether or not any decision
+   sequence. Root acceptance (D-77) checks every carried credential: its
+   terminal credential's `subject_kid` equals a root record's `root_kid`, that
+   record's `tenant_id` equals the credential's, and the credential's `site_id`
+   is in the record's `allowed_sites`. When the credential's `subject_kid` is
+   the protected kid of at least one envelope verified at step 6 (embedded
+   delegations and nested presentation manifests included), its `key_usage`
+   MUST also be in the record's `allowed_key_usages`. Either failure is
+   `credential/root-not-accepted`. Then, for EVERY carried status snapshot — whether or not any decision
    references it — evaluate its content in this order: lease maxima
    (`credential/lease-too-long`), status freshness (`credential/status-stale`),
    revocation (`credential/revoked`), compromise time (`credential/compromised`),
@@ -421,7 +455,7 @@ one input has several defects, section 2 selects the first verifier code.
 | `schema/string-size` | A tstr violates its stated UTF-8 byte length. |
 | `schema/digest-size` | A digest, kid, UUID-like id, or signature-sized bstr has the wrong fixed length. |
 | `schema/unsorted-set` | A bundle selector set or bundle artifact array is not strictly in its prescribed order. |
-| `schema/duplicate-entry` | A bundle selector set or bundle artifact array repeats an otherwise valid entry. |
+| `schema/duplicate-entry` | A bundle selector set or bundle artifact array repeats an otherwise valid entry, or two trust-store root records share a `root_kid` (D-77). |
 | `cose/tagged` | A CBOR tag wraps a COSE_Sign1. |
 | `cose/bad-structure` | A well-formed COSE item is not an untagged four-element array of the required element types. |
 | `cose/protected-not-map` | Protected is a bstr but its contents are not one closed CBOR map. |
@@ -466,12 +500,12 @@ one input has several defects, section 2 selects the first verifier code.
 | `receipt/outcome-subject-mismatch` | Outcome subject is not its `observed_outcome` dispatch/attempt parent. |
 | `journal/unavailable` | Operational refusal reason: before an AAR-3 non-life-safety action-bearing send, neither the primary nor emergency journal can durably commit the `action_attempt`; the EP emits a `not_dispatched` attempt carrying this exact `refusal_reason`. This code never appears as a verifier verdict reason. |
 | `journal/uncommitted-dispatch` | On an AAR-3 profile, a dispatch's linked attempt lacks the prior journal commitment defined at step 13 and is not the marked life-safety exception. |
-| `credential/root-not-accepted` | Credential path ends at a root not accepted for the bound tenant/site. |
+| `credential/root-not-accepted` | Credential path ends at a root not accepted for the bound tenant/site, or a credential that signs a verified envelope has a key usage its root does not allow (D-77). |
 | `credential/path-invalid` | Path within its schema length is not a contiguous issuer/subject chain or contains a loop. |
 | `credential/kid-key-mismatch` | SHA-256 of the credential's carried DER SubjectPublicKeyInfo differs from `subject_kid`. |
-| `credential/usage-mismatch` | Credential key usage does not authorize the signed object/role, including an epoch event, epoch manifest, or Merkle batch not signed by its `epoch_owner_kid` with `ep_signing`, or a Merkle batch whose `signer_kid` differs from `epoch_owner_kid`. |
-| `credential/not-yet-valid` | Evaluation or signing time precedes credential validity. |
-| `credential/expired` | Evaluation or signing time is after credential validity. |
+| `credential/usage-mismatch` | Credential key usage does not authorize the signed object/role, including an epoch event, epoch manifest, or Merkle batch not signed by its `epoch_owner_kid` with `ep_signing`, or a Merkle batch whose `signer_kid` differs from `epoch_owner_kid`., or an envelope whose protected kid differs from the signer its payload declares, or a signing credential whose tenant/site differs from the selector's (D-77). |
+| `credential/not-yet-valid` | Signing time (step 6.7) precedes credential `valid_from`, or use precedes the status lease window (step 8). |
+| `credential/expired` | Signing time (step 6.7) is at or after credential `valid_until`. |
 | `credential/status-missing` | A required stapled snapshot for the decision/key is absent. |
 | `credential/status-stale` | Snapshot age exceeds 86,400 seconds for AAR-1/2 or 300 seconds for AAR-2A/3. |
 | `credential/revoked` | Signing/use is at or after an effective revocation. |

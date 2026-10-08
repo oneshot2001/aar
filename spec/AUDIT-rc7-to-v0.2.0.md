@@ -49,3 +49,14 @@ receipt identity and sequence history that governs cross-evaluation checks.
 The protected content type remains `application/aar-verdict+cbor;v=0.2`.
 This extends D-51's frozen preimages and changes verdict bytes, with zero
 receipt-fixture changes and no change to `spec/aar-core.cddl`.
+
+## v0.2.2 delta
+
+D-77 binds credentials, status snapshots, and anchor records to the signer
+their payload declares. It requires root `allowed_key_usages` for every
+signing credential, fixes credential validity as half-open at signing
+time, forbids duplicate root keys, and fixes step 6.7's check order. These
+are verifier rules only. `spec/aar-core.cddl` gains comments but no shape
+change, the verdict stays `v: 3` with content type
+`application/aar-verdict+cbor;v=0.2`, and receipt fixtures are unchanged.
+Verdict bytes change through the bumped verifier build identity.

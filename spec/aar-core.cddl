@@ -694,6 +694,8 @@ credential-profile-object = {
 }
 
 ; public_key is DER SubjectPublicKeyInfo and subject_kid = SHA-256(public_key).
+; The credential envelope's protected kid MUST equal issuer_kid; a self-signed
+; root (empty path) has issuer_kid = subject_kid = protected kid (D-77).
 ; credential_id = SHA-256(deterministic-CBOR([
 ;   "AAR-CREDENTIAL-ID-v1", credential-profile-object with credential_id absent
 ; ])).
@@ -748,6 +750,7 @@ status-snapshot-envelope = [
   signature: bstr .cbor artifact-cose-sign1,
 ]
 
+; The status-snapshot envelope's protected kid MUST equal issuer_kid (D-77).
 status-snapshot = {
   v: 2,
   snapshot_id: digest32,
@@ -982,6 +985,7 @@ anchor-record = {
   claim: "existence_and_order_by_time_only",
 }
 
+; The anchor-record envelope's protected kid MUST equal target.anchor_kid (D-77).
 ; anchor_id = SHA-256(deterministic-CBOR([
 ;   "AAR-ANCHOR-ID-v1", anchor-record with anchor_id absent
 ; ])).  manifest_digest is SHA-256 of the exact epoch-manifest payload bstr.
@@ -1179,7 +1183,7 @@ trust-store-fields = (
 ;   "AAR-TRUST-STORE-v1", trust-store-id-input
 ; ])).
 
-trust-roots = [ 1*64 trust-root ]
+trust-roots = [ 1*64 trust-root ]   ; root_kid values pairwise distinct (D-77)
 trust-root = {
   root_id: digest32,
   root_kid: kid,

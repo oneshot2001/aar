@@ -1269,3 +1269,80 @@ trust-policy digest stayed unchanged. `prior_emissions` governs
 `identity/epoch-sequence-rollback`, but D-51's `replay_state_digest` covers only
 replay entries. A verdict that flips on an input it does not commit to is not
 a complete signed statement of its own evaluation.
+
+## D-77 — Signed objects are bound to their declared signer; root usage, credential validity, and root uniqueness each get one rule
+
+**Decision.** Four verifier rules, each closing a defect found on 2026-10-08
+while reviewing the D-58 trust-provisioning proposal
+(`docs/verifier-trust-provisioning-design-v0.1.md` §0, X-1 to X-4):
+
+1. **Declared signer (X-1).** An envelope's protected kid MUST equal the
+   signer its payload declares: a credential's `issuer_kid` (a self-signed
+   root has `issuer_kid == subject_kid ==` protected kid), a status
+   snapshot's `issuer_kid`, and an anchor record's `target.anchor_kid`. The
+   existing epoch-owner and Merkle-signer checks are the same rule and move
+   to the same position. A failure is `credential/usage-mismatch` at
+   CONFORMANCE step 6.7.5, the code the epoch-owner check already uses, or
+   `countersign/credential-invalid` for a countersigned subject.
+2. **Root usage (X-2).** At step 8, a credential whose `subject_kid` is the
+   protected kid of any envelope verified at step 6 (embedded delegations
+   and nested presentation manifests included) MUST carry a `key_usage`
+   listed in its root record's `allowed_key_usages`, else
+   `credential/root-not-accepted`. A carried credential that signs nothing
+   is exempt from the usage clause, not from root acceptance.
+3. **Credential validity (X-3).** A resolved signing credential is valid on
+   the half-open interval `[valid_from, valid_until)` at the signing time:
+   a receipt's `emission.committed_at`, otherwise the evaluation time.
+4. **Root uniqueness (X-4).** Trust-store root records MUST NOT share a
+   `root_kid`. A repeat is `schema/duplicate-entry` at step 5, before the
+   per-root tenant/site check.
+
+Step 6.7 is now an ordered list (key resolution, kid/key match, P-256,
+usage, declared signer, tenant/site, validity), and the receipt coordinate
+comparison runs after all of it. The two reference implementations had
+ordered these differently: pyref checked validity before tenant/site, the
+epoch owner after both, and receipt coordinates before key resolution; the
+harness had no step-6 tenant/site check and checked the epoch owner before
+validity. The declared spec becomes v0.2.2. Wire shape, the verdict version
+(3), and its content type are unchanged.
+
+**Why.** (1) Without it the issuer field is decorative. Each credential
+envelope was verified with the key its own header named, while path
+construction followed the declared `issuer_kid`. Anyone holding a key could
+therefore mint a credential claiming issuance by an accepted root, and both
+verifiers returned `conformant`. This was reproduced on
+`kats/positive/bundle-valid-subset` on 2026-10-08; a self-declared root and a
+corrupted signature were still rejected as controls. Status snapshots and
+anchor records had the same unbound field, so a producer could sign an
+anchor record for a target it declared independent. Attribution, the
+product's core claim, rests on this check. (2) and (4) The reference
+implementations disagreed (pyref checked usage for signers, the harness
+only for mediator credentials; pyref kept the last duplicate root, the
+harness accepted any match), and no corpus case exercised the difference,
+so the cross-implementation byte gate passed. (3) Half-open matches every
+other AAR interval: delegation `not_after`, replay `expires_at`, selector
+`committed_until`. Signing time matches the revocation and compromise
+rules, which already judge "signing/use" time, and keeps a receipt
+verifiable after the key that signed it has expired. A receipt's
+`committed_at` is only as trustworthy as its time class, which the
+verdict's `maximum_time_class` already reports.
+
+**Evidence.** A corpus scan before the change found that all 1,771
+credential, 176 status-snapshot, and 128 anchor-record envelopes in `kats/`
+satisfy rule 1, and no bundle repeats a `root_kid`. Existing KAT outcomes
+are unchanged. New negative KATs cover each rule, including the X-1
+forgery. Verdict bytes change only through verifier identity, because the
+build preimages move to v0.2.2.
+
+**Alternatives considered.** New reason codes such as
+`credential/issuer-mismatch` or `anchor/signer-mismatch`: rejected, because
+the epoch-owner precedent already maps a declared-signer mismatch to
+`credential/usage-mismatch`, and reason codes are wire surface. Checking
+root usage for every carried credential: rejected, because the corpus
+carries a `verifier_signing` credential whose root does not list that
+usage, and usage matters only for keys that sign. Evaluation-time validity
+for receipts (pyref's prior behavior): rejected, because a key whose
+validity ended before the bundle's evaluation time would invalidate every
+receipt it signed while valid, which contradicts the signing-time
+revocation rule. A closed validity interval: rejected, because it would be
+the only closed interval in the wire.
