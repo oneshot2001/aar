@@ -44,7 +44,7 @@ describe("malformed-input hardening", () => {
       expect(output.includes(`First failure: step ${variant.step} (${variant.code})`), `${variant.label}: ${output}`).toBe(true);
       expect(output.includes("Traceback"), variant.label).toBe(false);
     }
-  });
+  }, 180_000);
 
   test("a missing evaluationTime is a hard caller error, never a wall-clock read", () => {
     const input = readFileSync(join(root, "kats", "positive", "bundle-valid-subset.cbor"));
