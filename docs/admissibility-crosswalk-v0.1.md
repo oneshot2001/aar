@@ -1,7 +1,9 @@
 # Admissibility crosswalk — AAR v0.2 against the Federal Rules of Evidence (draft v0.1)
 
 Status: **draft, unreviewed by counsel, not legal advice.** Written against
-wire `v0.2.1` (verdict v3, D-76) on `main` and the Federal Rules of Evidence as amended through December 1,
+wire `v0.2.1` (verdict v3, D-76) on `main`; the limits table below adds the
+v0.2.3 `input_origin_ancestry` row (verdict v4, D-78), and the verdict digest
+in §0 is re-pinned with the v0.2.3 build. Rules text is against the Federal Rules of Evidence as amended through December 1,
 2024 (the 2023 Rule 702 amendment and the 2024 Rule 1006 / new Rule 107
 amendments). State rules differ; the state notes below are marked for
 verification. This document does not claim that any AAR artifact is
@@ -44,6 +46,7 @@ and a signed `scope` map. For this bundle they read:
 | `custody_continuity` | limits | `not_established` | v0.2 MUST emit this for every result (`:696-699`) |
 | `discovery_completeness` | limits | `not_established` | nobody checked that this is everything the producer holds |
 | `legal_admissibility` | limits | `not_established` | the only value the field can take |
+| `input_origin_ancestry` | limits | `not_declared` (this bundle predates D-78) | how completely the inputs in each dispatched action's ancestry declared their origin class; `declared_only` is the ceiling and means the producer labelled every slot, not that the labels are true, that capture was complete, or that any input caused the action (D-78) |
 | `ingress_completeness` | scope | `not_established` | v0.2 MUST emit only this (`:701`); no census exists |
 
 Two facts about the verifier itself matter for every rule below and are

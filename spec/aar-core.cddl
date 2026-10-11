@@ -73,6 +73,25 @@ edge-type =
 
 time-evidence-class = "asserted" / "boot_bound" / "externally_anchored"
 provenance-class = "self_asserted" / "proxy_captured" / "provider_attested"
+
+; D-78.  Emitter-declared origin class of an input, classified by the origin of
+; the CONTENT, never its transport, message role, or current custodian.  A
+; verifier relays it (CONFORMANCE step 13) and never checks it against prompt,
+; retrieval or tool manifest bytes (D-32).  Absence means "not declared", never
+; "unknown".  An item carrying content of more than one origin declares the
+; least trusted present: third_party, device_sensed, unknown, principal,
+; operator_system, in that order.
+input-origin =
+    "principal"        ; authored by the requesting principal (human or agent request)
+  / "operator_system"  ; produced inside the deploying operator's trust boundary
+  / "device_sensed"    ; captured by a sensor; the scene is attacker-influenceable
+  / "third_party"      ; crossed the operator boundary: web, mail, external tool or API output
+  / "unknown"          ; the emitter classifies inputs and could not classify this one
+
+; Strictly sorted unique set in deterministic-CBOR encoded-byte order:
+; unknown, principal, third_party, device_sensed, operator_system.  Enforced at
+; CONFORMANCE step 6 (schema/duplicate-entry before schema/unsorted-set).
+input-origins = [ 1*5 input-origin ]
 outcome-evidence-level =
     "accepted"
   / "dispatched"
@@ -323,6 +342,7 @@ consumption-item = {
   content_commitment: digest32,
   transformations: transformations,
   disposition: "used" / "discarded",
+  ? origin: input-origin,
 }
 
 transformations = [ 0*32 transformation ]
@@ -353,6 +373,7 @@ inference-body = {
   prompt_manifest: canonical-manifest-ref,
   retrieval_manifest: canonical-manifest-ref,
   tool_transcript_manifest: canonical-manifest-ref,
+  ? origins: input-origins,
   conclusion: structured-claim,
   uncertainty_bps: uint .le 10000,
 }

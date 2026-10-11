@@ -188,7 +188,14 @@ control; *no keys*. The camera scene is attacker input. Status: **partial,
 conditional** — forensic value exists only at a defined capture boundary and
 provenance level; the verdict is "the item was disclosed among captured
 inputs," never "causal chain reconstructed." At base provenance the injected
-item may simply be absent (T-P3). Residual RR-8.
+item may simply be absent (T-P3). Residual RR-8. Since v0.2.3 (D-78) the
+producer can declare each captured input's origin class and the verdict
+relays, per dispatched action, whether the ancestry declared itself
+(`input_origin_ancestry`) and whether a potentially untrusted origin was
+declared (`untrusted_origin_declared_in_action_ancestry`). This surfaces a
+disclosed untrusted-input path; it does not change the cap. Declarations are
+self-asserted, unchecked against manifest bytes (D-32), and an omitted input
+stays invisible.
 
 **T-P5 — Approval-context manipulation / approval forgery.** Caps:
 C-presign(EP) or C-net. Spec §2 lets the EP sign approvals "on the approver's
@@ -552,7 +559,7 @@ exists.
 | RR-5 | Equivocation before anchor commit | C-key | none until R-26 | conflicting signed histories |
 | RR-6 | Events after last anchor / destroyed-before-anchor | timing | declared cadence (planned R-24) | unprotected window = cadence |
 | RR-7 | Approver cognition; deception within faithful manifests; coercion | — | disclosed only | delivery ≠ understanding |
-| RR-8 | Manifest omission at self-asserted provenance; uninstrumented channels at proxy level | Agent control of pre-sign bytes | disclosed only (provenance label) | injected/exculpatory content absent from record |
+| RR-8 | Manifest omission at self-asserted provenance; uninstrumented channels at proxy level | Agent control of pre-sign bytes | disclosed only (provenance label; D-78 origin declaration relayed as `input_origin_ancestry`) | injected/exculpatory content absent from record; undeclared origin reads as `not_declared`, never as trusted |
 | RR-9 | Sensor truth: replayed/staged/false scene faithfully receipted | C-device or C-scene | signed media where deployed (partial) | receipts preserve a false world honestly |
 | RR-10 | Out-of-band actions bypassing the EP | C-oob | deployment architecture only | AAR blind spot by construction |
 | RR-11 | Issuer-root / status-service compromise | C-trust | root scoping limits blast radius (partial) | principal minting; status equivocation |

@@ -94,6 +94,16 @@ normative as the step order itself (D-54).
       value `schema/enum-unknown`, in that order after `principal_type`,
       D-73). Unknown principal-type text is
       `schema/enum-unknown` at step 6, before content-ID validation.
+      For an inference body, an `origins` value that is not an array is
+      `schema/bad-type`; empty or longer than five entries is
+      `schema/out-of-range`; a non-text member is `schema/bad-type`; a member
+      outside `input-origin` is `schema/enum-unknown`; a member repeated
+      anywhere in the array is `schema/duplicate-entry`, checked before order;
+      a member out of deterministic-CBOR encoded-byte order is
+      `schema/unsorted-set` (D-78). For an observation body, after the
+      consumption cardinality check, each item's `disposition` and optional
+      `origin` are validated for type (`schema/bad-type`) and closed enum
+      (`schema/enum-unknown`), in item order (D-78).
    7. resolve a P-256 verification key through the accepted credential path
       and check the resolved signer, in this order (D-77):
       1. a carried credential whose `subject_kid` equals the protected kid
@@ -290,6 +300,32 @@ normative as the step order itself (D-54).
     asynchronous and MUST NOT enter this check. An AAR-3 `not_dispatched` attempt with
     `refusal_reason="journal/unavailable"` and no dispatch naming it records
     `refused_pre_dispatch`.
+
+    **Input-origin ancestry (D-78).** After every dispatch has passed this
+    step, take the set of distinct action attempts those dispatches resolve.
+    For each attempt, walk incoming edges transitively, following every edge
+    type except `attempted_as` and `observed_outcome`, visiting each receipt
+    once and following the cross-epoch links already validated at step 12.
+    The walk covers observation, inference, authorization and
+    outcome_observation ancestors, including an authorization's own
+    `requested_by`, `triggered_by` and `supports` parents and an
+    outcome_observation's `supports` parents. `supports` is noncausal (D-09):
+    a result means an input sat in the action's ancestry, never that the
+    agent consumed it or that it caused the action. A *declaration slot* is
+    one inference receipt (declared iff `origins` is present) or one
+    consumption item with `disposition="used"` (declared iff `origin` is
+    present); an observation whose items are all `discarded` contributes no
+    slot. Over the union of slots across all attempts, set
+    `limits.input_origin_ancestry` to `not_evaluated` when there are no
+    slots, `declared_only` when every slot is declared, `not_declared` when
+    none is, otherwise `partially_declared`. Record
+    `untrusted_origin_declared_in_action_ancestry` iff any declared value is
+    `third_party`, `device_sensed` or `unknown`. Only these two aggregates
+    enter the signed verdict. Verifier tools MUST surface a report-layer
+    per-attempt table in dispatch array order, then attempt id, giving each
+    attempt's declared origin set and undeclared slot count, including
+    attempts that are eligible but undispatched, bound to the bundle and
+    verdict identifiers. This paragraph never rejects.
 14. **Epoch state machine.** Validate owner/event chains, monotonic epoch IDs and
     event sequences, predecessor manifest digest, one open and one close, duration,
     sequence span/count, immutable close, late-arrival routing, anchor deadline,
@@ -468,8 +504,8 @@ one input has several defects, section 2 selects the first verifier code.
 | `schema/out-of-range` | A correctly typed integer or collection violates its numeric/occurrence range. |
 | `schema/string-size` | A tstr violates its stated UTF-8 byte length. |
 | `schema/digest-size` | A digest, kid, UUID-like id, or signature-sized bstr has the wrong fixed length. |
-| `schema/unsorted-set` | A bundle selector set or bundle artifact array is not strictly in its prescribed order. |
-| `schema/duplicate-entry` | A bundle selector set or bundle artifact array repeats an otherwise valid entry, or two trust-store root records share a `root_kid` (D-77). |
+| `schema/unsorted-set` | A bundle selector set, bundle artifact array, or inference `origins` set (D-78) is not strictly in its prescribed order. |
+| `schema/duplicate-entry` | A bundle selector set, bundle artifact array, or inference `origins` set (D-78) repeats an otherwise valid entry, or two trust-store root records share a `root_kid` (D-77). |
 | `cose/tagged` | A CBOR tag wraps a COSE_Sign1. |
 | `cose/bad-structure` | A well-formed COSE item is not an untagged four-element array of the required element types. |
 | `cose/protected-not-map` | Protected is a bstr but its contents are not one closed CBOR map. |
@@ -616,6 +652,16 @@ first-failure reason:
 - `degraded_dispatch`: an AAR-3 action marked `life_safety` proceeded without the
   normal prior journal commitment, was allowed by the bound trust policy, and
   carried the required `degraded` marker;
+- `untrusted_origin_declared_in_action_ancestry` (D-78): at least one
+  declaration slot in the step-13 ancestry of a dispatched attempt carried a
+  producer-declared origin of `third_party`, `device_sensed` or `unknown`,
+  which this specification treats as potentially untrusted. The observation
+  relays a declaration; it establishes neither that the input was consumed,
+  that it influenced the action, nor that any undeclared input was absent.
+  Its companion limit `input_origin_ancestry` states how completely the
+  ancestry declared itself, so that the absence of this observation on a
+  `not_declared` or `partially_declared` verdict is never read as "no
+  untrusted input";
 - `mediator_countersigned`: every carried D-67 artifact verified and bound an
   exact action-attempt receipt envelope to the canonical-command digest observed
   by an accepted in-tenant `outcome_observer`/`outcome_signing` signer; v0.2
@@ -668,7 +714,7 @@ verdict = {
 verdict-id-input = { verdict-fields }
 
 verdict-fields = (
-  v: 3,
+  v: 4,
   evaluated_at: uint .le 9007199254740991,
   result: "conformant" / "nonconformant" / "indeterminate",
   ? reason: tstr .size (1..128),
@@ -688,6 +734,7 @@ verdict-fields = (
     / "refused_pre_dispatch"
     / "degraded_dispatch"
     / "mediator_countersigned"
+    / "untrusted_origin_declared_in_action_ancestry"
   ) ],
 )
 
@@ -738,8 +785,18 @@ verdict-limits = {
   custody_continuity: "not_established",
   discovery_completeness: "not_established" / "producer_declared_only",
   legal_admissibility: "not_established",
+  input_origin_ancestry:
+      "not_evaluated" / "not_declared" / "partially_declared" / "declared_only",
 }
 ```
+
+A v0.2.3 verifier MUST NOT emit an `input_origin_ancestry` value stronger than
+`declared_only`. `declared_only` means every declaration slot examined by the
+step-13 ancestry traversal contained an emitter-supplied origin label; it
+establishes neither label accuracy, complete capture of inputs, actual
+consumption, nor causal influence (D-78). Origin declarations are relayed, not
+checked against prompt, retrieval or tool manifest bytes (D-32). A failure
+verdict carries `not_evaluated`.
 
 A v0.2 verifier MUST emit `custody_continuity="not_established"` for every
 result. Receipt signatures, anchors, and mediator countersignatures do not
@@ -751,9 +808,11 @@ A v0.2 verifier MUST emit only `not_established` for `ingress_completeness`.
 R-15/census feature and MUST NOT be emitted by a verifier that does not implement
 that feature.
 
-The v0.2.1 verdict uses `v: 3` because its closed trust-policy map gained a
-required key (D-76); the protected content type continues to name the v0.2
-minor line. A v2 consumer must not silently accept this verdict.
+The v0.2.1 verdict used `v: 3` because its closed trust-policy map gained a
+required key (D-76). The v0.2.3 verdict uses `v: 4` because `verdict-limits`
+gained the required key `input_origin_ancestry` (D-78); the protected content
+type continues to name the v0.2 minor line. A v2 or v3 consumer must not
+silently accept this verdict.
 
 The verdict digest preimages are frozen as follows:
 

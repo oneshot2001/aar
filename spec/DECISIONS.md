@@ -1381,3 +1381,118 @@ validity ended before the bundle's evaluation time would invalidate every
 receipt it signed while valid, which contradicts the signing-time
 revocation rule. A closed validity interval: rejected, because it would be
 the only closed interval in the wire.
+
+## D-78 — Input origin in an action's ancestry is a producer declaration, relayed as a limit and an observation
+
+**Decision.** Six parts, one wire minor (v0.2.3, verdict `v: 4`).
+
+1. **Closed enum.** `input-origin = "principal" / "operator_system" /
+   "device_sensed" / "third_party" / "unknown"`. Classification is by the
+   *origin of the content*, never its transport, message role, or current
+   custodian: an internal tool that returns text fetched from the web declares
+   `third_party`; OCR of a camera frame declares `device_sensed`; the live
+   request of a principal who is also the operator is `principal`, while
+   independently configured system prompts, policies and internal records are
+   `operator_system`. `unknown` means the emitter classifies inputs and could
+   not classify this one. It is distinct from absence, which means "not
+   declared".
+2. **Two optional fields.** `consumption-item.origin: input-origin` (one value;
+   an item carrying content of more than one origin declares the least
+   trusted present, in the order `third_party`, `device_sensed`, `unknown`,
+   `principal`, `operator_system`) and `inference-body.origins: input-origins`,
+   a strictly sorted unique set of one to five values in deterministic-CBOR
+   encoded-byte order (`unknown`, `principal`, `third_party`, `device_sensed`,
+   `operator_system`) summarising the origin classes present across the
+   inference's prompt, retrieval and tool inputs. Both are wire-additive: a
+   receipt without them is byte-identical to a v0.2.2 receipt.
+3. **Step 6 validation.** `origins` that is not an array is `schema/bad-type`;
+   empty or longer than five is `schema/out-of-range`; a non-text member is
+   `schema/bad-type`; an unlisted member `schema/enum-unknown`; a repeated
+   member anywhere in the array `schema/duplicate-entry` (checked before
+   order); a member out of encoded-byte order `schema/unsorted-set`. A
+   consumption-item `origin` follows the same type and enum rules. A
+   consumption-item `disposition` is validated for type and enum at step 6,
+   which neither runtime did before; no corpus bundle is affected.
+4. **Step 13 tail: input-origin ancestry.** After every dispatch has passed
+   step 13, take the set of distinct action attempts those dispatches resolve.
+   For each, walk incoming edges transitively, following every edge type
+   except `attempted_as` and `observed_outcome`, visiting each receipt once
+   and following cross-epoch links already validated at step 12. The walk
+   therefore covers observation, inference, authorization and
+   outcome_observation ancestors, including the authorization's own
+   `requested_by`/`triggered_by`/`supports` parents and an
+   outcome_observation's `supports` parents. `supports` is noncausal (D-09):
+   the result means an input sat in the action's ancestry, never that it was
+   consumed by the agent or caused the action. A *declaration slot* is one
+   inference receipt (declared iff `origins` is present) or one consumption
+   item with `disposition = "used"` (declared iff `origin` is present); an
+   all-`discarded` observation contributes no slot. Over the union of slots
+   across all attempts: `limits.input_origin_ancestry` is `not_evaluated` when
+   there are no slots, `declared_only` when every slot is declared,
+   `not_declared` when none is, otherwise `partially_declared`. The
+   observation `untrusted_origin_declared_in_action_ancestry` is recorded iff
+   any declared value is `third_party`, `device_sensed` or `unknown`. Signed
+   bytes carry only these two aggregates. Verifier tools MUST surface a
+   report-layer per-attempt table (dispatch array order, then attempt id;
+   declared origin set; undeclared slot count), including attempts that are
+   eligible but undispatched, bound to the bundle and verdict identifiers.
+5. **Verdict.** `verdict-limits` gains the required key
+   `input_origin_ancestry`; the `observations` enum gains
+   `untrusted_origin_declared_in_action_ancestry`, emitted after
+   `refused_pre_dispatch` and before `membership_only`, with
+   `ingress_completeness_not_established` still last (D-72). The required key
+   raises the verdict version from 3 to 4 (the D-76 precedent) and the
+   declared spec to v0.2.3; the protected v0.2 content type and every
+   existing receipt fixture are unchanged. A failure verdict carries
+   `input_origin_ancestry: "not_evaluated"` and an empty `observations`
+   array.
+6. **Claim cap.** A v0.2.3 verifier MUST NOT emit any value stronger than
+   `declared_only`. Declarations are relayed, not established: the verifier
+   does not and cannot check them against prompt, retrieval or tool manifest
+   bytes (D-32), and at `self_asserted` provenance an input omitted from the
+   consumption manifest is undetectable (T-P3, RR-8). `declared_only` means
+   every declaration slot the specified traversal examined contained an
+   emitter-supplied origin label; it establishes neither label accuracy,
+   complete capture of inputs, actual consumption, nor causal influence.
+
+**Why.** Primary guidance published 2026-05-01 by the Five Eyes cyber agencies
+describes the confused-deputy pattern for agents and observes that executing
+an injected instruction "under a trusted agent identity ... produces audit
+logs that appear legitimate". Identity, network and endpoint records cannot
+distinguish that action from a legitimate one; only the harness that fed the
+model knows what untrusted content entered the context first. AAR already
+commits the inputs (consumption manifests, D-46; prompt, retrieval and tool
+manifests, D-32) and already caps the forensic claim at "the item was
+disclosed among captured inputs" (T-P4). What it lacked was a closed place
+for the producer to say *where an input came from* and a rule relating the
+captured inputs to the dispatched action, so that a third party can see that
+an untrusted-origin path was disclosed, or that nothing was declared at all.
+D-29 is why the aggregate is a required limit rather than a conditional
+observation alone: silence must never read as "no untrusted input". The
+Enforcement Point can apply the same declarations at authorization time as a
+toxic-combination rule (untrusted origin present and a consequential action
+requested); that is an EP policy, and nothing in the signed verdict
+establishes that it was applied.
+
+**Alternatives considered.** Observation only, keeping verdict v3: a bundle
+with no declarations and one declared all-trusted would produce the same
+silent verdict, and an optional limits key would still break closed-map
+consumers while weakening D-29. Limit only, folding the finding into the
+enum: conflates completeness of declaration with the finding; a partially
+declared ancestry with one `third_party` is a real state. A signed
+per-attempt table: no precedent in the verdict, unbounded size, and the
+report layer already carries it. Encoding origin in existing fields:
+`source_device.failure_domain_id` is load-bearing for step-19 observer
+independence; a reserved `evaluated_inputs` name is the free vocabulary D-09
+forbids and records what the Authority Source evaluated, not what the agent
+consumed; presence of a `retrieve` transformation cannot see injected content
+arriving through the prompt manifest and fires on every internal retrieval.
+Treating `unknown` as trusted: declaring `unknown` would then launder.
+Stopping the walk at outcome_observation receipts: `observation -supports->
+outcome_observation -supports-> inference` is a legal path and would be a
+blind spot. A new step number: every sidecar `expected_step` would churn. A
+v0.3 line: nothing is removed or made required on receipts. Proposed by the
+2026-10-11 design pass (two independent plans, one arguing against new
+fields, converging) and a Codex challenge that corrected the edge set, the
+sorted order, the disposition gap, the pyref `state.classes` overwrite, and
+the naming; accepted by the gate 2026-10-11.
