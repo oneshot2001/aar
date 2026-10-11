@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { decodeCbor, encodeCbor, equalBytes } from "./cbor";
+import { CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
 import { verifySigned } from "./crypto";
 import { buildFixtures } from "./fixtures";
-import { buildD77PositiveFixtures, buildClassBoundaryFixtures, buildEvidenceCommitFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
+import { buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildClassBoundaryFixtures, buildEvidenceCommitFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
 import { buildCountersignFixtures } from "./countersign-fixtures";
 import { TEST_KEYS } from "./testkeys";
 import { verifyBundle } from "./verifier";
@@ -33,6 +33,71 @@ describe("positive KAT harness", () => {
       expect(equalBytes(fixture.bytes, readFileSync(join(root, "kats", "positive", `${fixture.filename}.cbor`)))).toBe(true);
       expect(JSON.parse(readFileSync(join(root, "kats", "positive", `${fixture.filename}.json`), "utf8"))).toEqual(fixture.descriptor);
       expect(verifyBundle(fixture.bytes, { evaluationTime: AT }).result).toBe(fixture.descriptor.expected_result);
+    }
+  });
+
+  test("D-78 reports include undispatched attempts without signing their declarations and deduplicate diamonds", () => {
+    for (const fixture of buildD78ReportVariants()) {
+      const result = verifyBundle(fixture.bytes, { evaluationTime: AT });
+      expect(result.ok, fixture.name).toBe(true);
+      if (!result.ok) continue;
+      expect((result.verdict.limits as Record<string, string>).input_origin_ancestry, fixture.name).toBe(fixture.limit);
+      const report = result.report.input_origin_ancestry;
+      expect(report.attempts.map((row) => row.dispatched), fixture.name).toEqual(fixture.dispatched);
+      for (const row of report.attempts) {
+        expect(row.declared_origins, fixture.name).toEqual(["principal", "third_party"]);
+        expect(row.undeclared_slots, fixture.name).toBe(2);
+      }
+      expect(result.observations.includes("untrusted_origin_declared_in_action_ancestry"), fixture.name).toBe(fixture.dispatched.includes(true));
+    }
+  });
+
+  test("verification CLI labels stateful and empty-scope observations as unsigned", () => {
+    for (const [filename, empty] of [["positive/bundle-valid-subset", false], ["class-boundary/origin-no-input-ancestor", true]] as const) {
+      const proc = Bun.spawnSync(["bun", "run", "harness/verify.ts", `kats/${filename}.cbor`, "--at", String(AT)], { cwd: root });
+      expect(proc.exitCode, proc.stderr.toString()).toBe(0);
+      const output = proc.stdout.toString();
+      expect(output).toContain("  - stateful_not_evaluated [report layer; not signed]");
+      expect(output.includes("  - empty_scope [report layer; not signed]")).toBe(empty);
+      const hex = output.match(/^Signed verdict CBOR hex: ([a-f0-9]+)$/m)![1]!;
+      const envelope = decodeCbor(Uint8Array.from(Buffer.from(hex, "hex")), { strict: true }) as Uint8Array[];
+      const verdict = decodeCbor(envelope[0]!, { strict: true }) as Record<string, CborValue>;
+      expect(verdict.observations).not.toContain("stateful_not_evaluated");
+      expect(verdict.observations).not.toContain("empty_scope");
+    }
+  });
+
+  test("D-78 fixtures match files, classes, observations, and first failures", () => {
+    const first = buildD78Fixtures(); const second = buildD78Fixtures();
+    for (const [index, fixture] of first.entries()) {
+      expect(equalBytes(fixture.bytes, second[index]!.bytes), fixture.filename).toBe(true);
+      expect(equalBytes(fixture.bytes, readFileSync(join(root, "kats", fixture.directory, `${fixture.filename}.cbor`))), fixture.filename).toBe(true);
+      expect(JSON.parse(readFileSync(join(root, "kats", fixture.directory, `${fixture.filename}.json`), "utf8"))).toEqual(fixture.descriptor);
+      const result = verifyBundle(fixture.bytes, { evaluationTime: AT });
+      expect(result.result, fixture.filename).toBe(fixture.descriptor.expected_result);
+      if (!result.ok) {
+        expect(result.reason === fixture.descriptor.expected_code, fixture.filename).toBe(true);
+        expect(result.step, fixture.filename).toBe(fixture.descriptor.expected_step!);
+        expect(result.verdict!.observations).toEqual([]);
+        expect((result.verdict!.limits as Record<string, string>).input_origin_ancestry).toBe("not_evaluated");
+      } else {
+        expect((result.verdict.limits as Record<string, string>).input_origin_ancestry, fixture.filename).toBe(fixture.descriptor.expected_class);
+        for (const observation of fixture.descriptor.expected_observations) expect(result.observations.includes(observation), fixture.filename).toBe(true);
+        for (const observation of fixture.descriptor.absent_observations) expect(result.observations.includes(observation), fixture.filename).toBe(false);
+        const rows = result.report.input_origin_ancestry.attempts;
+        if (fixture.filename === "origin-two-attempts-distinct-sets") {
+          const bundle = decodeCbor(fixture.bytes, { strict: true }) as Record<string, any>;
+          const receipts = bundle.artifacts.receipts.map((envelope: Uint8Array[]) => decodeCbor(envelope[0]!, { strict: true })) as Record<string, any>[];
+          const dispatchOrder = receipts.filter((receipt) => receipt.kind === "dispatch").map((receipt) => toHex(receipt.body.attempt_id));
+          expect(rows.map((row) => row.attempt_id)).toEqual(dispatchOrder);
+          expect(rows.map((row) => row.dispatched)).toEqual([true, true]);
+          expect(rows.map((row) => row.declared_origins).sort()).toEqual([["principal"], ["third_party"]]);
+          expect(rows.map((row) => row.undeclared_slots)).toEqual([0, 0]);
+        } else expect(rows).toHaveLength(1);
+        if (fixture.filename === "origin-aar3-refused-and-untrusted") expect(result.verdict.observations).toEqual(fixture.descriptor.expected_observations);
+        const row = rows[0]!;
+        expect(row.undeclared_slots, fixture.filename).toBe(fixture.filename === "d78-origin-third-party-retrieval" || fixture.filename === "origin-unknown-only" || fixture.filename === "origin-cross-epoch-ancestry" ? 2 : fixture.filename === "origin-all-discarded" || fixture.filename === "origin-outcome-supports-ancestry" ? 1 : 0);
+      }
     }
   });
 

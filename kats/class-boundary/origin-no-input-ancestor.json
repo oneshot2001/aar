@@ -1,0 +1,11 @@
+{
+  "name": "origin-no-input-ancestor",
+  "object_type": "bundle",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "expected_class": "not_evaluated",
+  "expected_observations": [],
+  "absent_observations": [
+    "untrusted_origin_declared_in_action_ancestry"
+  ]
+}

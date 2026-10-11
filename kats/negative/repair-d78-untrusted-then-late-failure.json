@@ -1,0 +1,12 @@
+{
+  "name": "repair-d78-untrusted-then-late-failure",
+  "object_type": "bundle",
+  "expected_result": "nonconformant",
+  "expected_code": "epoch/open-close",
+  "expected_step": 14,
+  "expected_class": "not_evaluated",
+  "expected_observations": [],
+  "absent_observations": [
+    "untrusted_origin_declared_in_action_ancestry"
+  ]
+}

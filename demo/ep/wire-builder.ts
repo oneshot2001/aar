@@ -425,6 +425,7 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
     content_commitment: hash(request.payloadBytes),
     transformations: [],
     disposition: "used",
+    origin: "principal",
   }] };
   const consumption: Obj = { manifest_digest: domainHash("AAR-CONSUMPTION-MANIFEST-v1", consumptionFields), ...consumptionFields };
   const sourceDevice: Obj = {
@@ -446,6 +447,7 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
   const inference = makeReceipt(input, "inference", "agent", 1, [parent(observation, "derived_from", input)], {
     model: { provider, model, version, endpoint_credential_id: credentials.ids.agent },
     consumption_manifest_id: (consumption.manifest_digest as Uint8Array),
+    origins: ["principal"],
     prompt_manifest: { digest: promptDigest, media_type: "application/cbor", byte_length: promptBytes.length },
     retrieval_manifest: { digest: retrievalDigest, media_type: "application/cbor", byte_length: retrievalBytes.length },
     tool_transcript_manifest: { digest: toolsDigest, media_type: "application/cbor", byte_length: toolsBytes.length },

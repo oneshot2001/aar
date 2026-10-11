@@ -1,0 +1,11 @@
+{
+  "name": "repair-d78-item-origin-nontext",
+  "object_type": "bundle",
+  "expected_result": "nonconformant",
+  "expected_code": "schema/bad-type",
+  "expected_step": 6,
+  "expected_observations": [],
+  "absent_observations": [
+    "untrusted_origin_declared_in_action_ancestry"
+  ]
+}

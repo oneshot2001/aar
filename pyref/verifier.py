@@ -258,6 +258,8 @@ class State:
         "outcome": "not_evaluated",
     })
     stateful_checks: str = "not_evaluated"
+    input_origin_ancestry: str = "not_evaluated"
+    input_origin_attempts: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _schema_bundle(bundle: Any) -> dict[str, Any]:
@@ -505,6 +507,9 @@ def _raw_mediator_kids(state: State) -> set[bytes]:
     return kids
 
 
+INPUT_ORIGINS = {"principal", "operator_system", "device_sensed", "third_party", "unknown"}
+
+
 def _schema_payload(content_type: str, payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict):
         _fail("schema/bad-type", 6)
@@ -586,6 +591,34 @@ def _schema_payload(content_type: str, payload: Any) -> dict[str, Any]:
                 _fail("schema/bad-type", 6)
             if not 1 <= len(items) <= 4096:
                 _fail("schema/out-of-range", 6)
+            for item in items:
+                if not isinstance(item, dict) or any(not isinstance(key, str) for key in item):
+                    continue  # Step 10 owns item shape.
+                if "disposition" not in item:
+                    _fail("schema/missing-field", 6)
+                for name, allowed in (("disposition", {"used", "discarded"}), ("origin", INPUT_ORIGINS)):
+                    if name == "origin" and name not in item:
+                        continue
+                    if not isinstance(item.get(name), str):
+                        _fail("schema/bad-type", 6)
+                    if item[name] not in allowed:
+                        _fail("schema/enum-unknown", 6)
+        if payload["kind"] == "inference" and "origins" in body:
+            origins = body["origins"]
+            if not isinstance(origins, list):
+                _fail("schema/bad-type", 6)
+            if not 1 <= len(origins) <= 5:
+                _fail("schema/out-of-range", 6)
+            for origin in origins:
+                if not isinstance(origin, str):
+                    _fail("schema/bad-type", 6)
+                if origin not in INPUT_ORIGINS:
+                    _fail("schema/enum-unknown", 6)
+            if len(set(origins)) != len(origins):
+                _fail("schema/duplicate-entry", 6)
+            encoded = [dumps(origin) for origin in origins]
+            if encoded != sorted(encoded):
+                _fail("schema/unsorted-set", 6)
         if payload["kind"] == "action_attempt":
             command = body.get("command")
             if not isinstance(command, dict):
@@ -1184,7 +1217,8 @@ def _receipt_semantics(state: State) -> None:
             if not isinstance(consumption, dict) or not isinstance(consumption.get("items"), list):
                 _fail("schema/bad-type", 10)
             items = consumption["items"]
-            ordinals = [item.get("ordinal") if isinstance(item, dict) else None for item in items]
+            ordinals = [item.get("ordinal") if isinstance(item, dict)
+                        and all(isinstance(key, str) for key in item) else None for item in items]
             if ordinals != list(range(len(items))):
                 _fail("receipt/manifest-inconsistent", 10)
             for item in items:
@@ -1468,6 +1502,76 @@ def _graph_checks(state: State) -> dict[bytes, list[bytes]]:
     if widths and max(widths.values()) > LIMITS["dag_width"]:
         _fail("resource/dag-width", 12)
     return graph
+
+
+def _input_origin_ancestry(state: State, graph: dict[bytes, list[bytes]]) -> None:
+    # Keep edge types from the receipts; step 12's graph stores successors only.
+    incoming: dict[bytes, set[bytes]] = defaultdict(set)
+    for parent_id, children in graph.items():
+        for child_id in children:
+            if any(edge["parent_id"] == parent_id and edge["edge_type"] not in {"attempted_as", "observed_outcome"}
+                   for edge in state.receipts_by_id[child_id].payload["parents"]):
+                incoming[child_id].add(parent_id)
+    reachable: dict[bytes, set[bytes]] = {}
+
+    def ancestors(node: bytes) -> set[bytes]:
+        if node not in reachable:
+            nodes = {node}
+            for parent in incoming[node]:
+                nodes.update(ancestors(parent))
+            reachable[node] = nodes
+        return reachable[node]
+
+    def slots(nodes: set[bytes]) -> tuple[set[str], int, int]:
+        origins: set[str] = set()
+        declared = undeclared = 0
+        for node in nodes:
+            receipt = state.receipts_by_id[node].payload
+            body = receipt["body"]
+            if receipt["kind"] == "inference":
+                if "origins" in body:
+                    declared += 1
+                    origins.update(body["origins"])
+                else:
+                    undeclared += 1
+            elif receipt["kind"] == "observation":
+                for item in body["consumption"]["items"]:
+                    if item["disposition"] == "used":
+                        if "origin" in item:
+                            declared += 1
+                            origins.add(item["origin"])
+                        else:
+                            undeclared += 1
+        return origins, declared, undeclared
+
+    dispatched = list(dict.fromkeys(
+        edge["parent_id"] for env in state.envelopes["receipts"] if env.payload["kind"] == "dispatch"
+        for edge in env.payload["parents"] if edge["edge_type"] == "attempted_as"
+    ))
+    undispatched = sorted(
+        node for node, env in state.receipts_by_id.items()
+        if env.payload["kind"] == "action_attempt" and env.payload["body"]["disposition"] == "eligible_for_dispatch"
+        and node not in dispatched
+    )
+    union: set[bytes] = set()
+    for node in dispatched + undispatched:
+        nodes = ancestors(node)
+        origins, _, undeclared = slots(nodes)
+        is_dispatched = node in dispatched
+        state.input_origin_attempts.append({
+            "attempt_id": node.hex(), "dispatched": is_dispatched,
+            "declared_origins": sorted(origins, key=dumps), "undeclared_slots": undeclared,
+        })
+        if is_dispatched:
+            union.update(nodes)
+    origins, declared, undeclared = slots(union)
+    state.input_origin_ancestry = (
+        "not_evaluated" if declared + undeclared == 0 else
+        "not_declared" if declared == 0 else
+        "declared_only" if undeclared == 0 else "partially_declared"
+    )
+    if origins & {"third_party", "device_sensed", "unknown"}:
+        state.observations.append("untrusted_origin_declared_in_action_ancestry")
 
 
 def _authorization_dominance(state: State, graph: dict[bytes, list[bytes]]) -> None:
@@ -2035,7 +2139,7 @@ def _limits_digest() -> bytes:
     return hashes.domain_hash("AAR-VERDICT-LIMITS-v1", LIMITS)
 
 
-BUILD_DIGEST = hashes.sha256(b"pyref-aar-v0.2.2-d77-signer-binding-build-v1")
+BUILD_DIGEST = hashes.sha256(b"pyref-aar-v0.2.3-d78-input-origin-build-v1")
 CONFIG_DIGEST = hashes.sha256(b"pyref-aar-v0.2-gate4-c2-fixed-conformance-config-v1")
 
 
@@ -2161,15 +2265,16 @@ def _verdict_fields(state: State, result: str, reason: str | None, step: int) ->
         "custody_continuity": "not_established",
         "discovery_completeness": "producer_declared_only" if bundle and bundle["coverage"] == "complete" else "not_established",
         "legal_admissibility": "not_established",
+        "input_origin_ancestry": state.input_origin_ancestry if result == "conformant" else "not_evaluated",
     }
     fields: dict[str, Any] = {
-        "v": 3,
+        "v": 4,
         "evaluated_at": state.evaluated_at,
         "result": result,
         "bundle_digest": hashes.sha256(state.raw),
         "selector_commitment": selector_commitment,
         "verifier": {
-            "product": "pyref", "version": "v0.2.2",
+            "product": "pyref", "version": "v0.2.3",
             "build_digest": BUILD_DIGEST, "config_digest": CONFIG_DIGEST,
             "limits_digest": _limits_digest(),
         },
@@ -2263,6 +2368,7 @@ def evaluate(
         _replay_freshness(state)
         graph = _graph_checks(state)
         _authorization_dominance(state, graph)
+        _input_origin_ancestry(state, graph)
         _epoch_state_machine(state)
         _manifest_index_checks(state)
         _merkle_checks(state)
@@ -2309,6 +2415,11 @@ def evaluate(
             if observation in {"empty_scope", "stateful_not_evaluated"}
         ],
         "selector_matching_receipts": state.selector_matching_receipts,
+        "input_origin_ancestry": {
+            "bundle_digest": verdict["bundle_digest"].hex(),
+            "verdict_id": verdict["verdict_id"].hex(),
+            "attempts": state.input_origin_attempts if result == "conformant" else [],
+        },
         "stateful_properties": state.stateful_checks,
         "replay_state": "not_evaluated" if replay_state is None else "evaluated",
     }

@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
-import { buildD77PositiveFixtures, buildEvidenceCommitFixtures, buildNegativeFixtures, buildPresentationEnumVariants } from "./negative-fixtures";
+import { buildD78ItemVariants, buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildEvidenceCommitFixtures, buildNegativeFixtures, buildPresentationEnumVariants } from "./negative-fixtures";
 import { verifyBundle } from "./verifier";
 import { parseStatefulPrior } from "./stateful-fixtures";
 
@@ -20,7 +20,7 @@ from pyref.verifier import evaluate
 r = evaluate(sys.stdin.buffer.read(), evaluated_at=int(sys.argv[1]), replay_state={"entries": []})
 v = r.verdict; i = v["verifier"]
 print(json.dumps({"result": r.result, "reason": r.reason, "step": r.report["first_failure_step"], "hex": r.verdict_bytes.hex(),
-  "product": i["product"], "version": i["version"], "build": i["build_digest"].hex(), "config": i["config_digest"].hex()}))
+  "origins_report": r.report["input_origin_ancestry"], "selected": r.report["selector_matching_receipts"], "product": i["product"], "version": i["version"], "build": i["build_digest"].hex(), "config": i["config_digest"].hex()}))
 `;
 
 interface Case { name: string; bytes: Uint8Array; at: number; code: string | null; step: number | null }
@@ -36,6 +36,9 @@ function cases(): Case[] {
     { name: "positive-same-operator", bytes: sameOperator.bytes, at: AT, code: null, step: null },
     { name: "caller-before", bytes: base, at: AT - 1, code: "schema/out-of-range", step: 5 },
     { name: "caller-after", bytes: base, at: AT + 1, code: "schema/out-of-range", step: 5 },
+    ...buildD78ItemVariants().map((fixture) => ({ ...fixture, at: AT })),
+    ...buildD78ReportVariants().map((fixture) => ({ name: fixture.name, bytes: fixture.bytes, at: AT, code: null, step: null })),
+    ...buildD78Fixtures().map((fixture) => ({ name: fixture.filename, bytes: fixture.bytes, at: AT, code: fixture.descriptor.expected_code, step: fixture.descriptor.expected_step ?? null })),
     ...buildD77PositiveFixtures().map((fixture) => ({ name: fixture.filename, bytes: fixture.bytes, at: AT, code: null, step: null })),
     ...buildPresentationEnumVariants().map((fixture) => ({ ...fixture, at: AT })),
     ...buildNegativeFixtures().filter((fixture) => fixture.filename.startsWith("repair-")).map((fixture) => ({
@@ -63,6 +66,20 @@ describe("cross-implementation verdict bytes (harness vs pyref)", () => {
       expect(ts.result, item.name).toBe(py.result);
       expect(ts.verdictEnvelope === undefined, item.name).toBe(false);
       expect(toHex(ts.verdictEnvelope!), item.name).toBe(py.hex);
+      if (ts.ok) {
+        expect(ts.report.input_origin_ancestry, item.name).toEqual(py.origins_report);
+        expect(ts.report.selector_matching_receipts, item.name).toBe(py.selected);
+      } else if (item.name.startsWith("repair-d78-") || item.name.startsWith("d78-item-")) {
+        expect(ts.verdict!.observations, item.name).toEqual([]);
+        expect((ts.verdict!.limits as Record<string, string>).input_origin_ancestry, item.name).toBe("not_evaluated");
+        expect(py.origins_report, item.name).toEqual({
+          bundle_digest: toHex(ts.verdict!.bundle_digest as Uint8Array),
+          verdict_id: toHex(ts.verdict!.verdict_id as Uint8Array), attempts: [],
+        });
+      }
+      if (item.name.includes("d78-") || item.name.startsWith("origin-")) {
+        console.log(`${item.name}: reason=${py.reason ?? "none"}, step=${py.step ?? "none"}, signed verdict bytes equal; report parity=${ts.ok ? "PASS" : "PASS (empty failure ancestry)"}`);
+      }
     }
   }, 120_000);
 });

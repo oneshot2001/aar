@@ -1,0 +1,11 @@
+{
+  "name": "origin-all-discarded",
+  "object_type": "bundle",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "expected_class": "not_declared",
+  "expected_observations": [],
+  "absent_observations": [
+    "untrusted_origin_declared_in_action_ancestry"
+  ]
+}

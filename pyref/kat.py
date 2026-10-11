@@ -734,7 +734,9 @@ def _boundary_class(sidecar: dict[str, Any], evaluation: Evaluation) -> tuple[st
     if expected is None:
         return None, None
     family = sidecar.get("name", "").split("-", 1)[0]
-    if family == "time":
+    if family == "origin" or sidecar.get("name") == "d78-origin-third-party-retrieval":
+        produced = evaluation.verdict["limits"]["input_origin_ancestry"]
+    elif family == "time":
         produced = evaluation.verdict["limits"]["maximum_time_class"]
     elif family == "provenance":
         produced = evaluation.verdict["limits"]["maximum_provenance_class"]
@@ -861,7 +863,7 @@ def _prior_digest_checks() -> None:
             result = evaluate(raw, evaluated_at=KAT_EVALUATION_TIME,
                               prior_state=prior, replay_state=replay)
             assert result.reason == ("identity/issuer-sequence-rollback" if label == "rollback" else None)
-            assert result.verdict["v"] == 3
+            assert result.verdict["v"] == 4
             digest = result.verdict["trust_policy"]["prior_emissions_digest"]
             digests.append(digest)
             verdicts.append(result.verdict_bytes)
@@ -912,6 +914,7 @@ def run_c2() -> dict[str, Any]:
         expected_code = sidecar.get("expected_code")
         expected_result = sidecar.get("expected_result", _expected_result(expected_code))
         expected_observations = sidecar.get("expected_observations", [])
+        absent_observations = sidecar.get("absent_observations", [])
         try:
             first = evaluate(
                 raw, evaluated_at=KAT_EVALUATION_TIME, prior_state=prior,
@@ -927,7 +930,11 @@ def run_c2() -> dict[str, Any]:
             produced_observations = first.verdict["observations"]
             observations_matched = all(
                 observation in produced_observations for observation in expected_observations
-            )
+            ) and all(observation not in produced_observations for observation in absent_observations)
+            if first.result != "conformant":
+                observations_matched = observations_matched and produced_observations == [] and first.verdict["limits"]["input_origin_ancestry"] == "not_evaluated"
+            if path.name == "bundle-valid-subset.cbor":
+                observations_matched = observations_matched and first.verdict["limits"]["input_origin_ancestry"] == "not_declared"
             matched = (
                 first.result == expected_result and produced_code == expected_code
                 and deterministic and (expected_class is None or expected_class == produced_class)
@@ -941,8 +948,9 @@ def run_c2() -> dict[str, Any]:
                 "expected_class": expected_class, "produced_class": produced_class,
                 **({
                     "expected_observations": expected_observations,
+                    "absent_observations": absent_observations,
                     "produced_observations": produced_observations,
-                } if expected_observations else {}),
+                } if expected_observations or absent_observations else {}),
                 "matched": matched, "deterministic": deterministic,
                 "verdict_sha256": hashes.sha256(first.verdict_bytes).hex(),
                 "first_failure_step": first.report["first_failure_step"],

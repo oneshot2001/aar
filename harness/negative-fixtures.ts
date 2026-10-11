@@ -688,6 +688,277 @@ export function buildPresentationEnumVariants() {
   });
 }
 
+// Rewrite dependencies before children so every changed receipt and consumption
+// commitment is re-signed, including paths that do not follow epoch_seq order.
+function rewriteD78Receipts(bundle: Obj, mutation: (receipt: Obj, originals: Obj[]) => void): void {
+  const originals = receiptList(bundle).map(payload);
+  const sources = new Map(receiptList(bundle).map((envelope) => [toHex(payload(envelope).receipt_id as Uint8Array), envelope]));
+  const rewritten = new Map<string, Obj>();
+  const manifests = new Map<string, Uint8Array>();
+  function visit(id: string): Obj {
+    if (rewritten.has(id)) return rewritten.get(id)!;
+    const envelope = sources.get(id)!;
+    const next = clone(payload(envelope));
+    mutation(next, originals);
+    const body = next.body as Obj;
+    for (const edge of next.parents as Obj[]) {
+      const parent = visit(toHex(edge.parent_id as Uint8Array));
+      edge.parent_id = parent.receipt_id!;
+      edge.parent_kind = parent.kind!;
+      edge.parent_epoch_id = (parent.binding as Obj).epoch_id!;
+    }
+    for (const field of ["authorization_id", "attempt_id", "subject_id"]) {
+      if (body[field] instanceof Uint8Array && sources.has(toHex(body[field]))) body[field] = visit(toHex(body[field])).receipt_id!;
+    }
+    if (next.kind === "observation") {
+      const consumption = body.consumption as Obj;
+      const oldDigest = consumption.manifest_digest as Uint8Array;
+      consumption.manifest_digest = domainHash("AAR-CONSUMPTION-MANIFEST-v1", { items: consumption.items! });
+      manifests.set(toHex(oldDigest), consumption.manifest_digest as Uint8Array);
+    }
+    if (next.kind === "inference") body.consumption_manifest_id = manifests.get(toHex(body.consumption_manifest_id as Uint8Array)) ?? body.consumption_manifest_id!;
+    (next.freshness as Obj).intended_parents = (next.parents as Obj[]).map((edge) => edge.parent_id!);
+    const replacement = replaceReceipt(bundle, envelope, next);
+    const value = payload(replacement);
+    rewritten.set(id, value);
+    return value;
+  }
+  for (const id of sources.keys()) visit(id);
+}
+
+export function buildD78Fixtures() {
+  type Descriptor = {
+    name: string; object_type: "bundle"; expected_result: "conformant" | "nonconformant";
+    expected_code: string | null; expected_step?: number; expected_class?: string;
+    expected_observations: string[]; absent_observations: string[];
+  };
+  const result: { filename: string; directory: "positive" | "class-boundary" | "negative"; bytes: Uint8Array; descriptor: Descriptor }[] = [];
+  const observation = "untrusted_origin_declared_in_action_ancestry";
+  const positive = (filename: string, expectedClass: string, origins: string[] | undefined, itemOrigin?: string, discarded = false, noInput = false): void => {
+    const bundle = baseBundle();
+    // These valid subsets omit journal artifacts whose indexes bind the old receipts.
+    clearJournal(bundle);
+    const ids = new Map<string, Uint8Array>();
+    const manifests = new Map<string, Uint8Array>();
+    const receipts = [...receiptList(bundle)].sort((a, b) => ((payload(a).binding as Obj).epoch_seq as number) - ((payload(b).binding as Obj).epoch_seq as number));
+    for (const envelope of receipts) {
+      const next = clone(payload(envelope)); const body = next.body as Obj;
+      if (next.kind === "observation") {
+        const consumption = body.consumption as Obj;
+        const oldDigest = consumption.manifest_digest as Uint8Array;
+        for (const item of consumption.items as Obj[]) {
+          if (itemOrigin !== undefined) item.origin = itemOrigin;
+          if (discarded) item.disposition = "discarded";
+        }
+        consumption.manifest_digest = domainHash("AAR-CONSUMPTION-MANIFEST-v1", { items: consumption.items! });
+        manifests.set(toHex(oldDigest), consumption.manifest_digest as Uint8Array);
+      }
+      if (next.kind === "inference") {
+        // Only inferences with parents receive origins: the root inference lies outside every attempt's ancestry.
+        if (origins !== undefined && (next.parents as Obj[]).length > 0) body.origins = origins;
+        body.consumption_manifest_id = manifests.get(toHex(body.consumption_manifest_id as Uint8Array)) ?? body.consumption_manifest_id!;
+      }
+      for (const edge of next.parents as Obj[]) edge.parent_id = ids.get(toHex(edge.parent_id as Uint8Array)) ?? edge.parent_id!;
+      for (const field of ["authorization_id", "attempt_id", "subject_id"]) {
+        if (body[field] instanceof Uint8Array) body[field] = ids.get(toHex(body[field])) ?? body[field];
+      }
+      (next.freshness as Obj).intended_parents = (next.parents as Obj[]).map((edge) => edge.parent_id!);
+      const replacement = replaceReceipt(bundle, envelope, next);
+      ids.set(toHex(payload(envelope).receipt_id as Uint8Array), payload(replacement).receipt_id as Uint8Array);
+    }
+    if (noInput) updateAttemptFlow(bundle, (attempt, receipts) => {
+      const authorization = receipts.find((receipt) => receipt.kind === "authorization" && object(receipt.root))!;
+      const edge = (attempt.parents as Obj[]).find((parent) => parent.edge_type === "authorized_by")!;
+      edge.parent_id = authorization.receipt_id!;
+      attempt.parents = [edge];
+      (attempt.body as Obj).authorization_id = authorization.receipt_id!;
+    });
+    const untrusted = !noInput && ((origins ?? []).some((origin) => ["third_party", "device_sensed", "unknown"].includes(origin))
+      || (!discarded && itemOrigin !== undefined && ["third_party", "device_sensed", "unknown"].includes(itemOrigin)));
+    result.push({ filename, directory: filename.startsWith("d78-") ? "positive" : "class-boundary", bytes: encodeCbor(bundle), descriptor: {
+      name: filename, object_type: "bundle", expected_result: "conformant", expected_code: null, expected_class: expectedClass,
+      expected_observations: untrusted ? [observation] : [], absent_observations: untrusted ? [] : [observation],
+    } });
+  };
+  positive("d78-origin-third-party-retrieval", "partially_declared", ["principal", "third_party"]);
+  positive("origin-declared-only-device-sensed", "declared_only", ["device_sensed"], "device_sensed");
+  positive("origin-declared-only-trusted", "declared_only", ["principal", "operator_system"], "principal");
+  positive("origin-no-input-ancestor", "not_evaluated", undefined, undefined, false, true);
+  positive("origin-unknown-only", "partially_declared", ["unknown"]);
+  positive("origin-all-discarded", "not_declared", undefined, "third_party", true);
+  const negatives: [string, string, string, CborValue][] = [
+    ["item-disposition-missing", "schema/missing-field", "disposition", null],
+    ["origins-not-array", "schema/bad-type", "origins", "principal"],
+    ["origins-empty", "schema/out-of-range", "origins", []],
+    ["origins-six", "schema/out-of-range", "origins", ["unknown", "principal", "third_party", "device_sensed", "operator_system", "unknown"]],
+    ["origins-nontext", "schema/bad-type", "origins", [1]],
+    ["origins-enum-unknown", "schema/enum-unknown", "origins", ["web"]],
+    ["origins-duplicate-nonadjacent", "schema/duplicate-entry", "origins", ["unknown", "principal", "unknown"]],
+    ["origins-unsorted", "schema/unsorted-set", "origins", ["principal", "unknown"]],
+    ["item-origin-enum-unknown", "schema/enum-unknown", "origin", "web"],
+    ["item-origin-nontext", "schema/bad-type", "origin", 1],
+    ["item-disposition-enum-unknown", "schema/enum-unknown", "disposition", "ignored"],
+    ["item-disposition-nontext", "schema/bad-type", "disposition", 1],
+  ];
+  for (const [suffix, code, field, value] of negatives) {
+    const bundle = baseBundle();
+    mutateReceipt(bundle, field === "origins" ? "inference" : "observation", (receipt) => {
+      const body = receipt.body as Obj;
+      if (field === "origins") body.origins = value;
+      else {
+        const item = ((body.consumption as Obj).items as Obj[])[0]!;
+        if (suffix === "item-disposition-missing") { delete item.disposition; item.origin = "web"; }
+        else item[field] = value;
+      }
+    });
+    const filename = `repair-d78-${suffix}`;
+    result.push({ filename, directory: "negative", bytes: encodeCbor(bundle), descriptor: {
+      name: filename, object_type: "bundle", expected_result: "nonconformant", expected_code: code, expected_step: 6,
+      expected_observations: [], absent_observations: [observation],
+    } });
+  }
+  const add = (filename: string, bundle: Obj, expectedClass = "declared_only", expectedObservations = [observation], code: string | null = null, step?: number): void => {
+    result.push({ filename, directory: code ? "negative" : "class-boundary", bytes: encodeCbor(bundle), descriptor: {
+      name: filename, object_type: "bundle", expected_result: code ? "nonconformant" : "conformant",
+      expected_code: code, ...(step === undefined ? {} : { expected_step: step }), expected_class: expectedClass,
+      expected_observations: expectedObservations, absent_observations: code ? [observation] : [],
+    } });
+  };
+  const declared = () => decodeCbor(result.find((fixture) => fixture.filename === "origin-declared-only-trusted")!.bytes, { strict: true }) as Obj;
+
+  // Only the historical root observation declares third_party. Its sole outgoing
+  // edge crosses from epoch 42 into epoch 43 using the D-10 historical exception.
+  const cross = baseBundle();
+  const oldRoot = payload(receiptBy(cross, (r) => r.kind === "observation" && object(r.root)));
+  rewriteD78Receipts(cross, (r) => {
+    if (same(r.receipt_id, oldRoot.receipt_id)) {
+      for (const item of ((r.body as Obj).consumption as Obj).items as Obj[]) item.origin = "third_party";
+    } else (r.binding as Obj).epoch_id = 43;
+  });
+  const newRoot = payload(receiptBy(cross, (r) => r.kind === "observation" && object(r.root)));
+  rebuildManifest(cross, (manifest) => {
+    const index = manifest.receipt_index as Obj;
+    const entry = clone((index.entries as Obj[]).find((e) => same(e.receipt_id, oldRoot.receipt_id))!);
+    entry.receipt_id = newRoot.receipt_id!; entry.leaf_index = 0;
+    index.entries = [entry]; index.leaf_count = 1;
+    index.root = promotedRoot([domainHash("AAR-MANIFEST-INDEX-LEAF-v1", entry)], "AAR-MANIFEST-INDEX-NODE-v1");
+    manifest.item_count = 1; manifest.sequence_span = { first: 0, last: 0 };
+  }, true);
+  const sourceManifest = payload((artifacts(cross).epoch_manifests as CborValue[])[0]!);
+  const sourceAnchor = payload((artifacts(cross).anchors as CborValue[])[0]!);
+  rewriteD78Receipts(cross, (r) => {
+    for (const edge of r.parents as Obj[]) if (same(edge.parent_id, newRoot.receipt_id)) edge.cross_epoch = {
+      source_manifest_id: sourceManifest.manifest_id!, source_anchor_id: sourceAnchor.anchor_id!, reason: "historical_evidence",
+    };
+  });
+  artifacts(cross).merkle_batches = []; artifacts(cross).merkle_proofs = [];
+  add("origin-cross-epoch-ancestry", cross, "partially_declared");
+
+  const supports = baseBundle(); clearJournal(supports);
+  rewriteD78Receipts(supports, (r, originals) => {
+    const body = r.body as Obj;
+    const observationRoot = originals.find((v) => v.kind === "observation" && object(v.root))!;
+    const outcome = originals.find((v) => v.kind === "outcome_observation")!;
+    if (r.kind === "observation" && object(r.root)) for (const item of (body.consumption as Obj).items as Obj[]) item.origin = "third_party";
+    if (r.kind === "outcome_observation") {
+      const template = clone((originals.find((v) => v.kind === "observation" && !object(v.root))!.parents as Obj[])[0]!);
+      template.edge_type = "supports"; template.parent_id = observationRoot.receipt_id!;
+      const refused = originals.find((v) => v.kind === "action_attempt" && (v.body as Obj).disposition === "not_dispatched")!;
+      const subject = clone((r.parents as Obj[])[0]!);
+      subject.parent_id = refused.receipt_id!;
+      r.parents = [subject, template]; body.subject_id = refused.receipt_id!;
+    }
+    if (r.kind === "action_attempt" && body.disposition === "not_dispatched") {
+      const authorization = originals.find((v) => v.kind === "authorization" && object(v.root))!;
+      const edge = clone((r.parents as Obj[]).find((e) => e.edge_type === "authorized_by")!);
+      edge.parent_id = authorization.receipt_id!; r.parents = [edge];
+      body.authorization_id = authorization.receipt_id!;
+      body.decision_commitment = ((authorization.body as Obj).decision as Obj).decision_commitment!;
+    }
+    if (r.kind === "inference" && (r.parents as Obj[]).length) {
+      const edge = clone((r.parents as Obj[])[0]!);
+      edge.edge_type = "supports"; edge.parent_id = outcome.receipt_id!;
+      r.parents = [edge]; body.consumption_manifest_id = (body.prompt_manifest as Obj).digest!;
+    }
+  });
+  add("origin-outcome-supports-ancestry", supports, "partially_declared");
+
+  const two = declared();
+  rewriteD78Receipts(two, (r) => { if (r.kind === "inference" && (r.parents as Obj[]).length) (r.body as Obj).origins = ["principal"]; });
+  const other = declared();
+  rewriteD78Receipts(other, (r) => {
+    (r.binding as Obj).epoch_seq = ((r.binding as Obj).epoch_seq as number) + 20;
+    (r.emission as Obj).issuer_seq = ((r.emission as Obj).issuer_seq as number) + 20;
+    if (r.kind === "inference" && (r.parents as Obj[]).length) (r.body as Obj).origins = ["third_party"];
+    if (r.kind === "observation") for (const item of ((r.body as Obj).consumption as Obj).items as Obj[]) item.origin = "third_party";
+  });
+  receiptList(two).push(...receiptList(other)); sortArtifacts(two, "receipts");
+  add("origin-two-attempts-distinct-sets", two);
+
+  const late = decodeCbor(result.find((fixture) => fixture.filename === "d78-origin-third-party-retrieval")!.bytes, { strict: true }) as Obj;
+  // Match the existing manifest-without-events defect: a closed manifest has
+  // no open/close events, so both implementations fail at step 14.
+  artifacts(late).epoch_manifests = artifacts(baseBundle()).epoch_manifests!;
+  add("repair-d78-untrusted-then-late-failure", late, "not_evaluated", [], "epoch/open-close", 14);
+
+  const aar3 = declared(); aar3.claimed_profile = "AAR-3";
+  rewriteD78Receipts(aar3, (r) => {
+    if (r.kind === "inference" && (r.parents as Obj[]).length) (r.body as Obj).origins = ["third_party"];
+    if (r.kind === "action_attempt" && (r.body as Obj).disposition === "not_dispatched") (r.body as Obj).refusal_reason = "journal/unavailable";
+  });
+  // Membership proofs are independent of receipt ancestry and may cover other
+  // journal items; retain the fresh base corpus's signed batch and proofs.
+  const journal = artifacts(baseBundle());
+  artifacts(aar3).merkle_batches = journal.merkle_batches!; artifacts(aar3).merkle_proofs = journal.merkle_proofs!;
+  add("origin-aar3-refused-and-untrusted", aar3, "declared_only", ["refused_pre_dispatch", observation, "membership_only", "ingress_completeness_not_established"]);
+  return result;
+}
+
+export function buildD78ItemVariants() {
+  const bundle = baseBundle(); clearJournal(bundle);
+  rewriteD78Receipts(bundle, (receipt) => {
+    if (receipt.kind !== "observation") return;
+    const consumption = (receipt.body as Obj).consumption as Obj;
+    consumption.items = (consumption.items as Obj[]).map((item) => new Map<CborScalar, CborValue>([...Object.entries(item), [123, true], ["origin", "web"]]));
+  });
+  const variants = [{ name: "d78-item-123-origin-web", bytes: encodeCbor(bundle), code: "receipt/manifest-inconsistent", step: 10 }];
+  for (const [name, disposition, origin, code] of [
+    ["d78-item-disposition-type-before-origin-enum", 1, "web", "schema/bad-type"],
+    ["d78-item-disposition-enum-before-origin-type", "ignored", 1, "schema/enum-unknown"],
+  ] as const) {
+    const ordered = baseBundle();
+    mutateReceipt(ordered, "observation", (receipt) => {
+      const item = (((receipt.body as Obj).consumption as Obj).items as Obj[])[0]!;
+      item.disposition = disposition; item.origin = origin;
+    });
+    variants.push({ name, bytes: encodeCbor(ordered), code, step: 6 });
+  }
+  return variants;
+}
+
+export function buildD78ReportVariants() {
+  const source = buildD78Fixtures().find((fixture) => fixture.filename === "d78-origin-third-party-retrieval")!;
+  const undispatched = decodeCbor(source.bytes, { strict: true }) as Obj;
+  keepReceipts(undispatched, (receipt) => !["dispatch", "outcome_observation"].includes(receipt.kind as string));
+  const mixed = decodeCbor(source.bytes, { strict: true }) as Obj;
+  mutateReceiptWhere(mixed, (receipt) => receipt.kind === "action_attempt" && (receipt.body as Obj).disposition === "not_dispatched", (receipt) => {
+    (receipt.body as Obj).disposition = "eligible_for_dispatch";
+    delete (receipt.body as Obj).refusal_reason;
+  });
+  const repeated = decodeCbor(source.bytes, { strict: true }) as Obj;
+  const dispatchEnvelope = receiptBy(repeated, (receipt) => receipt.kind === "dispatch");
+  const dispatch = clone(payload(dispatchEnvelope));
+  (dispatch.binding as Obj).epoch_seq = 10;
+  (dispatch.emission as Obj).issuer_seq = 110;
+  receiptList(repeated).push(resign(dispatchEnvelope, dispatch, true));
+  sortArtifacts(repeated, "receipts");
+  return [
+    { name: "d78-report-eligible-undispatched", bytes: encodeCbor(undispatched), dispatched: [false], limit: "not_evaluated" },
+    { name: "d78-report-mixed-attempts-diamond", bytes: encodeCbor(mixed), dispatched: [true, false], limit: "partially_declared" },
+    { name: "d78-report-repeated-dispatch", bytes: encodeCbor(repeated), dispatched: [true], limit: "partially_declared" },
+  ];
+}
+
 export function buildD77PositiveFixtures() {
   const bundle = baseBundle();
   // outcome_signing signs only its outcome receipt and has no ID references.

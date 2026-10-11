@@ -1,0 +1,14 @@
+{
+  "name": "origin-aar3-refused-and-untrusted",
+  "object_type": "bundle",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "expected_class": "declared_only",
+  "expected_observations": [
+    "refused_pre_dispatch",
+    "untrusted_origin_declared_in_action_ancestry",
+    "membership_only",
+    "ingress_completeness_not_established"
+  ],
+  "absent_observations": []
+}

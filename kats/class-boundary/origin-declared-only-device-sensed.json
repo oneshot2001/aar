@@ -1,0 +1,11 @@
+{
+  "name": "origin-declared-only-device-sensed",
+  "object_type": "bundle",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "expected_class": "declared_only",
+  "expected_observations": [
+    "untrusted_origin_declared_in_action_ancestry"
+  ],
+  "absent_observations": []
+}

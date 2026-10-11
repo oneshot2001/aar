@@ -2,23 +2,167 @@
   "checks": {
     "id_digest_recomputation": {
       "failed": 0,
-      "passed": 58,
+      "passed": 68,
       "skipped": 0
     },
     "round_trip": {
       "failed": 0,
-      "passed": 58,
+      "passed": 68,
       "skipped": 0
     },
     "signature_recomputation": {
       "failed": 0,
-      "passed": 58,
+      "passed": 68,
       "skipped": 0
     }
   },
   "divergence_count": 0,
   "divergences": [],
   "fixtures": [
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 55,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 28,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/origin-aar3-refused-and-untrusted.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 53,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 27,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/origin-all-discarded.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 65,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 32,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/origin-cross-epoch-ancestry.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 53,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 27,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/origin-declared-only-device-sensed.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 53,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 27,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/origin-declared-only-trusted.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 52,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 26,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/origin-no-input-ancestor.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 53,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 27,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/origin-outcome-supports-ancestry.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 78,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 40,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/origin-two-attempts-distinct-sets.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 53,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 27,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/class-boundary/origin-unknown-only.cbor"
+    },
     {
       "checks": {
         "id_digest_recomputation": {
@@ -534,6 +678,22 @@
     {
       "checks": {
         "id_digest_recomputation": {
+          "commitments_checked": 53,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 27,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/d78-origin-third-party-retrieval.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
           "commitments_checked": 2,
           "status": "passed"
         },
@@ -948,7 +1108,7 @@
       "fixture": "kats/terminal-state/outcome-terminals-unknown-before-contradicted.cbor"
     }
   ],
-  "fixtures_checked": 58,
+  "fixtures_checked": 68,
   "schema_version": 1,
   "slice": "C1"
 }

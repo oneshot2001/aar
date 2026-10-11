@@ -10,16 +10,13 @@ import { hash } from "../../harness/crypto";
 import { EVALUATED_AT, goldenBundle } from "./golden";
 import { verifyBundle } from "../../harness/verifier";
 
-// Re-pinned 2026-09-09 under D-73: the demo canonical command now carries
-// parameters_digest, the epoch ships its open/close events, and the bundle
-// credentials the published KAT verifier key (D-58 step 20), so both golden
-// bundles changed bytes deliberately.
+// Re-pinned under D-78: request consumption and inference now declare principal origin.
 describe("RealNarrative byte-compatibility (golden digests)", () => {
   test("S1 dispatch bundle bytes unchanged with narrative omitted", async () => {
-    expect(toHex(hash(await goldenBundle("S1")))).toBe("5b75d23aeba8945e0b7d0d41efa6878af75764e40efc249db0264ba5ef0ff45d");
+    expect(toHex(hash(await goldenBundle("S1")))).toBe("80c05a553adac7e0976d1b3954847528f4e7e6cbaf2c41f22038b111f242a4d0");
   });
   test("S3 refusal bundle bytes unchanged with narrative omitted", async () => {
-    expect(toHex(hash(await goldenBundle("S3")))).toBe("c35114650d8143f2d44c9ffdce96020e6951bbd6f4a1985ff56c75cbaaddad2a");
+    expect(toHex(hash(await goldenBundle("S3")))).toBe("04023e481e7a97087c7f1681b1c982173cac130e5aed85950d0d035eb2a71e7d");
   });
 });
 

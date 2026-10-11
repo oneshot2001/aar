@@ -1,0 +1,11 @@
+{
+  "name": "repair-d78-origins-empty",
+  "object_type": "bundle",
+  "expected_result": "nonconformant",
+  "expected_code": "schema/out-of-range",
+  "expected_step": 6,
+  "expected_observations": [],
+  "absent_observations": [
+    "untrusted_origin_declared_in_action_ancestry"
+  ]
+}

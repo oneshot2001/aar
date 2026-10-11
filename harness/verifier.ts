@@ -31,6 +31,7 @@ export type B1Success = {
   observations: readonly string[];
   verdict: Obj;
   verdictEnvelope: Uint8Array;
+  report: { selector_matching_receipts: number; input_origin_ancestry: InputOriginReport };
 };
 
 export type B1Verification = B1Failure | B1Success;
@@ -65,6 +66,22 @@ export interface VerifyB1Options {
   buildDigest?: Uint8Array;
   configDigest?: Uint8Array;
 }
+
+interface InputOriginAttempt {
+  attempt_id: string;
+  dispatched: boolean;
+  declared_origins: string[];
+  undeclared_slots: number;
+}
+
+interface InputOriginReport {
+  bundle_digest: string;
+  verdict_id: string;
+  attempts: InputOriginAttempt[];
+}
+
+type InputOriginLimit = "not_evaluated" | "not_declared" | "partially_declared" | "declared_only";
+const INPUT_ORIGINS = ["principal", "operator_system", "device_sensed", "third_party", "unknown"];
 
 const LIMITS = {
   bundleBytes: 16_777_216,
@@ -579,6 +596,26 @@ function parseEnvelope(entry: CborValue, kind: ArtifactKind, path: string): Pars
       const items = body.consumption.items;
       if (!Array.isArray(items)) return failure(6, "schema/bad-type", `${path}.payload.body.consumption.items`);
       if (items.length < 1 || items.length > 4096) return failure(6, "schema/out-of-range", `${path}.payload.body.consumption.items`);
+      for (const [index, item] of items.entries()) {
+        if (!object(item)) continue; // Step 10 owns item shape.
+        if (!("disposition" in item)) return failure(6, "schema/missing-field", `${path}.payload.body.consumption.items[${index}].disposition`);
+        for (const [name, allowed] of [["disposition", ["used", "discarded"]], ["origin", INPUT_ORIGINS]] as const) {
+          if (name === "origin" && !(name in item)) continue;
+          if (typeof item[name] !== "string") return failure(6, "schema/bad-type", `${path}.payload.body.consumption.items[${index}].${name}`);
+          if (!(allowed as readonly string[]).includes(item[name])) return failure(6, "schema/enum-unknown", `${path}.payload.body.consumption.items[${index}].${name}`);
+        }
+      }
+    }
+    if (payloadValue.kind === "inference" && "origins" in body) {
+      const origins = body.origins;
+      if (!Array.isArray(origins)) return failure(6, "schema/bad-type", `${path}.payload.body.origins`);
+      if (origins.length < 1 || origins.length > 5) return failure(6, "schema/out-of-range", `${path}.payload.body.origins`);
+      for (const origin of origins) {
+        if (typeof origin !== "string") return failure(6, "schema/bad-type", `${path}.payload.body.origins`);
+        if (!INPUT_ORIGINS.includes(origin)) return failure(6, "schema/enum-unknown", `${path}.payload.body.origins`);
+      }
+      if (new Set(origins).size !== origins.length) return failure(6, "schema/duplicate-entry", `${path}.payload.body.origins`);
+      if (origins.some((origin, index) => index > 0 && compareEncoded(origins[index - 1]!, origin) >= 0)) return failure(6, "schema/unsorted-set", `${path}.payload.body.origins`);
     }
     if (payloadValue.kind === "action_attempt") {
       if (!object(body.command)) return failure(6, "schema/bad-type", `${path}.payload.body.command`);
@@ -1156,6 +1193,55 @@ function receiptsById(parsed: Parsed): Map<string, ParsedEnvelope> {
   return new Map(parsed.receipt.map((entry) => [toHex(entry.payload.receipt_id as Uint8Array), entry]));
 }
 
+function validateInputOrigins(parsed: Parsed, observations: string[]): { limit: InputOriginLimit; attempts: InputOriginAttempt[] } {
+  const byId = receiptsById(parsed);
+  const reachable = new Map<string, Set<string>>();
+  function ancestors(node: string): Set<string> {
+    if (!reachable.has(node)) {
+      const nodes = new Set([node]);
+      for (const edge of byId.get(node)!.payload.parents as Obj[]) {
+        if (edge.edge_type === "attempted_as" || edge.edge_type === "observed_outcome") continue;
+        for (const parent of ancestors(toHex(edge.parent_id as Uint8Array))) nodes.add(parent);
+      }
+      reachable.set(node, nodes);
+    }
+    return reachable.get(node)!;
+  }
+  function slots(nodes: Set<string>) {
+    const origins = new Set<string>();
+    let declared = 0; let undeclared = 0;
+    for (const node of nodes) {
+      const receipt = byId.get(node)!.payload; const body = receipt.body as Obj;
+      if (receipt.kind === "inference") {
+        if ("origins" in body) { declared += 1; for (const origin of body.origins as string[]) origins.add(origin); }
+        else undeclared += 1;
+      } else if (receipt.kind === "observation") {
+        for (const item of (body.consumption as Obj).items as Obj[]) {
+          if (item.disposition !== "used") continue;
+          if ("origin" in item) { declared += 1; origins.add(item.origin as string); }
+          else undeclared += 1;
+        }
+      }
+    }
+    return { origins, declared, undeclared };
+  }
+  const dispatched = new Set(parsed.receipt.filter((entry) => entry.payload.kind === "dispatch").map((entry) =>
+    toHex((entry.payload.parents as Obj[]).find((edge) => edge.edge_type === "attempted_as")!.parent_id as Uint8Array)));
+  const undispatched = parsed.receipt.filter((entry) => entry.payload.kind === "action_attempt"
+    && (entry.payload.body as Obj).disposition === "eligible_for_dispatch")
+    .map((entry) => toHex(entry.payload.receipt_id as Uint8Array)).filter((node) => !dispatched.has(node)).sort();
+  const union = new Set<string>();
+  const attempts = [...dispatched, ...undispatched].map((node) => {
+    const nodes = ancestors(node); const { origins, undeclared } = slots(nodes);
+    if (dispatched.has(node)) for (const ancestor of nodes) union.add(ancestor);
+    return { attempt_id: node, dispatched: dispatched.has(node), declared_origins: [...origins].sort(compareEncoded), undeclared_slots: undeclared };
+  });
+  const { origins, declared, undeclared } = slots(union);
+  const limit = declared + undeclared === 0 ? "not_evaluated" : declared === 0 ? "not_declared" : undeclared === 0 ? "declared_only" : "partially_declared";
+  if ([...origins].some((origin) => ["third_party", "device_sensed", "unknown"].includes(origin))) observe(observations, "untrusted_origin_declared_in_action_ancestry");
+  return { limit, attempts };
+}
+
 function validateGraph(parsed: Parsed): B1Failure | undefined {
   const byId = receiptsById(parsed);
   const manifests = new Map(parsed.epoch_manifest.map((entry) => [toHex(entry.payload.manifest_id as Uint8Array), entry]));
@@ -1653,9 +1739,9 @@ const VERDICT_LIMITS: Obj = {
   credential_path_length: 8,
 };
 
-// D-77 build identity hashes the literal UTF-8 preimage; config identity is unchanged.
-const DEFAULT_VERSION = "v0.2.2";
-const DEFAULT_BUILD_DIGEST = hash(new TextEncoder().encode("harness-aar-v0.2.2-d77-signer-binding-build-v1"));
+// D-78 build identity hashes the literal UTF-8 preimage; config identity is unchanged.
+const DEFAULT_VERSION = "v0.2.3";
+const DEFAULT_BUILD_DIGEST = hash(new TextEncoder().encode("harness-aar-v0.2.3-d78-input-origin-build-v1"));
 const DEFAULT_CONFIG_DIGEST = deterministicId("verifier-config:aar-reference-verifier@0.2.0-default");
 const ZERO_DIGEST = new Uint8Array(32);
 
@@ -1687,10 +1773,10 @@ function priorEmissionsDigest(state: readonly PriorEmission[] | undefined): Uint
   return domainHash("AAR-VERDICT-PRIOR-v1", { entries });
 }
 
-function emitVerdict(input: Uint8Array, bundle: Obj, parsed: Parsed, options: VerifyB1Options, observations: string[], evidence: EvidenceLimits): B1Success {
+function emitVerdict(input: Uint8Array, bundle: Obj, parsed: Parsed, options: VerifyB1Options, observations: string[], evidence: EvidenceLimits, inputOrigins: ReturnType<typeof validateInputOrigins>): B1Success {
   const selector = bundle.selector as Obj; const trust = bundle.trust_inputs as Obj; const store = trust.trust_store as Obj;
   const fields: Obj = {
-    v: 3,
+    v: 4,
     evaluated_at: trust.evaluation_time!,
     result: "conformant",
     bundle_digest: hash(input),
@@ -1722,13 +1808,21 @@ function emitVerdict(input: Uint8Array, bundle: Obj, parsed: Parsed, options: Ve
       custody_continuity: "not_established",
       discovery_completeness: bundle.coverage === "complete" ? "producer_declared_only" : "not_established",
       legal_admissibility: "not_established",
+      input_origin_ancestry: inputOrigins.limit,
     },
     observations,
   };
   const protectedBytes = encodeCbor(new Map<CborScalar, CborValue>([[1, -7], [3, "application/aar-verdict+cbor;v=0.2"], [4, TEST_KEYS.verifier_signing.kid]]));
   const verdict: Obj = { verdict_id: domainHash("AAR-VERDICT-ID-v1", protectedBytes, fields), ...fields };
   const signed = signDetached(verdict, "application/aar-verdict+cbor;v=0.2", "verifier_signing");
-  return { ok: true, result: "conformant", completedThrough: 20, observations, verdict, verdictEnvelope: signed.envelopeBytes };
+  const carriedIds = new Set(parsed.receipt.map((entry) => toHex(entry.payload.receipt_id as Uint8Array)));
+  const selectedIds = new Set(parsed.epoch_manifest
+    .filter((entry) => same(entry.payload.tenant_id, selector.tenant_id) && same(entry.payload.site_id, selector.site_id))
+    .flatMap((entry) => ((entry.payload.receipt_index as Obj).entries as Obj[]))
+    .filter((entry) => carriedIds.has(toHex(entry.receipt_id as Uint8Array)) && entryMatchesSelector(entry, selector))
+    .map((entry) => toHex(entry.receipt_id as Uint8Array)));
+  return { ok: true, result: "conformant", completedThrough: 20, observations, verdict, verdictEnvelope: signed.envelopeBytes,
+    report: { selector_matching_receipts: selectedIds.size, input_origin_ancestry: { bundle_digest: toHex(fields.bundle_digest as Uint8Array), verdict_id: toHex(verdict.verdict_id as Uint8Array), attempts: inputOrigins.attempts } } };
 }
 
 function validateBundle(input: Uint8Array, options: VerifyB1Options): B1Verification {
@@ -1763,6 +1857,7 @@ function validateBundle(input: Uint8Array, options: VerifyB1Options): B1Verifica
   if (graphIssue) return graphIssue;
   const dominanceIssue = validateDominance(bundle, parsed, observations);
   if (dominanceIssue) return dominanceIssue;
+  const inputOrigins = validateInputOrigins(parsed, observations);
   const epochIssue = validateEpochs(parsed);
   if (epochIssue) return epochIssue;
   const indexIssue = validateManifestIndexes(parsed);
@@ -1777,7 +1872,7 @@ function validateBundle(input: Uint8Array, options: VerifyB1Options): B1Verifica
   if (isFailure(evidence)) return evidence;
   const verifierCredential = parsed.credential.find((entry) => equalBytes(entry.payload.subject_kid as Uint8Array, TEST_KEYS.verifier_signing.kid));
   if (verifierCredential === undefined || verifierCredential.payload.key_usage !== "verifier_signing") return failure(20, "key/not-found", "verifier_signing", true);
-  return emitVerdict(input, bundle, parsed, options, observations, evidence);
+  return emitVerdict(input, bundle, parsed, options, observations, evidence, inputOrigins);
 }
 
 function emitFailureVerdict(input: Uint8Array, issue: B1Failure, options: VerifyB1Options): B1Failure {
@@ -1793,7 +1888,7 @@ function emitFailureVerdict(input: Uint8Array, issue: B1Failure, options: Verify
   const committedUntil = uint(selector.committed_until) ? selector.committed_until : 0;
   const receiptKinds = Array.isArray(selector.receipt_kinds) && selector.receipt_kinds.length > 0 ? selector.receipt_kinds : ["observation"];
   const fields: Obj = {
-    v: 3, evaluated_at: evaluationTime, result: issue.result, reason: issue.reason,
+    v: 4, evaluated_at: evaluationTime, result: issue.result, reason: issue.reason,
     bundle_digest: hash(input), selector_commitment: bytes(decoded?.selector_commitment, 32) ? decoded!.selector_commitment! : zero32,
     verifier: {
       product: options.product ?? "aar-reference-verifier", version: options.version ?? DEFAULT_VERSION,
@@ -1816,7 +1911,7 @@ function emitFailureVerdict(input: Uint8Array, issue: B1Failure, options: Verify
     limits: {
       requested_profile: ["AAR-1", "AAR-2", "AAR-2A", "AAR-3"].includes(decoded?.claimed_profile as string) ? decoded!.claimed_profile! : "AAR-1",
       evaluated_profile: "below_AAR-1", maximum_time_class: "not_evaluated", maximum_provenance_class: "not_evaluated", maximum_outcome_level: "not_evaluated",
-      technical_integrity: "not_satisfied", source_authenticity: "not_established", custody_continuity: "not_established", discovery_completeness: "not_established", legal_admissibility: "not_established",
+      technical_integrity: "not_satisfied", source_authenticity: "not_established", custody_continuity: "not_established", discovery_completeness: "not_established", legal_admissibility: "not_established", input_origin_ancestry: "not_evaluated",
     },
     observations: [],
   };

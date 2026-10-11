@@ -29,7 +29,7 @@ One real bundle, one real verdict, run offline:
 $ python -m pyref verify kats/positive/bundle-valid-subset.cbor --at 1735689800
 Result: conformant
 Trust policy: producer-declared only
-  verdict_id:        064431204fe224ef1c6f1aee22773eb80f40a99e87bf430afd018a517bc1da5b
+  verdict_id:        75b472f9d9bb95da62730fba4b0dd22b930ad79a544e7321100b157b3691808a
   bundle_digest:     9571233e3ea5f08ff9cea1e81fa8394b669c135ac113f68c41b0ef59916a5b75
   requested_profile: AAR-2A   evaluated_profile: AAR-2A   coverage: valid_subset
   signed_observations: membership_only, anchor_existence_order_only,

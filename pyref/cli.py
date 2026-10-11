@@ -279,12 +279,25 @@ def _print_evaluation(bundle_path: Path, at: int, evaluation: Evaluation, policy
         print(f"  - {observation}{suffix}")
 
     verdict = evaluation.verdict
+    if evaluation.result == "conformant":
+        origins = evaluation.report["input_origin_ancestry"]
+        print("Input-origin ancestry [report layer; not signed]:")
+        print(f"  bundle_digest: {origins['bundle_digest']}")
+        print(f"  verdict_id: {origins['verdict_id']}")
+        print("  attempt_id | dispatch status | declared origins | undeclared slots")
+        for row in origins["attempts"]:
+            status = "dispatched" if row["dispatched"] else "eligible, undispatched"
+            declared = ", ".join(row["declared_origins"]) or "(none)"
+            print(f"  {row['attempt_id']} | {status} | {declared} | {row['undeclared_slots']}")
+        if not origins["attempts"]:
+            print("  (none)")
     limits = verdict["limits"]
     scope = verdict["scope"]
     print("Signed verdict:")
     print(f"  CBOR hex: {evaluation.verdict_bytes.hex()}")
     print("  Decoded summary:")
     print(f"    verdict_id: {verdict['verdict_id'].hex()}")
+    print(f"    v: {verdict['v']}")
     print(f"    result: {verdict['result']}")
     if evaluation.reason is not None:
         print(f"    reason: {evaluation.reason}")
@@ -293,6 +306,7 @@ def _print_evaluation(bundle_path: Path, at: int, evaluation: Evaluation, policy
     print(f"    requested_profile: {limits['requested_profile']}")
     print(f"    evaluated_profile: {limits['evaluated_profile']}")
     print(f"    coverage: {scope['coverage']}")
+    print(f"    input_origin_ancestry: {limits['input_origin_ancestry']}")
     signed_observations = verdict["observations"]
     print(f"    signed_observations: {', '.join(signed_observations) if signed_observations else '(none)'}")
 

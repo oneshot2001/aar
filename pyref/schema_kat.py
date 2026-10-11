@@ -113,6 +113,7 @@ def probes() -> list[tuple[str, str, str, bytes, bool, bool]]:
     """(label, schema, root, bytes, expect_accept, engine_self_test)."""
     credential = (POSITIVE / "credential-ep-signing-aar-2a.cbor").read_bytes()
     observation = (POSITIVE / "receipt-observation-agent-root.cbor").read_bytes()
+    inference = (POSITIVE / "receipt-inference-requested.cbor").read_bytes()
     attempt = (POSITIVE / "receipt-action-attempt.cbor").read_bytes()
     manifest = (POSITIVE / "epoch-manifest-populated.cbor").read_bytes()
     signed_verdict = verdict((POSITIVE / "bundle-valid-subset.cbor").read_bytes())
@@ -139,6 +140,14 @@ def probes() -> list[tuple[str, str, str, bytes, bool, bool]]:
         ("D2 zero exclusions", CORE, "receipt-envelope", mutate(attempt, "body.command.excluded_fields", []), True, False),
         ("D2 basis unknown", CORE, "epoch-manifest-envelope", mutate(manifest, "anchor_plan.independence.basis", "independent"), False, False),
         ("D2 one anchor target", CORE, "epoch-manifest-envelope", mutate(manifest, "anchor_plan.targets", [target]), True, False),
+        ("D-78 inference origins twin", CORE, "receipt-envelope", mutate(inference, "body.origins", ["principal", "third_party"]), True, False),
+        ("D-78 item origin twin", CORE, "receipt-envelope", mutate(observation, "body.consumption.items", [{**item, "origin": "principal"}]), True, False),
+        ("D-78 item origin unknown", CORE, "receipt-envelope", mutate(observation, "body.consumption.items", [{**item, "origin": "web"}]), False, False),
+        ("D-78 origins enum unknown", CORE, "receipt-envelope", mutate(inference, "body.origins", ["web"]), False, False),
+        ("D-78 origins empty", CORE, "receipt-envelope", mutate(inference, "body.origins", []), False, False),
+        ("D-78 origins six", CORE, "receipt-envelope", mutate(inference, "body.origins", ["unknown"] * 6), False, False),
+        ("D-78 verdict v3 rejected", VERDICT, "verdict-envelope", mutate(signed_verdict, "v", 3), False, False),
+        ("D-78 origin established rejected", VERDICT, "verdict-envelope", mutate(signed_verdict, "limits.input_origin_ancestry", "established"), False, False),
         ("D-76 verdict v2 rejected", VERDICT, "verdict-envelope", mutate(signed_verdict, "v", 2), False, False),
         ("D-76 prior digest size", VERDICT, "verdict-envelope", mutate(signed_verdict, "trust_policy.prior_emissions_digest", bytes(31)), False, False),
         ("D4 custody partially_evidenced", VERDICT, "verdict-envelope", mutate(signed_verdict, "limits.custody_continuity", "partially_evidenced"), False, False),

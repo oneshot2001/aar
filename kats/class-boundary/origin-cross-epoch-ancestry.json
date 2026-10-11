@@ -1,0 +1,11 @@
+{
+  "name": "origin-cross-epoch-ancestry",
+  "object_type": "bundle",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "expected_class": "partially_declared",
+  "expected_observations": [
+    "untrusted_origin_declared_in_action_ancestry"
+  ],
+  "absent_observations": []
+}
