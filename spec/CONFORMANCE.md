@@ -101,9 +101,12 @@ normative as the step order itself (D-54).
       anywhere in the array is `schema/duplicate-entry`, checked before order;
       a member out of deterministic-CBOR encoded-byte order is
       `schema/unsorted-set` (D-78). For an observation body, after the
-      consumption cardinality check, each item's `disposition` and optional
-      `origin` are validated for type (`schema/bad-type`) and closed enum
-      (`schema/enum-unknown`), in item order (D-78).
+      consumption cardinality check, each item that decodes as a text-keyed
+      map has its `disposition` validated for presence
+      (`schema/missing-field`), type (`schema/bad-type`) and closed enum
+      (`schema/enum-unknown`), then its optional `origin` for type and enum,
+      in item order; an item that is not a text-keyed map is left to step 10
+      (D-78).
    7. resolve a P-256 verification key through the accepted credential path
       and check the resolved signer, in this order (D-77):
       1. a carried credential whose `subject_kid` equals the protected kid
