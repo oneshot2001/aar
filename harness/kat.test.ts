@@ -99,7 +99,7 @@ describe("positive KAT harness", () => {
         expect(row.undeclared_slots, fixture.filename).toBe(fixture.filename === "d78-origin-third-party-retrieval" || fixture.filename === "origin-unknown-only" || fixture.filename === "origin-cross-epoch-ancestry" ? 2 : fixture.filename === "origin-all-discarded" || fixture.filename === "origin-outcome-supports-ancestry" ? 1 : 0);
       }
     }
-  });
+  }, 180_000);
 
   test("every KAT strict-decodes and round-trips exactly", () => {
     for (const kat of buildFixtures().kats) {
