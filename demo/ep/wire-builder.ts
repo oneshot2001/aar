@@ -34,7 +34,14 @@ export interface DelegationWindow {
 // authorization decision it actually evaluated (policySetRoot = digest of the
 // REAL policy; decision "deny" yields a not_dispatched attempt with the given
 // refusal reason — the generalization of the S3 delegation-expiry special case).
+export const REAL_CLOCK_BOUND_SECONDS = 60;
+
+// Opt in with realClock and committedAt = evaluatedAt = T0. beforeDispatch
+// must return timing on success: producer clock readings at send, readback,
+// post-send commitment (T1), monotonic time and anchor observation. Ancestors,
+// credentials and request remain frozen at T0; only descendants use T1.
 export interface RealNarrative {
+  readonly realClock?: boolean;
   // Real emission time for every receipt (ties order by epoch_seq). INVARIANT
   // (enforced below, because the non-overridable freshness window and bundle
   // selector stay pinned to evaluatedAt): committedAt must lie within
@@ -75,7 +82,7 @@ function validateNarrative(input: WireBuildInput): void {
     throw new Error("scenario S3 forces a refusal — narrative.decision \"permit\" would sign an incoherent permit + not_dispatched + delegation-expired artifact");
   }
   if (narrative.committedAt !== undefined) {
-    if (narrative.committedAt < input.evaluatedAt - 60 || narrative.committedAt > input.evaluatedAt) {
+    if (narrative.committedAt < input.evaluatedAt - REAL_CLOCK_BOUND_SECONDS || narrative.committedAt > input.evaluatedAt) {
       throw new Error("narrative.committedAt must lie within [evaluatedAt - 60, evaluatedAt] (freshness window and bundle selector are pinned to evaluatedAt)");
     }
     const closedAt = narrative.epochClosedAt ?? input.evaluatedAt - 40;
@@ -127,7 +134,13 @@ export interface WireDispatch {
 }
 
 export type PreDispatchResult =
-  | { readonly dispatch: WireDispatch; readonly refusalReason?: never }
+  | { readonly dispatch: WireDispatch; readonly refusalReason?: never; readonly timing?: {
+      readonly dispatchedAt: number;
+      readonly outcomeObservedAt: number;
+      readonly committedAt: number;
+      readonly monotonicNs: number;
+      readonly anchorObservedAt: number;
+    } }
   | { readonly dispatch?: never; readonly refusalReason: string };
 
 export interface ReceiptBuild {
@@ -165,6 +178,7 @@ export interface TrustPolicyJson {
 }
 
 export interface WireBuildResult {
+  readonly evaluatedAt: number;
   readonly bundle: Uint8Array;
   readonly trustPolicy: TrustPolicyJson;
   readonly receipts: readonly ReceiptBuild[];
@@ -405,6 +419,10 @@ export function buildSignedAgentRequest(input: AgentRequestInput): DemoSignedEnv
 
 export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildResult> {
   validateNarrative(input);
+  const initialInput = input;
+  if (input.narrative?.realClock && (!input.beforeDispatch || input.dispatch || input.narrative.committedAt !== input.evaluatedAt)) {
+    throw new Error("realClock requires beforeDispatch and committedAt = evaluatedAt = T0");
+  }
   const credentials = buildCredentials(input);
   const request = buildSignedAgentRequest(input);
   const requestPayload = request.payload as Obj;
@@ -496,6 +514,19 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
       });
     } else {
       dispatchResult = result.dispatch;
+      if (input.narrative?.realClock) {
+        const t = result.timing;
+        const t0 = input.evaluatedAt;
+        if (!t || ![t0, t.dispatchedAt, t.outcomeObservedAt, t.committedAt, t.monotonicNs, t.anchorObservedAt].every(Number.isSafeInteger)
+          || !(t0 <= t.dispatchedAt && t.dispatchedAt <= t.outcomeObservedAt && t.outcomeObservedAt <= t.committedAt)
+          || t.committedAt - t0 > REAL_CLOCK_BOUND_SECONDS
+          || t.monotonicNs < (input.narrative.monotonicNs ?? 0) || t.anchorObservedAt < t.committedAt) {
+          throw new Error("invalid real-clock timeline: require T0 <= dispatch <= outcome <= T1, span <= 60 and nondecreasing clocks");
+        }
+        input = { ...input, evaluatedAt: t.committedAt, anchorObservedAt: t.anchorObservedAt,
+          narrative: { ...input.narrative, committedAt: t.committedAt, epochClosedAt: t.committedAt,
+            dispatchedAt: t.dispatchedAt, outcomeObservedAt: t.outcomeObservedAt, monotonicNs: t.monotonicNs } };
+      }
     }
   }
   const receipts: ReceiptBuild[] = [observation, inference, authorization, attempt];
@@ -569,7 +600,7 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
     tenant_id: input.tenantId, allowed_sites: [input.siteId],
     allowed_key_usages: canonicalSort(["credential_issuing", "agent_signing", "ep_signing", "authority_signing", "outcome_signing", "anchor_signing"]),
   };
-  const trustFields: Obj = { snapshot_id: opaque(`trust-snapshot:${toHex(input.keys["verifier-trust"].kid)}`), created_at: input.evaluatedAt - 3600, roots: [rootRecord] };
+  const trustFields: Obj = { snapshot_id: opaque(`trust-snapshot:${toHex(input.keys["verifier-trust"].kid)}`), created_at: initialInput.evaluatedAt - 3600, roots: [rootRecord] };
   const trustStore: Obj = { digest: domainHash("AAR-TRUST-STORE-v1", trustFields), ...trustFields };
   const trust: Obj = {
     evaluation_time: input.evaluatedAt, trust_store: trustStore,
@@ -613,7 +644,7 @@ export async function buildDemoBundle(input: WireBuildInput): Promise<WireBuildR
     artifacts,
   };
   return {
-    bundle: encodeCbor(bundle), trustPolicy: trustPolicyJson(trust), receipts, request,
+    evaluatedAt: input.evaluatedAt, bundle: encodeCbor(bundle), trustPolicy: trustPolicyJson(trust), receipts, request,
     selectedDelegation: selected.payload, allDelegations: delegations.map((item) => item.payload), manifest,
   };
 }
