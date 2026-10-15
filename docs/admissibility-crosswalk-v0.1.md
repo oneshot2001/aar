@@ -269,6 +269,49 @@ opinion, not the spec in the abstract.
   custody of referenced media is outside the bundle entirely.
 - **Who:** the agency's DEMS / RMS records chain the bundle attaches to.
 
+### State courts — the "silent witness" foundation for unattended recordings
+
+Most criminal cases are tried in state court, where video and stills from an
+unattended camera usually come in under the "silent witness" theory: no
+eyewitness vouches for the picture, so the proponent shows the process that
+made it was reliable. *People v. Taylor*, 2011 IL 110067 (filed 2011-10-06),
+¶ 35, accepted six factors and held them nonexclusive: "(1) the device's
+capability for recording and general reliability; (2) competency of the
+operator; (3) proper operation of the device; (4) showing the manner in which
+the recording was preserved (chain of custody); (5) identification of the
+persons, locale, or objects depicted; and (6) explanation of any copying or
+duplication process." Its survey (¶ 33) shows other courts asking the same
+questions in other words, including "evidence of time and date" (¶ 33,
+summarizing *Wagner v. State*, 707 So. 2d 827, 831 (Fla. Dist. Ct. App. 1998))
+and "the process by which it was focused" (¶ 33, quoting *Washington v.
+State*, 961 A.2d 1110, 1116 (Md. 2008)).
+
+The bar is flexible, not absent. *Taylor* admitted a recording with a
+29-second gap because the camera "clearly worked" (¶ 39), but kept exclusion
+for incompleteness "so substantial as to render the film as a whole
+untrustworthy" (¶ 39, quoting 60 A.L.R.3d 333), and relaxed strict custody
+proof only "if there are other factors demonstrating the authenticity of the
+recording" (¶ 41). *Washington v. State*, 406 Md. 642 (2008), reversed because
+the State's foundation for a compiled surveillance recording was insufficient
+(secondary summaries differ on what the owner testified to; read the opinion
+before relying on it). The test is whether the proponent offers sufficient
+evidence of the recording's accuracy and reliability under the venue's
+standard. Only once that threshold is met do remaining gaps, such as custody
+under ¶ 41, go to **weight**, which is where cross-examination works.
+
+AAR bundles carry the agent's records around a capture (`observation`
+artifacts, authorizations, outcomes); the media's own integrity is the signed
+video layer (EdgeProof / ONVIF Media Signing), outside the bundle.
+
+| Factor | Bundle + verdict supply | Not established |
+|---|---|---|
+| (1) capability, reliability | device identity (maker, model, firmware, credential; `aar-core.cddl:315-322`) | firmware is producer-asserted; field reliability (G-B) |
+| (2) operator | for agent-driven capture: principal, authorization, delegation | agent competence; no error rate (G-D) |
+| (3) proper operation, incl. time and date | the declared outcome level (live runs reach `device_acknowledged` at best; timeouts and rejections stay `unknown` / `contradicted`); producer `time-evidence-class` | an acknowledged command is not proof the recording process was accurate; the **capture device's** clock (source, offset at capture) and its **aim** (PTZ position, reference scene); the time class covers the producer's clock only (G-J) |
+| (4) preservation | record tamper checks (901 custody row above) | custody continuity (G-F) |
+| (5) persons, locale, objects | what the agent claimed (`inference` receipts); `site_id` | locale beyond `site_id` (G-J); identity of persons comes from witnesses and investigators, not the bundle |
+| (6) copying | `transformation` ops (e.g. `redact`) | copying of the referenced media, outside the bundle |
+
 ## 2. Confrontation Clause (criminal cases)
 
 Under *Crawford*, *Melendez-Diaz*, and *Bullcoming*, a certificate that
@@ -378,6 +421,7 @@ prepared from this crosswalk may say:
 | G-G | Hearsay status of inference receipts and embedded human assertions | counsel | 803(6) |
 | G-H | Completeness and retention of material behind §3.2 manifests | operator audit | *Brady* |
 | G-I | State-rule variance (e.g. whether a given state has adopted 902(13)/(14) analogs) | counsel, per venue | all |
+| G-J | Capture time and camera placement: no signed record binds the capture device's clock (source, offset at capture) or its position and aim (PTZ position, reference scene) to the media; the `time-evidence-class` covers the producer's clock only | spec + adapters (camera clock read, reference scene at commissioning) | silent-witness factors (3) and (5), 901(b)(9) |
 
 ## 7. Questions for the first lawyer read
 
@@ -395,6 +439,10 @@ prepared from this crosswalk may say:
 
 ## Change log
 
+- 2026-10-15: added the state-court silent-witness section (*People v.
+  Taylor*, 2011 IL 110067, ¶¶ 33-41, read from the Illinois Supreme Court
+  opinion) and gap G-J (capture-device time and placement), from the
+  2026-10-15 custody-gap review.
 - v0.1 (2026-10-02): first draft from the chain-of-custody next-link review.
   Bounded to a crosswalk with marked gaps against one KAT bundle; no
   templates; no admissibility promised. Revised the same day after a
