@@ -546,3 +546,37 @@ adapters/vms/live/evidence/.
   unsandboxed runs 90/90 — environmental. This fix pass adds
   one adapter test; its current sandbox run was 90/91 (1,518 assertions), with
   the same sole loopback-bind failure.
+
+## W-01 — witness proxy hung on a reused client connection under Bun (live, 2026-10-16, FIXED)
+
+- Found running the transport witness on a separate host (Jetson, Linux arm64,
+  Bun 1.3.5) in front of onvif-mcp's `curl --digest` camera calls. curl sends
+  the Digest retry on the same proxy connection; the retry never got a
+  response and curl hung until its own timeout.
+- Root cause (isolated on macOS, Bun 1.3.5, no camera): after serving an
+  absolute-form request target (`GET http://host/path`, i.e. any proxy
+  request), Bun's node:http server never dispatches the next request on that
+  connection — the handler is not called again. Origin-form requests on the
+  same server keep-alive normally. Independent of the witness code and of
+  hop-by-hop headers. Gate 5 never hit it: the TS DigestHttpClient did not
+  reuse the connection.
+- Also: the proxy forwarded the camera's hop-by-hop `Connection: Keep-Alive`
+  and `Keep-Alive` headers to the client.
+- Fix (`demo/witness/proxy.ts`): every response carries `Connection: close`
+  (RFC 9112 §9.6: the client then closes after reading the response) and the
+  camera's `connection` / `keep-alive` headers are no longer forwarded. One
+  request per connection. The proxy does NOT end the socket itself: ending it
+  on response `finish` truncated a 1 MiB body under Bun ("finish" fires before
+  the body drains), caught by the regression test's body check. Bun leaves the
+  socket open until the client closes it. The S6 withheld-response fault path
+  is unchanged.
+- Test: `demo/witness/proxy.test.ts` W-01 (raw socket reading like a
+  close-honoring client; camera-shaped 401 with keep-alive headers and a
+  1 MiB body): `connection: close`, no `keep-alive`, full body, both requests
+  logged. Fails on the old proxy. `bun test demo/witness` added to
+  `scripts/release-check.sh` so it runs in the gate. Opens loopback sockets,
+  so it shares the known sandbox loopback-bind failure noted above.
+- Verified with real curl reusing its connection (two 3 MB requests, each
+  answered on its own connection, full bodies, both logged) and live through
+  the Jetson witness: Q6358 Digest 401 → 200, and a 2.3 MB 4K snapshot arrived
+  whole (JPEG start and end markers intact).

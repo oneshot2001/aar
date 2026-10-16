@@ -37,6 +37,13 @@ async function handle(
   const commandDigest = clientRequest.headers["x-aar-command-digest"];
   const actionBearing = clientRequest.headers["x-aar-action-bearing"] === "1";
   const requestBody = await bodyOf(clientRequest);
+  // W-01: after serving an absolute-form (proxy) request target, Bun 1.3.5's
+  // node:http server never dispatches the next request on that connection, so
+  // a client that reuses it (curl's Digest retry) hangs. One request per
+  // connection: tell every client to close (RFC 9112 §9.6 — the client stops
+  // reusing it). Do NOT end the socket on "finish": under Bun that fires before
+  // the body drains and truncated a 1 MiB response.
+  clientResponse.setHeader("connection", "close");
 
   if (method === "CONNECT") {
     clientResponse.writeHead(501, "TLS interception is not supported");
@@ -124,6 +131,10 @@ async function handle(
   const forwardedHeaders = { ...response.headers };
   delete forwardedHeaders["transfer-encoding"];
   delete forwardedHeaders["content-length"];
+  // W-01: hop-by-hop headers belong to the camera's connection, not the
+  // client's; a forwarded "Connection: Keep-Alive" would override the close.
+  delete forwardedHeaders["connection"];
+  delete forwardedHeaders["keep-alive"];
   clientResponse.writeHead(response.statusCode, response.statusMessage, forwardedHeaders);
   clientResponse.end(response.body);
 }
