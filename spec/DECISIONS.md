@@ -1496,3 +1496,148 @@ v0.3 line: nothing is removed or made required on receipts. Proposed by the
 fields, converging) and a Codex challenge that corrected the edge set, the
 sorted order, the disposition gap, the pyref `state.classes` overwrite, and
 the naming; accepted by the gate 2026-10-11.
+
+## D-79 — A delegation names the enforcement point that attempts under it
+
+**Decision.** At step 13, after `decision.delegation_id` equality and before
+any scope check, the embedded delegation's `subject_credential_id` MUST
+resolve, by find-first over the carried `credentials` array, to a credential
+whose `subject_kid` equals the protected kid of the action attempt. No such
+credential, or a different kid, is `delegation/scope`. The step-13 order is
+normative (D-54): dominance and embedded-delegation identity; subject; action,
+target, purpose, profile, tenant, site, invocation (all `delegation/scope`);
+`not_before`; `not_after`; `parent_delegations`; then D-66 for that dispatch.
+The invocation check applies whenever the delegation carries `invocation_id`,
+and a `one_time` delegation without `invocation_id` fails it. No wire change;
+no new reason code; the `delegation/scope` row names the subject.
+
+**Why.** `subject_credential_id` was carried and never read, so a delegation
+issued to one enforcement point authorized an attempt signed by another.
+Every producer in the corpus and the demo issues delegations to the EP
+credential (`harness/fixtures.ts`, `demo/ep/wire-builder.ts`), and action
+attempts are EP-signed by role (§2 roles), so binding the subject to the
+attempt's signer closes the gap without touching bundle bytes. The two
+verifiers also disagreed on whether the time window or the scope fails first,
+and on when the invocation check applies; one order and one rule end both.
+
+**What this does not establish.** Which *agent* was delegated. A delegation
+whose subject is an `agent_signing` credential now fails `delegation/scope`
+by rule; agent attribution needs a selection rule over the attempt's ancestry
+(request signer, inference signer, human and standing-condition roots) and
+stays a DESIGN item in BACKLOG (Codex challenge 2026-10-17, finding 6).
+
+**Alternatives considered.** Bind to the request envelope's `agent_signing`
+kid or the nearest inference signer: breaks the base positive, and no rule
+picks one ancestor under `human_request` or `standing_condition_trigger`
+roots. A usage-keyed rule (an EP subject binds to the attempt, an agent
+subject to the inference ancestor): more spec surface for a delegation shape
+no producer issues. A new reason code: D-77 reused codes for the same kind of
+binding.
+
+## D-80 — A rotation record is signed by the predecessor's issuer and ordered within its tenant and site
+
+**Decision.** Rotation binding at step 8, per record in artifact-array order:
+`predecessor_credential_id` and `successor_credential_id` resolve to carried
+credentials whose `subject_kid` equal `predecessor_kid` and `successor_kid`;
+the record's protected kid equals the predecessor credential's `issuer_kid`
+(the predecessor's own key when it is self-signed); the record's `tenant_id`
+and `site_id` equal both credentials'. Any failure is
+`credential/rotation-invalid`. After every record binds, the ordering pass
+groups records by (`tenant_id`, `site_id`), sorts each group by
+(`effective_at`, `continuity_sequence`), and fails a record whose
+`continuity_sequence` or `effective_at` is not strictly greater than its
+predecessor's with `credential/rotation-rollback`; groups are never compared.
+A rotation record asserts continuity only: it never makes its successor's root
+accepted, and a successor root key is accepted through the trust store like
+any other root. The rotation envelope's own signer is subject to the step-8
+status checks like every envelope (D-81), so a predecessor issuer revoked or
+compromised before evaluation cannot authorize a rotation.
+
+**Why.** Any `credential_issuing` key could sign a rotation asserting
+continuity between any two credentials, so a stranger's issuing key could
+splice a successor onto a victim's identity. Only the authority that issued
+the retiring key can speak for its successor. The namespace question was a
+cross-implementation divergence (pyref per tenant/site by `(effective_at,
+seq)`, harness global by `seq`): the CDDL carries tenant and site on every
+record and names no global allocator, and no producer has asked for one
+sequence across sites, so the partition is the rule and the harness changes.
+Binding every record before any ordering check keeps the first failure
+observable: a binding defect in one record cannot be masked by, or mask, a
+rollback between two others.
+
+**Alternatives considered.** Signer must equal both credentials' issuers:
+forbids issuer handover, which is what root rotation is. Global sequence
+(harness): a new restriction with no producer behind it. Interleaving binding
+and ordering per record (harness today): the first-failure code depends on
+array position in a way the spec never stated.
+
+## D-81 — Revocation and compromise are judged at use time; every signed object has one signing time
+
+**Decision.** Three parts, one wire-additive field (v0.2.4; verdict `v: 4`,
+protected content types unchanged).
+
+1. **`revoked_at`.** A status snapshot gains optional `revoked_at:
+   unix-time`. A `revoked` snapshot without `revoked_at`, or a `compromised`
+   snapshot without `compromise_at`, is `schema/missing-field` at step 6; a
+   present value that is not a `unix-time` is `schema/bad-type`. The instant
+   is the status authority's assertion of the effective event and travels
+   unchanged through refreshed snapshots; `produced_at` is when the snapshot
+   was published and is never the instant.
+2. **Signing time per object (6.7.7).** The signing time of an object is the
+   time it claims for its own signed act: a receipt's `emission.committed_at`;
+   an epoch manifest's `closed_at`; an epoch event's `occurred_at`; an anchor
+   record's `accepted_at`; a Merkle batch's `created_at`; a presentation
+   manifest's `delivered_at`; a status snapshot's `produced_at`; a request
+   envelope's `freshness.issued_at`; a mediator countersignature's
+   `mediator_observed_at`. A credential, a delegation, and a rotation record
+   carry no time of their own signing; their signing time is the evaluation
+   time. The same signing time is the credential validity instant at 6.7.7
+   and the key's use time at step 8.
+3. **Use-time status (step 8).** For a `revoked` or `compromised` snapshot,
+   the named credential's key is used by every envelope verified at step 6
+   whose protected kid equals that credential's `subject_kid` (embedded
+   delegations and nested presentation manifests included), each at its
+   signing time, and by the verifier's own signing credential at the
+   evaluation time (step 20). The snapshot fails (`credential/revoked`,
+   `credential/compromised`) when any use is at or after its instant, and
+   passes when no use is, with the status inputs bound into the verdict. A
+   `revoked` or `compromised` snapshot whose `credential_id` names no carried
+   credential fails closed as if used at the evaluation time. After every
+   snapshot's content passes, a carried snapshot naming no carried credential
+   and a decision reference naming no carried snapshot are each
+   `credential/status-missing`, in that order (D-52). The freshness boundary
+   is half-open: an evaluation time at or after `next_update` is
+   `credential/status-stale`.
+
+**Why.** D-15 already decided that a signature before the compromise time
+may validate even when evaluated later. Both verifiers nonetheless failed
+every `revoked` snapshot unconditionally and judged compromise at the
+evaluation time, so a revoked key made every receipt it ever signed
+unverifiable, the opposite of what evidence retention needs. Doing it at use
+time needs an instant the authority asserts (`compromise_at` existed,
+`revoked_at` did not; a snapshot's `produced_at` moves with each refresh) and
+a signing time for every object, not only receipts (under the old 6.7.7 a
+revoked EP key still failed its manifests and events at step 8). The
+verifier's own key is a use at the evaluation time because step 20 is about
+to sign with it; without that rule a revoked verifier credential went from
+`credential/revoked` to `conformant`. Lifecycle envelopes get the evaluation
+time because their `valid_from`, `not_before`, and `effective_at` express
+effectiveness, not issuance, and a compromised issuer can backdate them. All
+four points come from the Codex challenge of 2026-10-17 (findings 1 to 3 and
+8).
+
+**Consequence for producers.** Revoking or marking an issuer key compromised
+fails every credential, delegation, and rotation record that key signed, in
+any bundle that also carries the snapshot. Re-issue leaf credentials under
+the successor before stapling the snapshot; an export built after the fact
+can carry the re-issued chain and omit the old one. Receipts signed by a
+revoked leaf key before `revoked_at` keep verifying.
+
+**Alternatives considered.** Keep evaluation time and rewrite the rows to
+match the code: erases D-15 and makes history after a revocation
+unverifiable. `produced_at` as the revocation instant: unstable across
+refreshes. `valid_from` / `not_before` / `effective_at` as issuance proxies:
+self-asserted by the party whose key is in question. Exempting unresolved
+subjects as "unused": lets a dangling `credential_id` downgrade
+`credential/revoked` to `credential/status-missing`, the masking D-52
+forbids.

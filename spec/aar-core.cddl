@@ -783,7 +783,8 @@ status-snapshot = {
   lease_not_after: unix-time,
   profile: profile,
   status: "good" / "revoked" / "compromised" / "unknown",
-  ? compromise_at: unix-time,
+  ? revoked_at: unix-time,     ; REQUIRED when status is "revoked" (D-81)
+  ? compromise_at: unix-time,  ; REQUIRED when status is "compromised" (D-81)
   sequence: sequence,
   tenant_id: id16,
   site_id: id16,
@@ -798,6 +799,8 @@ rotation-continuity-envelope = [
   signature: bstr .cbor artifact-cose-sign1,
 ]
 
+; The rotation envelope's protected kid MUST equal the predecessor credential's
+; issuer_kid, and tenant_id/site_id MUST equal both credentials' (D-80).
 rotation-continuity = {
   v: 2,
   rotation_id: digest32,

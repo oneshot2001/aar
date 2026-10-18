@@ -149,7 +149,7 @@ are split per gate finding 6.
 |---|---|---|---|---|
 | T-I1 | Principal minting under compromised/sloppy issuer root | C-trust | **residual** (root compromise) / partial (out-of-tenant detection) | §2.1 tenant binding; tenant-scoped root *acceptance* rules = planned (R-19); KAT: out-of-tenant credential → distinct failure code |
 | T-I2 | Post-compromise signing, backdating into unanchored history | C-key | partial | §2.1 status objects + pre/post-compromise verifier behavior; anchored epochs pin what existed; unanchored asserted-time history = **disclosed** via time class |
-| T-I3 | Rotation-seam confusion / orphaned chains | C-key | partial | §2.1 successor-of continuity; KAT planned |
+| T-I3 | Rotation-seam confusion / orphaned chains | C-key | partial | §2.1 successor-of continuity; D-80 binds the rotation signer to the predecessor's issuer and orders records within tenant/site; KATs `rotation-*`, `repair-d80-rotation-*` |
 | T-I4 | Stapled-status staleness gaming | C-key(EP) | **planned** | v0.1 names the mechanism but defines **no numeric profile maxima** (gate finding 13) — R-20 sets per-profile lease/staleness numbers; until then this cell is not a counter |
 | T-I5 | Path-construction ambiguity, key-usage confusion, algorithm downgrade | C-presign | planned | R-19: path/usage/algorithm rules + trust-store snapshot in bundle |
 | T-I6 | Status-service equivocation; malicious retroactive compromise time | C-trust | **residual** | split from generic "revocation"; independent status witnessing = stronger profile |

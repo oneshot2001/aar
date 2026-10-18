@@ -106,7 +106,11 @@ normative as the step order itself (D-54).
       (`schema/missing-field`), type (`schema/bad-type`) and closed enum
       (`schema/enum-unknown`), then its optional `origin` for type and enum,
       in item order; an item that is not a text-keyed map is left to step 10
-      (D-78).
+      (D-78). For a status snapshot, after `status` validates as a closed
+      enum, a `revoked` snapshot without `revoked_at` or a `compromised`
+      snapshot without `compromise_at` is `schema/missing-field`, and a
+      present `revoked_at` or `compromise_at` that is not a `unix-time` is
+      `schema/bad-type` (D-81).
    7. resolve a P-256 verification key through the accepted credential path
       and check the resolved signer, in this order (D-77):
       1. a carried credential whose `subject_kid` equals the protected kid
@@ -137,9 +141,17 @@ normative as the step order itself (D-54).
          selector's, else `credential/usage-mismatch`;
       7. the signing time lies in the half-open interval
          `[valid_from, valid_until)`, else `credential/not-yet-valid` or
-         `credential/expired`. The signing time is a receipt's
-         `emission.committed_at`, and the evaluation time for every other
-         object.
+         `credential/expired`. The signing time of an object is the time it
+         claims for its own signed act (D-81): a receipt's
+         `emission.committed_at`; an epoch manifest's `closed_at`; an epoch
+         event's `occurred_at`; an anchor record's `accepted_at`; a Merkle
+         batch's `created_at`; a presentation manifest's `delivered_at`; a
+         status snapshot's `produced_at`; a request envelope's
+         `freshness.issued_at`; a mediator countersignature's
+         `mediator_observed_at`. A credential, a delegation, and a rotation
+         record carry no time of their own signing, so their signing time is
+         the evaluation time. The same signing time is the use time of the
+         signer's key for the step-8 revocation and compromise checks.
 
       Status-snapshot content (lease, freshness, revocation) is evaluated at
       step 8; status envelopes pass sub-step 7 like every other envelope;
@@ -190,7 +202,10 @@ normative as the step order itself (D-54).
    disagreement is `countersign/digest-mismatch`.
 8. **Credential lifecycle.** Enforce role-key separation; path construction;
    tenant-scoped roots; and rotation predecessor/successor continuity and monotonic
-   sequence. In path construction, a credential whose `subject_kid` equals a
+   sequence, in this order (D-54): role-key separation; path construction for
+   every credential; root acceptance for every credential; rotation binding for
+   every rotation record in artifact-array order; the rotation ordering pass;
+   then status snapshots. In path construction, a credential whose `subject_kid` equals a
    trust-store `root_kid` MUST have an empty path, else `credential/path-invalid`
    (D-77): only the root's self-signed credential may speak for a root key.
    Root acceptance (D-77) checks every carried credential: its
@@ -200,14 +215,44 @@ normative as the step order itself (D-54).
    the protected kid of at least one envelope verified at step 6 (embedded
    delegations and nested presentation manifests included), its `key_usage`
    MUST also be in the record's `allowed_key_usages`. Either failure is
-   `credential/root-not-accepted`. Then, for EVERY carried status snapshot — whether or not any decision
+   `credential/root-not-accepted`. Rotation binding (D-80) checks every
+   rotation record, in artifact-array order and in this order per record:
+   `predecessor_credential_id` and `successor_credential_id` each resolve to a
+   carried credential whose `subject_kid` equals the record's `predecessor_kid`
+   or `successor_kid`; the record's protected kid equals the predecessor
+   credential's `issuer_kid` (the predecessor's own key when it is
+   self-signed); and the record's `tenant_id` and `site_id` equal both
+   credentials'. Any failure is `credential/rotation-invalid`. The ordering
+   pass then groups records by (`tenant_id`, `site_id`) and sorts each group by
+   (`effective_at`, `continuity_sequence`); within a group, a record whose
+   `continuity_sequence` or `effective_at` is not strictly greater than its
+   predecessor's is `credential/rotation-rollback`. Records in different groups
+   are never compared. A rotation record asserts continuity only: it never
+   makes its successor's root accepted, and a successor root key is accepted
+   through the trust store like any other root.
+   Then, for EVERY carried status snapshot — whether or not any decision
    references it — evaluate its content in this order: lease maxima
-   (`credential/lease-too-long`), status freshness (`credential/status-stale`),
-   revocation (`credential/revoked`), compromise time (`credential/compromised`),
-   unknown status (`credential/status-unknown`), and the lease validity window
-   (`credential/not-yet-valid`, `credential/lease-expired`). Only after every
-   carried snapshot passes are decision `status_snapshot_ids` references resolved;
-   an unresolved reference is `credential/status-missing`. Content defects MUST
+   (`credential/lease-too-long`), status freshness (`credential/status-stale`:
+   the snapshot's age exceeds the profile maximum, or the evaluation time is at
+   or after `next_update`), revocation use (`credential/revoked`), compromise
+   use (`credential/compromised`), unknown status (`credential/status-unknown`),
+   and the lease validity window (`credential/not-yet-valid`,
+   `credential/lease-expired`). Revocation and compromise are judged at use
+   time, never at the evaluation time alone (D-15, D-81): the named
+   credential's key is used by every envelope verified at step 6 whose
+   protected kid equals that credential's `subject_kid` (embedded delegations
+   and nested presentation manifests included), each at its own signing time
+   as 6.7.7 defines it, and by the verifier's own signing credential at the
+   evaluation time (step 20). A `revoked` snapshot fails when any such use is
+   at or after its `revoked_at`; a `compromised` snapshot fails when any such
+   use is at or after its `compromise_at`; a snapshot whose key has no use at
+   or after its instant passes, with the status inputs bound into the verdict.
+   A `revoked` or `compromised` snapshot whose `credential_id` names no carried
+   credential fails closed, as if its key were used at the evaluation time.
+   Only after every carried snapshot passes are references resolved: a carried
+   snapshot whose `credential_id` names no carried credential, then a decision
+   `status_snapshot_ids` entry that names no carried snapshot, are each
+   `credential/status-missing`. Content defects MUST
    fire before reference-resolution failures so a producer cannot mask a revoked
    or compromised stapled snapshot behind a dangling reference (D-52). The
    numeric maxima are: AAR-1/AAR-2 status age and lease 86,400 seconds; AAR-2A/
@@ -286,7 +331,18 @@ normative as the step order itself (D-54).
     that fails to resolve, is `graph/dominator-missing`. The top-level
     `delegations` array exists to resolve `parent_delegations` references. A
     verifier MUST NOT skip delegation evaluation when a reference fails to
-    resolve (D-53). For each dispatch in array order, after that dispatch's
+    resolve (D-53). The embedded delegation's `subject_credential_id` MUST
+    resolve, by find-first over the carried `credentials` array, to a
+    credential whose `subject_kid` equals the protected kid of the action
+    attempt (D-79): a delegation names the enforcement point that attempts
+    under it. No such credential, or a different kid, is `delegation/scope`.
+    The remaining delegation checks run in this order (D-54): subject; then
+    action, target, purpose, profile, tenant, site, and invocation, each
+    `delegation/scope` (the invocation check applies whenever the delegation
+    carries `invocation_id`, and a `one_time` delegation without
+    `invocation_id` fails it); then `not_before` (`delegation/not-yet-valid`);
+    then `not_after` (`delegation/expired`); then `parent_delegations`
+    (`delegation/chain-invalid`). For each dispatch in array order, after that dispatch's
     dominance, embedded-delegation, scope, time and parent-delegation checks
     succeed, apply D-66 before moving to the next dispatch (D-54). On an AAR-3
     profile, the linked `action_attempt` is committed
@@ -414,6 +470,9 @@ normative as the step order itself (D-54).
     signing key resolves from bundle credentials (plus explicit configuration,
     none in v0.2): a bundle carrying no `verifier_signing` credential for the
     verifier's kid yields a signed indeterminate `key/not-found` at this step.
+    Signing the verdict is a use of the verifier's key at the evaluation time:
+    a carried `revoked` or `compromised` snapshot that names the verifier's
+    credential is judged against that use at step 8 (D-81).
 
 ### 2.1 Edge legality and roots
 
@@ -559,15 +618,15 @@ one input has several defects, section 2 selects the first verifier code.
 | `credential/usage-mismatch` | Credential key usage does not authorize the signed object/role, including an epoch event, epoch manifest, or Merkle batch not signed by its `epoch_owner_kid` with `ep_signing`, or a Merkle batch whose `signer_kid` differs from `epoch_owner_kid`, or an envelope whose protected kid differs from the signer its payload declares, or a signing credential whose tenant/site differs from the selector's (D-77). |
 | `credential/not-yet-valid` | Signing time (step 6.7) precedes credential `valid_from`, or use precedes the status lease window (step 8). |
 | `credential/expired` | Signing time (step 6.7) is at or after credential `valid_until`. |
-| `credential/status-missing` | A required stapled snapshot for the decision/key is absent. |
-| `credential/status-stale` | Snapshot age exceeds 86,400 seconds for AAR-1/2 or 300 seconds for AAR-2A/3. |
-| `credential/revoked` | Signing/use is at or after an effective revocation. |
-| `credential/compromised` | Signing/use is at or after declared compromise time. |
+| `credential/status-missing` | A required stapled snapshot for the decision/key is absent, or a carried snapshot names a credential the bundle does not carry; both checked only after every snapshot's content (D-52, D-81). |
+| `credential/status-stale` | Snapshot age exceeds 86,400 seconds for AAR-1/2 or 300 seconds for AAR-2A/3, or the evaluation time is at or after `next_update`. |
+| `credential/revoked` | A use of the named credential's key (a step-6 envelope at its signing time, or the verifier's own key at the evaluation time) is at or after the snapshot's `revoked_at`; or a `revoked` snapshot names no carried credential (D-81). |
+| `credential/compromised` | A use of the named credential's key (a step-6 envelope at its signing time, or the verifier's own key at the evaluation time) is at or after the snapshot's `compromise_at`; or a `compromised` snapshot names no carried credential (D-81). |
 | `credential/status-unknown` | A required status snapshot says `unknown`. |
 | `credential/lease-too-long` | Issued lease exceeds 86,400 seconds for AAR-1/2 or 3,600 seconds for AAR-2A/3. |
 | `credential/lease-expired` | Evaluation/use occurs after the lease expiry. |
-| `credential/rotation-invalid` | Successor/predecessor ids or kids do not cross-bind. |
-| `credential/rotation-rollback` | Rotation continuity sequence or effective time is non-monotonic. |
+| `credential/rotation-invalid` | Successor/predecessor ids or kids do not cross-bind, the record is not signed by the predecessor credential's issuer, or the record's tenant/site differs from either credential's (D-80). |
+| `credential/rotation-rollback` | Within one tenant and site, rotation continuity sequence or effective time is non-monotonic (D-80). |
 | `credential/role-key-reuse` | Agent, EP, or Authority Source resolve to the same signing kid. |
 | `replay/not-yet-valid` | Receipt freshness `issued_at` is after its committed time/evaluation window. |
 | `replay/expired` | Receipt committed/evaluated at or after `expires_at`. |
@@ -576,7 +635,7 @@ one input has several defects, section 2 selects the first verifier code.
 | `replay/one-time-reused` | A one-time replay-domain/invocation coordinate was previously used for different content. |
 | `delegation/not-yet-valid` | Attempt precedes delegation `not_before`. |
 | `delegation/expired` | Attempt is at or after delegation `not_after`. |
-| `delegation/scope` | Action, target, purpose, tenant, site, profile, or invocation is outside delegation scope. |
+| `delegation/scope` | The delegation's subject is not the enforcement point that signed the attempt (D-79), or action, target, purpose, tenant, site, profile, or invocation is outside delegation scope. |
 | `delegation/chain-invalid` | Parent delegation is missing, cyclic, expired, or grants less authority than its child. |
 | `graph/dangling-parent` | A parent id cannot be resolved in the bundle when closure is required. |
 | `graph/parent-metadata-mismatch` | Parent kind/tenant/site/epoch metadata differs from the resolved parent. |
