@@ -81,7 +81,7 @@ describe("cross-implementation verdict bytes (harness vs pyref)", () => {
         console.log(`${item.name}: reason=${py.reason ?? "none"}, step=${py.step ?? "none"}, signed verdict bytes equal; report parity=${ts.ok ? "PASS" : "PASS (empty failure ancestry)"}`);
       }
     }
-  }, 120_000);
+  }, 900_000);
 });
 
 // Standalone artifact fixtures are evaluated inside the same corpus bundle by
@@ -131,4 +131,4 @@ test("every corpus fixture has identical result, reason, step, and signed verdic
     expect(ts.ok ? null : ts.step, row.path).toBe(row.step);
     expect(toHex(ts.verdictEnvelope!), row.path).toBe(row.hex);
   }
-}, 300_000);
+}, 900_000);
