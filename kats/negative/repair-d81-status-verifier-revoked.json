@@ -1,0 +1,7 @@
+{
+  "name": "repair-d81-status-verifier-revoked",
+  "expected_code": "credential/revoked",
+  "mutation_description": "A revoked snapshot names the verifier_signing credential, effective at evaluation time: signing the verdict is a use.",
+  "expected_result": "nonconformant",
+  "expected_step": 8
+}

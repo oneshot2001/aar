@@ -1,0 +1,7 @@
+{
+  "name": "repair-d81-request-issued-at-missing",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "Remove freshness.issued_at from the agent request, re-sign it, and repair the root commitment.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,7 @@
+{
+  "name": "repair-d81-status-stale-before-revoked",
+  "expected_code": "credential/status-stale",
+  "mutation_description": "Stale AND revoked before the EP key's earliest use; freshness fires first.",
+  "expected_result": "nonconformant",
+  "expected_step": 8
+}

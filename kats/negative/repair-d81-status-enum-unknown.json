@@ -1,0 +1,7 @@
+{
+  "name": "repair-d81-status-enum-unknown",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "A refreshed snapshot carries status good2.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

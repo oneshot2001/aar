@@ -1,0 +1,7 @@
+{
+  "name": "repair-d79-delegation-subject-before-expiry",
+  "expected_code": "delegation/scope",
+  "mutation_description": "Wrong subject AND not_after before the attempt's committed_at; the subject check precedes the window.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

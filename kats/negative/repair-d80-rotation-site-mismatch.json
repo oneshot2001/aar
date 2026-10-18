@@ -1,0 +1,7 @@
+{
+  "name": "repair-d80-rotation-site-mismatch",
+  "expected_code": "credential/rotation-invalid",
+  "mutation_description": "Move the rotation record to a foreign site_id, recompute its ID, and re-sign it with the issuing root; both credentials stay on the original site.",
+  "expected_result": "nonconformant",
+  "expected_step": 8
+}

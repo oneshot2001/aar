@@ -1,0 +1,8 @@
+{
+  "name": "d80-root-rotation",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "The root rotates to a self-signed successor root carried in the trust store; the record is signed by the predecessor root."
+}

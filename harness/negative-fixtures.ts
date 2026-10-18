@@ -636,10 +636,10 @@ function addSecondEpoch(bundle: Obj, epochId: number, predecessorDigest: Uint8Ar
 
 // D-77 fixtures use genuine signatures and valid content IDs unless step 6
 // deliberately fires before content validation.
-function d77Credential(bundle: Obj, key: TestKeyName, usage: string, issuer: TestKeyName, path: CborValue[], signer: TestKeyName): Obj {
+function d77Credential(bundle: Obj, key: TestKeyName, usage: string, issuer: TestKeyName, path: CborValue[], signer: TestKeyName, extra: Obj = {}): Obj {
   const template = (artifacts(bundle).credentials as CborValue[]).map(payload).find((p) => p.key_usage === usage)!;
   const claims: Obj = { ...clone(template), subject_kid: TEST_KEYS[key].kid, public_key: TEST_KEYS[key].spki,
-    issuer_kid: TEST_KEYS[issuer].kid, path };
+    issuer_kid: TEST_KEYS[issuer].kid, path, ...extra };
   claims.credential_id = domainHash("AAR-CREDENTIAL-ID-v1", withoutField(claims, "credential_id"));
   (artifacts(bundle).credentials as CborValue[]).push(signDetached(claims, "application/aar-credential+cbor;v=0.2", signer).envelope);
   sortArtifacts(bundle, "credentials");
@@ -666,6 +666,76 @@ function d77OmitUsage(bundle: Obj, usage: string): void {
   const root = (((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[])[0]!;
   root.allowed_key_usages = (root.allowed_key_usages as CborValue[]).filter((value) => value !== usage);
   recalcTrust(bundle);
+}
+
+function credentialId(bundle: Obj, key: TestKeyName): Uint8Array {
+  return (artifacts(bundle).credentials as CborValue[]).map(payload).find((p) => same(p.subject_kid, TEST_KEYS[key].kid))!.credential_id as Uint8Array;
+}
+
+// D-81 (6.7.7): the time each object claims for its own signed act; lifecycle
+// envelopes take the evaluation time. Every use of `kid` across the bundle.
+const SIGNING_TIME_FIELD: Record<string, string> = {
+  "application/aar-epoch-manifest+cbor;v=0.2": "closed_at", "application/aar-epoch-event+cbor;v=0.2": "occurred_at",
+  "application/aar-anchor-record+cbor;v=0.2": "accepted_at", "application/aar-merkle-batch+cbor;v=0.2": "created_at",
+  "application/aar-presentation+cbor;v=0.2": "delivered_at", "application/aar-status+cbor;v=0.2": "produced_at",
+  "application/aar-mediator-countersignature+cbor;v=0.2": "mediator_observed_at",
+};
+function useTimes(bundle: Obj, kid: Uint8Array): number[] {
+  const evaluation = (bundle.trust_inputs as Obj).evaluation_time as number;
+  const times: number[] = [];
+  const visit = (envelope: CborValue): void => {
+    if (!same(protectedMap(envelope).get(4), kid)) return;
+    const type = contentType(envelope); const p = payload(envelope);
+    times.push(type === "application/aar-receipt+cbor;v=0.2" ? (p.emission as Obj).committed_at as number
+      : type === "application/aar-request+cbor;v=0.2" ? (p.freshness as Obj).issued_at as number
+      : SIGNING_TIME_FIELD[type] === undefined ? evaluation : p[SIGNING_TIME_FIELD[type]!] as number);
+  };
+  for (const field of ["credentials", "rotations", "status_snapshots", "requests", "delegations", "epoch_events", "epoch_manifests", "anchors", "merkle_batches", "mediator_countersignatures", "receipts"]) {
+    for (const envelope of (artifacts(bundle)[field] ?? []) as CborValue[]) {
+      visit(envelope);
+      if (field === "receipts") for (const nested of ["delegation", "presentation"]) { const value = (payload(envelope).body as Obj)[nested]; if (value !== undefined) visit(value); }
+    }
+  }
+  return times;
+}
+
+// D-81: the instant precedes the earliest use of the named EP key, so every use is at or after it.
+function revokedBeforeUse(status: Obj, bundle: Obj): void { status.status = "revoked"; status.revoked_at = Math.min(...useTimes(bundle, TEST_KEYS.ep_signing.kid)); }
+function compromisedBeforeUse(status: Obj, bundle: Obj): void { status.status = "compromised"; status.compromise_at = Math.min(...useTimes(bundle, TEST_KEYS.ep_signing.kid)); }
+
+// A second (refreshed) snapshot cloned from the stapled one, so decision references stay intact.
+function addStatusSnapshot(bundle: Obj, mutation: (status: Obj, evaluation: number) => void): void {
+  const list = artifacts(bundle).status_snapshots as CborValue[];
+  const next = clone(payload(list[0]!));
+  next.sequence = (next.sequence as number) + 1;
+  mutation(next, (bundle.trust_inputs as Obj).evaluation_time as number);
+  next.snapshot_id = domainHash("AAR-STATUS-ID-v1", withoutField(next, "snapshot_id"));
+  list.push(resign(list[0]!, next));
+  sortArtifacts(bundle, "status_snapshots");
+}
+
+function addRotation(bundle: Obj, mutation: (rotation: Obj) => void): void {
+  const list = artifacts(bundle).rotations as CborValue[];
+  const next = clone(payload(list[0]!));
+  mutation(next);
+  next.rotation_id = domainHash("AAR-ROTATION-ID-v1", withoutField(next, "rotation_id"));
+  list.push(resign(list[0]!, next));
+  sortArtifacts(bundle, "rotations");
+}
+
+// D-80: the root rotates to a self-signed successor root; the record is signed by the predecessor root.
+function d80RootRotation(bundle: Obj, successorInStore: boolean): void {
+  const root = d77Root(bundle);
+  const successor = d77Credential(bundle, "d77_outsider", "credential_issuing", "d77_outsider", [], "d77_outsider");
+  if (successorInStore) {
+    const roots = ((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[];
+    roots.push({ ...clone(roots[0]!), root_id: deterministicId("trust-root:d80-successor"), root_kid: TEST_KEYS.d77_outsider.kid });
+    recalcTrust(bundle);
+  }
+  addRotation(bundle, (r) => {
+    Object.assign(r, { predecessor_credential_id: root.credential_id!, successor_credential_id: successor.credential_id!, predecessor_kid: root.subject_kid!, successor_kid: successor.subject_kid!,
+      effective_at: (r.effective_at as number) + 100, continuity_sequence: 2 });
+  });
 }
 
 export function buildPresentationEnumVariants() {
@@ -984,6 +1054,39 @@ export function buildD77PositiveFixtures() {
     mutation_description: "An EP-session presentation is signed by the enclosing authorization receipt's EP key; presenter and decision name the same approver." } }];
 }
 
+// D-80 / D-81 positives: conformant bundles that pin the use-time and namespace rules.
+export function buildD80D81PositiveFixtures() {
+  const make = (filename: string, description: string, mutate: (bundle: Obj) => void) => {
+    const bundle = baseBundle(); mutate(bundle);
+    return { filename, bytes: encodeCbor(bundle), descriptor: { name: filename, object_type: "bundle" as const,
+      expectation: "conformant" as const, expected_result: "conformant" as const, expected_code: null, mutation_description: description } };
+  };
+  const afterLastUse = (field: "revoked_at" | "compromise_at") => (bundle: Obj): void => addStatusSnapshot(bundle, (s, evaluation) => {
+    s.status = field === "revoked_at" ? "revoked" : "compromised";
+    s[field] = Math.max(...useTimes(bundle, TEST_KEYS.ep_signing.kid)) + 1;
+    if ((s[field] as number) >= evaluation) throw new Error("EP key use reaches the evaluation time");
+  });
+  return [
+    make("d80-rotation-two-sites-same-seq", "A second allowed site rotates its own agent credentials under the same root with the same continuity_sequence; groups are never compared.", (bundle) => {
+      const site = id16("site:d80-second-site");
+      const root = (((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[])[0]!;
+      root.allowed_sites = [...(root.allowed_sites as CborValue[]), site].sort(compare); recalcTrust(bundle);
+      const rootId = d77Root(bundle).credential_id!;
+      const predecessor = d77Credential(bundle, "d77_outsider", "agent_signing", "credential_issuing", [rootId], "credential_issuing", { site_id: site });
+      const successor = d77Credential(bundle, "d77_leaf", "agent_signing", "credential_issuing", [rootId], "credential_issuing", { site_id: site });
+      addRotation(bundle, (r) => { Object.assign(r, { predecessor_credential_id: predecessor.credential_id!, successor_credential_id: successor.credential_id!, predecessor_kid: predecessor.subject_kid!, successor_kid: successor.subject_kid!, site_id: site }); });
+    }),
+    make("d80-root-rotation", "The root rotates to a self-signed successor root carried in the trust store; the record is signed by the predecessor root.", (bundle) => d80RootRotation(bundle, true)),
+    make("d81-status-revoked-after-last-use", "A refreshed snapshot revokes the EP credential one second after its last use and before evaluation.", afterLastUse("revoked_at")),
+    make("d81-status-compromised-after-last-use", "A refreshed snapshot marks the EP credential compromised one second after its last use and before evaluation.", afterLastUse("compromise_at")),
+    make("d81-status-revoked-key-unused", "A refreshed snapshot revokes the agent_signing_successor credential, whose key signs nothing in the bundle.", (bundle) => addStatusSnapshot(bundle, (s) => { s.status = "revoked"; s.revoked_at = s.produced_at!; s.credential_id = credentialId(bundle, "agent_signing_successor"); })),
+    make("d81-anchor-credential-expired-after-use", "The anchor_signing credential expires one second after its anchor record's accepted_at and before evaluation.", (bundle) => {
+      const anchor = payload((artifacts(bundle).anchors as CborValue[])[0]!);
+      mutateArtifact(bundle, "credentials", (p) => same(p.subject_kid, TEST_KEYS.anchor_signing.kid), (p) => { p.valid_until = (anchor.accepted_at as number) + 1; });
+    }),
+  ];
+}
+
 export function buildNegativeFixtures(): NegativeFixture[] {
   const result: NegativeFixture[] = [];
   const add = (value: NegativeFixture): void => { result.push(value); };
@@ -1169,8 +1272,9 @@ export function buildNegativeFixtures(): NegativeFixture[] {
       const receipt = (artifacts(bundle).receipts as CborValue[]).map(payload).find((p) => p.kind === "outcome_observation")!;
       mutateArtifact(bundle, "credentials", (p) => same(p.subject_kid, TEST_KEYS.outcome_signing.kid), (p) => { p.valid_until = (receipt.emission as Obj).committed_at!; });
     }],
-    ["nonreceipt-signer-valid-until-boundary", "credential/expired", 6, "Set status_signing valid_until to evaluation time; its status snapshot is a non-receipt.", (bundle) => {
-      mutateArtifact(bundle, "credentials", (p) => p.key_usage === "status_signing", (p) => { p.valid_until = (bundle.trust_inputs as Obj).evaluation_time!; });
+    ["nonreceipt-signer-valid-until-boundary", "credential/expired", 6, "Set the anchor_signing credential valid_until to its anchor record's accepted_at; a non-receipt signs at the time it claims (D-81).", (bundle) => {
+      const anchor = payload((artifacts(bundle).anchors as CborValue[])[0]!);
+      mutateArtifact(bundle, "credentials", (p) => same(p.subject_kid, TEST_KEYS.anchor_signing.kid), (p) => { p.valid_until = anchor.accepted_at!; });
     }],
     ["order-tenant-before-validity", "credential/usage-mismatch", 6, "Give the status signer both a foreign site and expired validity; scope must fail first.", (bundle) => {
       mutateArtifact(bundle, "credentials", (p) => p.key_usage === "status_signing", (p) => { p.site_id = id16("d77-foreign-site"); p.valid_until = ((bundle.trust_inputs as Obj).evaluation_time as number) - 1; });
@@ -1187,6 +1291,64 @@ export function buildNegativeFixtures(): NegativeFixture[] {
     const name = `repair-d77-${suffix}`;
     add({ ...item, filename: name, descriptor: { ...item.descriptor, name,
       expected_result: code === "key/not-found" ? "indeterminate" : "nonconformant", expected_step: step } });
+  }
+
+  // D-79 / D-80 / D-81 repairs: genuine signatures and valid content IDs unless step 6 fires on the mutation itself.
+  const delegationRepair = (mutation: (delegation: Obj, bundle: Obj) => void) => (bundle: Obj): void => mutateEmbeddedDelegation(bundle, (d) => mutation(d, bundle));
+  const statusRepair = (mutation: (status: Obj, evaluation: number, bundle: Obj) => void) => (bundle: Obj): void => addStatusSnapshot(bundle, (s, evaluation) => mutation(s, evaluation, bundle));
+  const d79to81Repairs: [string, string, number, string, (bundle: Obj) => void][] = [
+    ["repair-d79-delegation-subject-mismatch", "delegation/scope", 13, "Point the embedded delegation subject_credential_id at the agent_signing credential; the attempt is EP-signed.", delegationRepair((d, b) => { d.subject_credential_id = credentialId(b, "agent_signing"); })],
+    ["repair-d79-delegation-subject-unresolved", "delegation/scope", 13, "Point the embedded delegation subject_credential_id at an id no carried credential has.", delegationRepair((d) => { d.subject_credential_id = deterministicId("d79-missing-subject-credential"); })],
+    ["repair-d79-delegation-subject-before-expiry", "delegation/scope", 13, "Wrong subject AND not_after before the attempt's committed_at; the subject check precedes the window.", delegationRepair((d, b) => { d.subject_credential_id = credentialId(b, "agent_signing"); d.not_after = 1; })],
+    ["repair-d79-delegation-scope-before-window", "delegation/scope", 13, "Action out of scope AND not_after before the attempt's committed_at; scope precedes the window.", delegationRepair((d) => { (d.scope as Obj).actions = ["camera.ptz.preset"]; d.not_after = 1; })],
+    ["repair-d79-delegation-one-time-no-invocation", "delegation/scope", 13, "A one_time delegation without invocation_id fails the invocation check.", delegationRepair((d) => { d.use = "one_time"; delete d.invocation_id; })],
+    ["repair-d79-delegation-invocation-mismatch-reusable", "delegation/scope", 13, "A reusable delegation carrying a different invocation_id; the check applies whenever the field is present.", delegationRepair((d) => { d.invocation_id = id16("d79-other-invocation"); })],
+    ["repair-d80-rotation-signer-not-predecessor-issuer", "credential/rotation-invalid", 8, "A carried intermediate credential_issuing credential (d77_leaf under the root) re-signs the unchanged rotation; it did not issue the predecessor.", (bundle) => {
+      d77Credential(bundle, "d77_leaf", "credential_issuing", "credential_issuing", [d77Root(bundle).credential_id!], "credential_issuing");
+      const list = artifacts(bundle).rotations as CborValue[];
+      list[0] = signDetached(payload(list[0]!), contentType(list[0]!), "d77_leaf").envelope;
+    }],
+    ["repair-d80-rotation-site-mismatch", "credential/rotation-invalid", 8, "Move the rotation record to a foreign site_id, recompute its ID, and re-sign it with the issuing root; both credentials stay on the original site.", (bundle) => {
+      mutateArtifact(bundle, "rotations", () => true, (r) => { r.site_id = id16("d80-foreign-site"); });
+    }],
+    ["repair-d80-rotation-binding-before-rollback", "credential/rotation-invalid", 8, "Three rotations: records 0 and 2 reuse continuity_sequence 1 with increasing effective_at (a rollback); record 1 names a wrong predecessor_kid. Every record binds before ordering.", (bundle) => {
+      const list = artifacts(bundle).rotations as CborValue[]; const original = list[0]!; const base = payload(original);
+      const bad = clone(base); bad.predecessor_kid = deterministicId("d80-wrong-predecessor-kid"); bad.rotation_id = domainHash("AAR-ROTATION-ID-v1", withoutField(bad, "rotation_id"));
+      for (let offset = 1; offset < 1024; offset += 1) {
+        const late = clone(base); late.effective_at = (base.effective_at as number) + offset; late.rotation_id = domainHash("AAR-ROTATION-ID-v1", withoutField(late, "rotation_id"));
+        const ids = [base.rotation_id!, bad.rotation_id!, late.rotation_id!].sort(compare);
+        if (!same(ids[1], bad.rotation_id)) continue;
+        list.push(resign(original, bad), resign(original, late)); sortArtifacts(bundle, "rotations"); return;
+      }
+      throw new Error("could not order D-80 rotation fixtures");
+    }],
+    ["repair-d80-root-rotation-successor-not-in-store", "credential/root-not-accepted", 8, "The root rotates to a self-signed successor root that the trust store does not carry; a rotation never makes its successor accepted.", (bundle) => d80RootRotation(bundle, false)],
+    ["repair-d81-status-revoked-missing-revoked-at", "schema/missing-field", 6, "A refreshed snapshot says revoked without revoked_at.", statusRepair((s) => { s.status = "revoked"; })],
+    ["repair-d81-status-compromised-missing-compromise-at", "schema/missing-field", 6, "A refreshed snapshot says compromised without compromise_at.", statusRepair((s) => { s.status = "compromised"; })],
+    ["repair-d81-status-revoked-at-bad-type", "schema/bad-type", 6, "A refreshed revoked snapshot carries a text revoked_at.", statusRepair((s) => { s.status = "revoked"; s.revoked_at = "soon"; })],
+    ["repair-d81-status-enum-unknown", "schema/enum-unknown", 6, "A refreshed snapshot carries status good2.", statusRepair((s) => { s.status = "good2"; })],
+    ["repair-d81-status-revoked-unresolved-credential", "credential/revoked", 8, "A revoked snapshot naming no carried credential fails closed as if used at the evaluation time.", statusRepair((s) => { s.status = "revoked"; s.revoked_at = s.produced_at!; s.credential_id = deterministicId("d81-missing-credential"); })],
+    ["repair-d81-status-good-unresolved-credential", "credential/status-missing", 8, "A good snapshot naming no carried credential; content passes, then the reference fails.", statusRepair((s) => { s.credential_id = deterministicId("d81-missing-credential"); })],
+    ["repair-d81-status-verifier-revoked", "credential/revoked", 8, "A revoked snapshot names the verifier_signing credential, effective at evaluation time: signing the verdict is a use.", statusRepair((s, evaluation, b) => { s.status = "revoked"; s.revoked_at = evaluation; s.credential_id = credentialId(b, "verifier_signing"); })],
+    ["repair-d81-status-profile-enum-unknown", "schema/enum-unknown", 6, "A refreshed snapshot carries profile AAR-9 with a 5000 s lease; the closed profile enum fails before any lease arithmetic.", statusRepair((s) => { s.profile = "AAR-9"; s.lease_not_after = (s.lease_not_before as number) + 5000; })],
+    ["repair-d81-status-stale-next-update-boundary", "credential/status-stale", 8, "A refreshed snapshot whose next_update equals the evaluation time (half-open).", statusRepair((s, evaluation) => { s.next_update = evaluation; })],
+    ["repair-d81-status-stale-before-revoked", "credential/status-stale", 8, "Stale AND revoked before the EP key's earliest use; freshness fires first.", statusRepair((s, evaluation, b) => { s.next_update = evaluation; s.status = "revoked"; s.revoked_at = Math.min(...useTimes(b, TEST_KEYS.ep_signing.kid)); })],
+    // Round 2: malformed time/sequence fields fail at step 6 before any arithmetic; the two lifecycle twins put the re-mutated originals under the byte gate.
+    ["repair-d81-status-next-update-bad-type", "schema/bad-type", 6, "A refreshed snapshot carries a text next_update.", statusRepair((s) => { s.next_update = "future"; })],
+    ["repair-d81-status-bad-type", "schema/bad-type", 6, "A refreshed snapshot carries status false; the type gate precedes the enum.", statusRepair((s) => { s.status = false; })],
+    ["repair-d80-rotation-effective-at-bad-type", "schema/bad-type", 6, "A second rotation carries a text effective_at.", (bundle) => addRotation(bundle, (r) => { r.effective_at = "later"; })],
+    ["repair-d81-anchor-accepted-at-missing", "schema/missing-field", 6, "Remove accepted_at from the anchor record and re-sign it.", (bundle) => mutateArtifact(bundle, "anchors", () => true, (a) => { delete a.accepted_at; })],
+    ["repair-d81-request-issued-at-missing", "schema/missing-field", 6, "Remove freshness.issued_at from the agent request, re-sign it, and repair the root commitment.", (bundle) => divergeRequest(bundle, (claims) => { delete (claims.freshness as Obj).issued_at; })],
+    ["repair-d81-status-revoked-before-use", "credential/revoked", 8, "Twin of credential-revoked: the stapled snapshot is revoked effective at the EP key's earliest signing time.", (bundle) => mutateArtifact(bundle, "status_snapshots", () => true, (s) => revokedBeforeUse(s, bundle))],
+    ["repair-d81-status-compromised-before-use", "credential/compromised", 8, "Twin of credential-compromised: the stapled snapshot is compromised effective at the EP key's earliest signing time.", (bundle) => mutateArtifact(bundle, "status_snapshots", () => true, (s) => compromisedBeforeUse(s, bundle))],
+    ["repair-d81-anchor-credential-not-yet-valid-at-use", "credential/not-yet-valid", 6, "The anchor_signing credential becomes valid one second after its anchor record's accepted_at, still before evaluation.", (bundle) => {
+      const anchor = payload((artifacts(bundle).anchors as CborValue[])[0]!);
+      mutateArtifact(bundle, "credentials", (p) => same(p.subject_kid, TEST_KEYS.anchor_signing.kid), (p) => { p.valid_from = (anchor.accepted_at as number) + 1; });
+    }],
+  ];
+  for (const [name, code, step, description, mutate] of d79to81Repairs) {
+    const item = bundleFixture(code, description, mutate);
+    add({ ...item, filename: name, descriptor: { ...item.descriptor, name, expected_result: "nonconformant", expected_step: step } });
   }
 
   add(fixture("resource/bundle-too-large", "Append bytes until the exact input exceeds the fixed bundle limit.", concat(validBytes, new Uint8Array(16_777_217 - validBytes.length))));
@@ -1323,10 +1485,10 @@ export function buildNegativeFixtures(): NegativeFixture[] {
   add(bundleFixture("credential/not-yet-valid", "Move the trust-root credential valid_from beyond evaluation.", (bundle) => { const evaluation = (bundle.trust_inputs as Obj).evaluation_time as number; mutateArtifact(bundle, "credentials", (value) => value.key_usage === "credential_issuing", (value) => { value.valid_from = evaluation + 1; }, false); }));
   add(bundleFixture("credential/expired", "Move the trust-root credential valid_until before evaluation.", (bundle) => mutateArtifact(bundle, "credentials", (value) => value.key_usage === "credential_issuing", (value) => { value.valid_until = 1; }, false)));
   add(bundleFixture("credential/status-missing", "Remove the only stapled status snapshot referenced by authorization decisions.", (bundle) => { artifacts(bundle).status_snapshots = []; }));
-  const statusFixture = (code: string, description: string, mutation: (status: Obj, evaluation: number) => void): void => add(bundleFixture(code, description, (bundle) => { const evaluation = (bundle.trust_inputs as Obj).evaluation_time as number; mutateArtifact(bundle, "status_snapshots", () => true, (value) => mutation(value, evaluation)); }));
+  const statusFixture = (code: string, description: string, mutation: (status: Obj, evaluation: number, bundle: Obj) => void): void => add(bundleFixture(code, description, (bundle) => { const evaluation = (bundle.trust_inputs as Obj).evaluation_time as number; mutateArtifact(bundle, "status_snapshots", () => true, (value) => mutation(value, evaluation, bundle)); }));
   statusFixture("credential/status-stale", "Move status production before the AAR-2A maximum age.", (value, evaluation) => { value.produced_at = evaluation - 301; });
-  statusFixture("credential/revoked", "Change stapled status from good to revoked.", (value) => { value.status = "revoked"; });
-  statusFixture("credential/compromised", "Declare compromise effective before evaluation.", (value, evaluation) => { value.status = "compromised"; value.compromise_at = evaluation - 1; });
+  statusFixture("credential/revoked", "Change stapled status from good to revoked, effective at the EP key's earliest signing time.", (value, _evaluation, bundle) => revokedBeforeUse(value, bundle));
+  statusFixture("credential/compromised", "Declare compromise effective at the EP key's earliest signing time.", (value, _evaluation, bundle) => compromisedBeforeUse(value, bundle));
   statusFixture("credential/status-unknown", "Change stapled status from good to unknown.", (value) => { value.status = "unknown"; });
   statusFixture("credential/lease-too-long", "Extend an AAR-2A lease beyond 3,600 seconds.", (value) => { value.lease_not_after = (value.lease_not_before as number) + 3_601; });
   statusFixture("credential/lease-expired", "End an otherwise fresh lease before evaluation.", (value, evaluation) => { value.lease_not_after = evaluation; value.next_update = evaluation + 100; value.produced_at = evaluation - 1; });

@@ -1,0 +1,7 @@
+{
+  "name": "repair-d79-delegation-invocation-mismatch-reusable",
+  "expected_code": "delegation/scope",
+  "mutation_description": "A reusable delegation carrying a different invocation_id; the check applies whenever the field is present.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

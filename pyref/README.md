@@ -161,9 +161,9 @@ public test key is not an operational verifier identity and its signature must
 not be treated as third-party assurance or used as a deployment credential.
 
 The implementation-defined verifier identity preimages are stable constants:
-`pyref-aar-v0.2.3-d78-input-origin-build-v1` for `build_digest` and
+`pyref-aar-v0.2.4-d79-d81-bindings-build-v1` for `build_digest` and
 `pyref-aar-v0.2-gate4-c2-fixed-conformance-config-v1` for `config_digest`.
 
-Both verifiers report version `v0.2.3`. The harness build digest is SHA-256 of
-UTF-8 `harness-aar-v0.2.3-d78-input-origin-build-v1`; its config digest keeps
+Both verifiers report version `v0.2.4`. The harness build digest is SHA-256 of
+UTF-8 `harness-aar-v0.2.4-d79-d81-bindings-build-v1`; its config digest keeps
 the preimage `AAR-KAT-OPAQUE-ID:verifier-config:aar-reference-verifier@0.2.0-default`.

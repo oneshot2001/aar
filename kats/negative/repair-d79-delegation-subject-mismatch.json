@@ -1,0 +1,7 @@
+{
+  "name": "repair-d79-delegation-subject-mismatch",
+  "expected_code": "delegation/scope",
+  "mutation_description": "Point the embedded delegation subject_credential_id at the agent_signing credential; the attempt is EP-signed.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

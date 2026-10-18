@@ -514,8 +514,27 @@ const REQUIRED_PAYLOAD_FIELDS: Record<ArtifactKind, readonly string[]> = {
 };
 
 const OPTIONAL_PAYLOAD_FIELDS: Partial<Record<ArtifactKind, readonly string[]>> = {
-  status: ["compromise_at"], delegation: ["invocation_id"], epoch_event: ["previous_event_digest"], epoch_manifest: ["predecessor_manifest_digest"], anchor: ["consistency"], receipt: ["root", "correlation"],
+  status: ["revoked_at", "compromise_at"], delegation: ["invocation_id"], epoch_event: ["previous_event_digest"], epoch_manifest: ["predecessor_manifest_digest"], anchor: ["consistency"], receipt: ["root", "correlation"],
 };
+
+const STATUS_INSTANTS: Record<string, string> = { revoked: "revoked_at", compromised: "compromise_at" };
+const UINT_FIELDS: Partial<Record<ArtifactKind, readonly string[]>> = {
+  rotation: ["effective_at", "continuity_sequence"], epoch_manifest: ["opened_at", "closed_at"], epoch_event: ["occurred_at"],
+  anchor: ["submitted_at", "accepted_at"], merkle_batch: ["created_at"], presentation: ["delivered_at"], mediator_countersignature: ["mediator_observed_at"],
+};
+// D-81 (6.7.7): the time an object claims for its own signed act. Credentials,
+// delegations, and rotations carry none and take the evaluation time.
+const SIGNING_TIME_FIELDS: Partial<Record<ArtifactKind, string>> = {
+  epoch_manifest: "closed_at", epoch_event: "occurred_at", anchor: "accepted_at", merkle_batch: "created_at",
+  presentation: "delivered_at", status: "produced_at", mediator_countersignature: "mediator_observed_at",
+};
+
+function signingTime(entry: ParsedEnvelope, evaluationTime: number): CborValue | undefined {
+  if (entry.kind === "receipt") return (entry.payload.emission as Obj).committed_at;
+  if (entry.kind === "request") return object(entry.payload.freshness) ? entry.payload.freshness.issued_at : undefined;
+  const field = SIGNING_TIME_FIELDS[entry.kind];
+  return field === undefined ? evaluationTime : entry.payload[field];
+}
 
 function parseEnvelope(entry: CborValue, kind: ArtifactKind, path: string): ParsedEnvelope | B1Failure {
   if (!Array.isArray(entry) || entry.length !== 2 || !(entry[0] instanceof Uint8Array) || !(entry[1] instanceof Uint8Array)) return failure(6, "schema/bad-type", path);
@@ -583,6 +602,30 @@ function parseEnvelope(entry: CborValue, kind: ArtifactKind, path: string): Pars
     if (typeof payloadValue.state !== "string") return failure(6, "schema/bad-type", `${path}.payload.state`);
     if (!["assembled", "delivered", "rendered", "human_approved"].includes(payloadValue.state)) return failure(6, "schema/enum-unknown", `${path}.payload.state`);
   }
+  if (kind === "status") {
+    // D-81, in CDDL field order: the four times, then the closed status
+    // enum (type first), the instant the status requires, then sequence.
+    for (const field of ["produced_at", "next_update", "lease_not_before", "lease_not_after"]) if (!uint(payloadValue[field])) return failure(6, "schema/bad-type", `${path}.payload.${field}`);
+    if (typeof payloadValue.profile !== "string") return failure(6, "schema/bad-type", `${path}.payload.profile`);
+    if (!["AAR-1", "AAR-2", "AAR-2A", "AAR-3"].includes(payloadValue.profile)) return failure(6, "schema/enum-unknown", `${path}.payload.profile`);
+    if (typeof payloadValue.status !== "string") return failure(6, "schema/bad-type", `${path}.payload.status`);
+    if (!["good", "revoked", "compromised", "unknown"].includes(payloadValue.status)) return failure(6, "schema/enum-unknown", `${path}.payload.status`);
+    const instant = STATUS_INSTANTS[payloadValue.status];
+    if (instant !== undefined && !(instant in payloadValue)) return failure(6, "schema/missing-field", `${path}.payload.${instant}`);
+    for (const field of Object.values(STATUS_INSTANTS)) if (field in payloadValue && !uint(payloadValue[field])) return failure(6, "schema/bad-type", `${path}.payload.${field}`);
+    if (!uint(payloadValue.sequence)) return failure(6, "schema/bad-type", `${path}.payload.sequence`);
+  }
+  if (kind === "request") {
+    const freshness = payloadValue.freshness;
+    if (!object(freshness)) return failure(6, "schema/bad-type", `${path}.payload.freshness`);
+    for (const field of ["issued_at", "expires_at"]) {
+      if (!(field in freshness)) return failure(6, "schema/missing-field", `${path}.payload.freshness.${field}`);
+      if (!uint(freshness[field])) return failure(6, "schema/bad-type", `${path}.payload.freshness.${field}`);
+    }
+  }
+  // Every time and sequence field the lifecycle and signing-time logic reads
+  // (D-81 round 2); presence is the closed-map check above.
+  for (const field of UINT_FIELDS[kind] ?? []) if (!uint(payloadValue[field])) return failure(6, "schema/bad-type", `${path}.payload.${field}`);
   for (const [field, size] of payloadFixedFields(kind)) if ((issue = fixed(payloadValue[field], size, 6, `${path}.payload.${field}`))) return issue;
   if (kind === "receipt") {
     if (typeof payloadValue.kind !== "string" || !KINDS.includes(payloadValue.kind)) return failure(6, "schema/enum-unknown", `${path}.payload.kind`);
@@ -779,11 +822,11 @@ function validateMechanics(bundle: Obj, parsed: Parsed): B1Failure | undefined {
     }
     const selector = bundle.selector as Obj;
     if (!same(credential.payload.tenant_id, selector.tenant_id) || !same(credential.payload.site_id, selector.site_id)) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "credential/usage-mismatch", "credential.scope");
-    const signingTime = kind === "receipt" ? (entry.payload.emission as Obj).committed_at as number : evaluationTime;
-    if (!uint(signingTime)) return failure(6, "schema/bad-type", "receipt.emission.committed_at");
+    const signedAt = signingTime(entry, evaluationTime);
+    if (!uint(signedAt)) return failure(6, "schema/bad-type", `${kind}.signing_time`);
     if (!uint(credential.payload.valid_from) || !uint(credential.payload.valid_until)) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "schema/bad-type", "credential.validity");
-    if (signingTime < credential.payload.valid_from) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "credential/not-yet-valid", "credential.valid_from");
-    if (signingTime >= credential.payload.valid_until) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "credential/expired", "credential.valid_until");
+    if (signedAt < credential.payload.valid_from) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "credential/not-yet-valid", "credential.valid_from");
+    if (signedAt >= credential.payload.valid_until) return failure(6, countersignCredentialFailure ? "countersign/credential-invalid" : "credential/expired", "credential.valid_until");
     if (kind === "receipt") {
       const binding = entry.payload.binding as Obj;
       const emission = entry.payload.emission as Obj;
@@ -920,10 +963,19 @@ function receiptHashes(payload: Obj): B1Failure | undefined {
 function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | undefined {
   const credentials = new Map(parsed.credential.map((entry) => [toHex(entry.payload.credential_id as Uint8Array), entry]));
   const mediatorKids = new Set(parsed.mediator_countersignature.map((entry) => toHex(entry.kid)));
-  const usedKids = new Set(Object.values(parsed).flatMap((entries) => entries.map((entry) =>
-    toHex("delegation" in entry ? entry.delegation.kid : entry.kid))));
-  const roots = ((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[];
   const evaluation = (bundle.trust_inputs as Obj).evaluation_time as number;
+  // D-81: every step-6 envelope uses its signer's key at its signing time;
+  // the verifier's own key is used at the evaluation time (step 20).
+  const uses = new Map<string, number[]>();
+  for (const item of Object.values(parsed).flat()) {
+    const entry = "delegation" in item ? item.delegation : item;
+    const kid = toHex(entry.kid);
+    uses.set(kid, [...(uses.get(kid) ?? []), signingTime(entry, evaluation) as number]);
+  }
+  const usedKids = new Set(uses.keys());
+  const verifierKid = toHex(TEST_KEYS.verifier_signing.kid);
+  uses.set(verifierKid, [...(uses.get(verifierKid) ?? []), evaluation]);
+  const roots = ((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[];
   const roleKids = new Map<string, string>();
   for (const entry of parsed.credential) {
     const role = entry.payload.principal_role as string;
@@ -961,14 +1013,27 @@ function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | u
       return failure(8, mediatorCredential ? "countersign/credential-invalid" : "credential/root-not-accepted", "credential.path");
     }
   }
-  const rotations = [...parsed.rotation].sort((a, b) => (a.payload.continuity_sequence as number) - (b.payload.continuity_sequence as number));
-  let previous: ParsedEnvelope | undefined;
-  for (const rotation of rotations) {
-    const predecessor = credentials.get(toHex(rotation.payload.predecessor_credential_id as Uint8Array));
-    const successor = credentials.get(toHex(rotation.payload.successor_credential_id as Uint8Array));
-    if (predecessor === undefined || successor === undefined || !same(predecessor.payload.subject_kid, rotation.payload.predecessor_kid) || !same(successor.payload.subject_kid, rotation.payload.successor_kid)) return failure(8, "credential/rotation-invalid", "rotation");
-    if (previous !== undefined && ((rotation.payload.continuity_sequence as number) <= (previous.payload.continuity_sequence as number) || (rotation.payload.effective_at as number) <= (previous.payload.effective_at as number))) return failure(8, "credential/rotation-rollback", "rotation");
-    previous = rotation;
+  // D-80: bind every record (ids/kids, predecessor's issuer signs, tenant and
+  // site) in array order before any ordering check.
+  for (const rotation of parsed.rotation) {
+    const payload = rotation.payload;
+    const predecessor = credentials.get(toHex(payload.predecessor_credential_id as Uint8Array));
+    const successor = credentials.get(toHex(payload.successor_credential_id as Uint8Array));
+    if (predecessor === undefined || successor === undefined || !same(predecessor.payload.subject_kid, payload.predecessor_kid) || !same(successor.payload.subject_kid, payload.successor_kid)
+      || !same(rotation.kid, predecessor.payload.issuer_kid)
+      || [predecessor, successor].some((credential) => !same(credential.payload.tenant_id, payload.tenant_id) || !same(credential.payload.site_id, payload.site_id))) return failure(8, "credential/rotation-invalid", "rotation");
+  }
+  const groups = new Map<string, ParsedEnvelope[]>();
+  for (const rotation of parsed.rotation) {
+    const key = toHex(encodeCbor([rotation.payload.tenant_id!, rotation.payload.site_id!]));
+    groups.set(key, [...(groups.get(key) ?? []), rotation]);
+  }
+  for (const group of groups.values()) {
+    const ordered = [...group].sort((a, b) => (a.payload.effective_at as number) - (b.payload.effective_at as number) || (a.payload.continuity_sequence as number) - (b.payload.continuity_sequence as number));
+    for (let index = 1; index < ordered.length; index += 1) {
+      const previous = ordered[index - 1]!.payload; const current = ordered[index]!.payload;
+      if ((current.continuity_sequence as number) <= (previous.continuity_sequence as number) || (current.effective_at as number) <= (previous.effective_at as number)) return failure(8, "credential/rotation-rollback", "rotation");
+    }
   }
   for (const status of parsed.status) {
     const payload = status.payload;
@@ -976,12 +1041,19 @@ function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | u
     const maxLease = payload.profile === "AAR-1" || payload.profile === "AAR-2" ? 86_400 : 3_600;
     if ((payload.lease_not_after as number) - (payload.lease_not_before as number) > maxLease) return failure(8, "credential/lease-too-long", "status.lease_not_after");
     if (evaluation - (payload.produced_at as number) > maxAge || evaluation >= (payload.next_update as number)) return failure(8, "credential/status-stale", "status.produced_at");
-    if (payload.status === "revoked") return failure(8, "credential/revoked", "status.status");
-    if (payload.status === "compromised" && (!uint(payload.compromise_at) || evaluation >= payload.compromise_at)) return failure(8, "credential/compromised", "status.status");
+    // D-81: judged at use time; an unresolved subject fails closed as if used
+    // at the evaluation time.
+    const instant = STATUS_INSTANTS[payload.status as string];
+    if (instant !== undefined) {
+      const credential = credentials.get(toHex(payload.credential_id as Uint8Array));
+      const used = credential === undefined ? [evaluation] : uses.get(toHex(credential.payload.subject_kid as Uint8Array)) ?? [];
+      if (used.some((use) => use >= (payload[instant] as number))) return failure(8, `credential/${payload.status as string}`, "status.status");
+    }
     if (payload.status === "unknown") return failure(8, "credential/status-unknown", "status.status");
     if (evaluation < (payload.lease_not_before as number)) return failure(8, "credential/not-yet-valid", "status.lease_not_before");
     if (evaluation >= (payload.lease_not_after as number)) return failure(8, "credential/lease-expired", "status.lease_not_after");
   }
+  for (const status of parsed.status) if (!credentials.has(toHex(status.payload.credential_id as Uint8Array))) return failure(8, "credential/status-missing", "status.credential_id");
   for (const receipt of parsed.receipt) {
     if (receipt.payload.kind !== "authorization") continue;
     const decision = (receipt.payload.body as Obj).decision;
@@ -1352,13 +1424,16 @@ function validateDominance(bundle: Obj, parsed: Parsed, observations: string[]):
     const decision = (authorization.payload.body as Obj).decision as Obj;
     const delegation = embeddedDelegations.get(toHex(authorization.payload.receipt_id as Uint8Array));
     if (delegation === undefined || !same(decision.delegation_id, delegation.payload.delegation_id)) return failure(13, "graph/dominator-missing", "authorization.body.decision.delegation_id");
-    const committed = (attempt.payload.emission as Obj).committed_at as number;
-    if (committed < (delegation.payload.not_before as number)) return failure(13, "delegation/not-yet-valid", "authorization.body.delegation.not_before");
-    if (committed >= (delegation.payload.not_after as number)) return failure(13, "delegation/expired", "authorization.body.delegation.not_after");
+    // D-79: the delegation names the enforcement point that signed the attempt.
+    const subject = parsed.credential.find((credential) => same(credential.payload.credential_id, delegation.payload.subject_credential_id));
+    if (subject === undefined || !same(subject.payload.subject_kid, attempt.kid)) return failure(13, "delegation/scope", "authorization.body.delegation.subject_credential_id");
     const scope = delegation.payload.scope as Obj;
     const action = attemptBody.action as Obj;
     const legal = attempt.payload.legal as Obj;
-    if (!Array.isArray(scope.actions) || !scope.actions.some((value) => same(value, action.action_name)) || !Array.isArray(scope.targets) || !scope.targets.some((value) => same(value, action.target_id)) || !Array.isArray(scope.purpose_ids) || !scope.purpose_ids.some((value) => same(value, legal.purpose_id)) || !Array.isArray(scope.allowed_profiles) || !scope.allowed_profiles.some((value) => same(value, decision.profile)) || !same(delegation.payload.tenant_id, (attempt.payload.binding as Obj).tenant_id) || !same(delegation.payload.site_id, (attempt.payload.binding as Obj).site_id) || (delegation.payload.use === "one_time" && !same(delegation.payload.invocation_id, (attempt.payload.freshness as Obj).invocation_id))) return failure(13, "delegation/scope", "authorization.body.delegation.scope");
+    if (!Array.isArray(scope.actions) || !scope.actions.some((value) => same(value, action.action_name)) || !Array.isArray(scope.targets) || !scope.targets.some((value) => same(value, action.target_id)) || !Array.isArray(scope.purpose_ids) || !scope.purpose_ids.some((value) => same(value, legal.purpose_id)) || !Array.isArray(scope.allowed_profiles) || !scope.allowed_profiles.some((value) => same(value, decision.profile)) || !same(delegation.payload.tenant_id, (attempt.payload.binding as Obj).tenant_id) || !same(delegation.payload.site_id, (attempt.payload.binding as Obj).site_id) || (delegation.payload.invocation_id !== undefined && !same(delegation.payload.invocation_id, (attempt.payload.freshness as Obj).invocation_id)) || (delegation.payload.use === "one_time" && delegation.payload.invocation_id === undefined)) return failure(13, "delegation/scope", "authorization.body.delegation.scope");
+    const committed = (attempt.payload.emission as Obj).committed_at as number;
+    if (committed < (delegation.payload.not_before as number)) return failure(13, "delegation/not-yet-valid", "authorization.body.delegation.not_before");
+    if (committed >= (delegation.payload.not_after as number)) return failure(13, "delegation/expired", "authorization.body.delegation.not_after");
     for (const parentId of delegation.payload.parent_delegations as CborValue[]) {
       const parent = bytes(parentId, 32) ? parentDelegations.get(toHex(parentId)) : undefined;
       if (parent === undefined || (parent.payload.not_before as number) > (delegation.payload.not_before as number) || (parent.payload.not_after as number) < (delegation.payload.not_after as number)) return failure(13, "delegation/chain-invalid", "authorization.body.delegation.parent_delegations");
@@ -1739,9 +1814,9 @@ const VERDICT_LIMITS: Obj = {
   credential_path_length: 8,
 };
 
-// D-78 build identity hashes the literal UTF-8 preimage; config identity is unchanged.
-const DEFAULT_VERSION = "v0.2.3";
-const DEFAULT_BUILD_DIGEST = hash(new TextEncoder().encode("harness-aar-v0.2.3-d78-input-origin-build-v1"));
+// D-81 build identity hashes the literal UTF-8 preimage; config identity is unchanged.
+const DEFAULT_VERSION = "v0.2.4";
+const DEFAULT_BUILD_DIGEST = hash(new TextEncoder().encode("harness-aar-v0.2.4-d79-d81-bindings-build-v1"));
 const DEFAULT_CONFIG_DIGEST = deterministicId("verifier-config:aar-reference-verifier@0.2.0-default");
 const ZERO_DIGEST = new Uint8Array(32);
 

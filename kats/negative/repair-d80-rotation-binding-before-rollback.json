@@ -1,0 +1,7 @@
+{
+  "name": "repair-d80-rotation-binding-before-rollback",
+  "expected_code": "credential/rotation-invalid",
+  "mutation_description": "Three rotations: records 0 and 2 reuse continuity_sequence 1 with increasing effective_at (a rollback); record 1 names a wrong predecessor_kid. Every record binds before ordering.",
+  "expected_result": "nonconformant",
+  "expected_step": 8
+}

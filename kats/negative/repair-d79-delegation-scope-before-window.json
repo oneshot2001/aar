@@ -1,0 +1,7 @@
+{
+  "name": "repair-d79-delegation-scope-before-window",
+  "expected_code": "delegation/scope",
+  "mutation_description": "Action out of scope AND not_after before the attempt's committed_at; scope precedes the window.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

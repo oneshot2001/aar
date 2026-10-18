@@ -1,0 +1,8 @@
+{
+  "name": "d81-status-revoked-after-last-use",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "A refreshed snapshot revokes the EP credential one second after its last use and before evaluation."
+}

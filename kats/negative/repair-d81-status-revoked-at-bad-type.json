@@ -1,0 +1,7 @@
+{
+  "name": "repair-d81-status-revoked-at-bad-type",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "A refreshed revoked snapshot carries a text revoked_at.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -26,6 +26,8 @@ TEST_SCALARS = {
     "status_signing": 9,
     "agent_signing_successor": 10,
     "mediator_outcome_signing": 11,
+    "d77_outsider": 12,
+    "d77_leaf": 13,
 }
 
 

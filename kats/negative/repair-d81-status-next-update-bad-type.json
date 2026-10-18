@@ -1,0 +1,7 @@
+{
+  "name": "repair-d81-status-next-update-bad-type",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "A refreshed snapshot carries a text next_update.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,7 +1,7 @@
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildD78Fixtures, buildD77PositiveFixtures, buildClassBoundaryFixtures, buildNegativeFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
+import { buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildClassBoundaryFixtures, buildNegativeFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
 import { buildStatefulFixtures } from "./stateful-fixtures";
 
 const harnessDirectory = dirname(fileURLToPath(import.meta.url));
@@ -48,7 +48,7 @@ for (const fixture of terminalOutcomes) {
 
 console.log(`generated ${fixtures.length} stateless, ${stateful.length} stateful, ${classBoundaries.length} class-boundary, and ${terminalOutcomes.length} terminal-state KATs`);
 
-for (const fixture of buildD77PositiveFixtures()) {
+for (const fixture of [...buildD77PositiveFixtures(), ...buildD80D81PositiveFixtures()]) {
   const directory = join(outputDirectory, "..", "positive");
   await writeFile(join(directory, `${fixture.filename}.cbor`), fixture.bytes);
   await writeFile(join(directory, `${fixture.filename}.json`), `${JSON.stringify(fixture.descriptor, null, 2)}\n`);

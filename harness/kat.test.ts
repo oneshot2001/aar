@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
 import { verifySigned } from "./crypto";
 import { buildFixtures } from "./fixtures";
-import { buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildClassBoundaryFixtures, buildEvidenceCommitFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
+import { buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildClassBoundaryFixtures, buildEvidenceCommitFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
 import { buildCountersignFixtures } from "./countersign-fixtures";
 import { TEST_KEYS } from "./testkeys";
 import { verifyBundle } from "./verifier";
@@ -26,8 +26,8 @@ describe("positive KAT harness", () => {
     }
   });
 
-  test("D-77 positive repairs remain conformant and deterministic", () => {
-    const first = buildD77PositiveFixtures(); const second = buildD77PositiveFixtures();
+  test("D-77 and D-80/D-81 positive repairs remain conformant and deterministic", () => {
+    const first = [...buildD77PositiveFixtures(), ...buildD80D81PositiveFixtures()]; const second = [...buildD77PositiveFixtures(), ...buildD80D81PositiveFixtures()];
     for (const [index, fixture] of first.entries()) {
       expect(equalBytes(fixture.bytes, second[index]!.bytes)).toBe(true);
       expect(equalBytes(fixture.bytes, readFileSync(join(root, "kats", "positive", `${fixture.filename}.cbor`)))).toBe(true);

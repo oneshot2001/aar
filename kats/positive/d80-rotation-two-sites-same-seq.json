@@ -1,0 +1,8 @@
+{
+  "name": "d80-rotation-two-sites-same-seq",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "A second allowed site rotates its own agent credentials under the same root with the same continuity_sequence; groups are never compared."
+}

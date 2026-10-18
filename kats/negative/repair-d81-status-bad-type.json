@@ -1,0 +1,7 @@
+{
+  "name": "repair-d81-status-bad-type",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "A refreshed snapshot carries status false; the type gate precedes the enum.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,7 @@
+{
+  "name": "repair-d81-status-compromised-missing-compromise-at",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "A refreshed snapshot says compromised without compromise_at.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

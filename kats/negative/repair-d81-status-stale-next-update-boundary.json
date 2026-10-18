@@ -1,0 +1,7 @@
+{
+  "name": "repair-d81-status-stale-next-update-boundary",
+  "expected_code": "credential/status-stale",
+  "mutation_description": "A refreshed snapshot whose next_update equals the evaluation time (half-open).",
+  "expected_result": "nonconformant",
+  "expected_step": 8
+}

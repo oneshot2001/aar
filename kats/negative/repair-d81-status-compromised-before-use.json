@@ -1,0 +1,7 @@
+{
+  "name": "repair-d81-status-compromised-before-use",
+  "expected_code": "credential/compromised",
+  "mutation_description": "Twin of credential-compromised: the stapled snapshot is compromised effective at the EP key's earliest signing time.",
+  "expected_result": "nonconformant",
+  "expected_step": 8
+}

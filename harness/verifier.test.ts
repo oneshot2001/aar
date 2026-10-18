@@ -117,9 +117,9 @@ describe("B2 reference verifier", () => {
     }
   }, 180_000);
 
-  test("release-repair fixtures fail at their specified step, not a later hash step (D-68..D-77)", () => {
+  test("release-repair fixtures fail at their specified step, not a later hash step (D-68..D-81)", () => {
     const repairs = negativeFixtures.filter((fixture) => fixture.filename.startsWith("repair-"));
-    expect(repairs).toHaveLength(40);
+    expect(repairs).toHaveLength(68);
     for (const fixture of repairs) {
       const result = verifyBundle(fixture.bytes, { evaluationTime: AT });
       expect(result.ok, fixture.filename).toBe(false);

@@ -1,0 +1,7 @@
+{
+  "name": "repair-d79-delegation-subject-unresolved",
+  "expected_code": "delegation/scope",
+  "mutation_description": "Point the embedded delegation subject_credential_id at an id no carried credential has.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

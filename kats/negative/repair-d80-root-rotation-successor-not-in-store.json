@@ -1,0 +1,7 @@
+{
+  "name": "repair-d80-root-rotation-successor-not-in-store",
+  "expected_code": "credential/root-not-accepted",
+  "mutation_description": "The root rotates to a self-signed successor root that the trust store does not carry; a rotation never makes its successor accepted.",
+  "expected_result": "nonconformant",
+  "expected_step": 8
+}

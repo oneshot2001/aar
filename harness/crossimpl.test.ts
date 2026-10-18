@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
-import { buildD78ItemVariants, buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildEvidenceCommitFixtures, buildNegativeFixtures, buildPresentationEnumVariants } from "./negative-fixtures";
+import { buildD78ItemVariants, buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildEvidenceCommitFixtures, buildNegativeFixtures, buildPresentationEnumVariants } from "./negative-fixtures";
 import { verifyBundle } from "./verifier";
 import { parseStatefulPrior } from "./stateful-fixtures";
 
@@ -39,7 +39,7 @@ function cases(): Case[] {
     ...buildD78ItemVariants().map((fixture) => ({ ...fixture, at: AT })),
     ...buildD78ReportVariants().map((fixture) => ({ name: fixture.name, bytes: fixture.bytes, at: AT, code: null, step: null })),
     ...buildD78Fixtures().map((fixture) => ({ name: fixture.filename, bytes: fixture.bytes, at: AT, code: fixture.descriptor.expected_code, step: fixture.descriptor.expected_step ?? null })),
-    ...buildD77PositiveFixtures().map((fixture) => ({ name: fixture.filename, bytes: fixture.bytes, at: AT, code: null, step: null })),
+    ...[...buildD77PositiveFixtures(), ...buildD80D81PositiveFixtures()].map((fixture) => ({ name: fixture.filename, bytes: fixture.bytes, at: AT, code: null, step: null })),
     ...buildPresentationEnumVariants().map((fixture) => ({ ...fixture, at: AT })),
     ...buildNegativeFixtures().filter((fixture) => fixture.filename.startsWith("repair-")).map((fixture) => ({
       name: fixture.filename, bytes: fixture.bytes, at: AT, code: fixture.descriptor.expected_code, step: fixture.descriptor.expected_step ?? repairStep(fixture.filename),

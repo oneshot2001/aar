@@ -1,0 +1,7 @@
+{
+  "name": "repair-d81-status-profile-enum-unknown",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "A refreshed snapshot carries profile AAR-9 with a 5000 s lease; the closed profile enum fails before any lease arithmetic.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

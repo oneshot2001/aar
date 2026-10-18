@@ -9,7 +9,7 @@
 <p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/code-Apache--2.0-blue.svg" alt="Code: Apache-2.0"></a>
   <a href="LICENSE-SPEC"><img src="https://img.shields.io/badge/spec-CC%20BY%204.0-blue.svg" alt="Spec: CC BY 4.0"></a>
-  <a href="spec/aar-core.cddl"><img src="https://img.shields.io/badge/wire-v0.2.3-3ec9a7.svg" alt="Wire: v0.2.3"></a>
+  <a href="spec/aar-core.cddl"><img src="https://img.shields.io/badge/wire-v0.2.4-3ec9a7.svg" alt="Wire: v0.2.4"></a>
   <a href="pyref/"><img src="https://img.shields.io/badge/verifier-offline%20%C2%B7%20stdlib--only-3ec9a7.svg" alt="Verifier: offline, stdlib-only"></a>
   <a href="kats/"><img src="https://img.shields.io/badge/KATs-byte--pinned-1d3648.svg" alt="KATs: byte-pinned"></a>
   <a href="#status"><img src="https://img.shields.io/badge/status-stable%20experimental%20spec-d98e3b.svg" alt="Status: stable experimental spec"></a>
@@ -35,7 +35,7 @@ authorized to do, what it attempted, whether the command was dispatched, and
 what an observer saw happen. Anyone holding that bundle can check it offline,
 with no vendor service, account, or network, and get a signed verdict. AAR is
 the wire format, the conformance rules, and a free verifier for that record.
-It is a **stable experimental spec** (`v0.2.3`), implemented twice by one
+It is a **stable experimental spec** (`v0.2.4`), implemented twice by one
 operator, run against real cameras, and not yet adopted by anyone else.
 
 ## Verify a receipt bundle in 60 seconds
@@ -61,6 +61,7 @@ TypeScript harness: `bun run harness/verify.ts BUNDLE --at UNIX_SECONDS`.
 | The epoch's manifest, events, and anchor agree; a producer-declared epoch has not been truncated after the fact | That every action that happened was recorded (completeness is census-conditional, see D-72) |
 | Outcome claims carry their evidence grade; `verified` is barred without a named independent observer | That a `device_acknowledged` outcome was independently sensed (all live runs so far are device-acknowledged) |
 | The verdict bytes are reproducible by a second, clean-room implementation | Custody continuity or legal admissibility (D-71) |
+| A delegation names the enforcement point that attempted under it, a rotation is signed by the retiring key's issuer, and revocation is judged at each signature's own time: receipts signed before `revoked_at` keep verifying, nothing signed at or after it passes (D-79..D-81) | That the status authority's `revoked_at` instant is accurate (it is that authority's assertion) |
 
 "Evidence-grade" in this repo means exactly the left column: attribution,
 post-emission tamper evidence, and anchored completeness over declared
@@ -71,7 +72,7 @@ verdict is signed with a **published test key** so its bytes are reproducible
 
 ## Supported actions
 
-The `v0.2.3` ontology is closed to two camera actions: `camera.stream.view`
+The `v0.2.4` ontology is closed to two camera actions: `camera.stream.view`
 and `camera.ptz.preset`, on VAPIX and via one VMS control path. Alert
 disposition is specified but experimental; access control and data-access
 actions (ALPR queries, video export) are not in this wire. That is a scoping
@@ -81,7 +82,7 @@ choice, stated so nobody has to discover it.
 
 | Artifact | State |
 |---|---|
-| Wire | **v0.2.3** — normative CDDL at `spec/aar-core.cddl`; five rc gates closed, exit bar re-run live against real cameras; delta since rc7 in `spec/AUDIT-rc7-to-v0.2.0.md` |
+| Wire | **v0.2.4** — normative CDDL at `spec/aar-core.cddl`; five rc gates closed, exit bar re-run live against real cameras; delta since rc7 in `spec/AUDIT-rc7-to-v0.2.0.md` |
 | Offline verifier | **pyref** — clean-room, Python stdlib only, no network, no wall clock |
 | Second implementation | TypeScript harness (`harness/`) — generates the KAT corpus; byte-identical verdicts with pyref on the cross-implementation gate (repair KATs, positive bundles, demo bundles). 40 of 232 corpus fixtures still differ in signed failure-verdict fields: [parity audit](docs/verifier-parity-audit-2026-10-08.md) |
 | Conformance KATs | byte-pinned positive / negative / class-boundary / terminal-state fixtures in `kats/` |

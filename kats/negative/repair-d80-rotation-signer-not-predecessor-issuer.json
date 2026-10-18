@@ -1,0 +1,7 @@
+{
+  "name": "repair-d80-rotation-signer-not-predecessor-issuer",
+  "expected_code": "credential/rotation-invalid",
+  "mutation_description": "A carried intermediate credential_issuing credential (d77_leaf under the root) re-signs the unchanged rotation; it did not issue the predecessor.",
+  "expected_result": "nonconformant",
+  "expected_step": 8
+}

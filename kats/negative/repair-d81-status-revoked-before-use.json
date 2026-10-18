@@ -1,0 +1,7 @@
+{
+  "name": "repair-d81-status-revoked-before-use",
+  "expected_code": "credential/revoked",
+  "mutation_description": "Twin of credential-revoked: the stapled snapshot is revoked effective at the EP key's earliest signing time.",
+  "expected_result": "nonconformant",
+  "expected_step": 8
+}

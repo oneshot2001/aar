@@ -508,6 +508,33 @@ def _raw_mediator_kids(state: State) -> set[bytes]:
 
 
 INPUT_ORIGINS = {"principal", "operator_system", "device_sensed", "third_party", "unknown"}
+STATUS_INSTANTS = {"revoked": "revoked_at", "compromised": "compromise_at"}
+UINT_FIELDS = {
+    CONTENT_TYPES["rotations"]: ("effective_at", "continuity_sequence"),
+    CONTENT_TYPES["epoch_manifests"]: ("opened_at", "closed_at"),
+    CONTENT_TYPES["epoch_events"]: ("occurred_at",),
+    CONTENT_TYPES["anchors"]: ("submitted_at", "accepted_at"),
+    CONTENT_TYPES["merkle_batches"]: ("created_at",),
+    CONTENT_TYPES["presentations"]: ("delivered_at",),
+    CONTENT_TYPES["mediator_countersignatures"]: ("mediator_observed_at",),
+}
+# D-81 (6.7.7): the time an object claims for its own signed act. Credentials,
+# delegations, and rotations carry none and take the evaluation time.
+SIGNING_TIME_FIELDS = {
+    "epoch_manifests": "closed_at", "epoch_events": "occurred_at", "anchors": "accepted_at",
+    "merkle_batches": "created_at", "presentations": "delivered_at", "status_snapshots": "produced_at",
+    "mediator_countersignatures": "mediator_observed_at",
+}
+
+
+def _signing_time(category: str, payload: dict[str, Any], evaluated_at: int) -> Any:
+    if category == "receipts":
+        return payload["emission"].get("committed_at")
+    if category == "requests":
+        freshness = payload.get("freshness")
+        return freshness.get("issued_at") if isinstance(freshness, dict) else None
+    field = SIGNING_TIME_FIELDS.get(category)
+    return payload.get(field) if field else evaluated_at
 
 
 def _schema_payload(content_type: str, payload: Any) -> dict[str, Any]:
@@ -516,7 +543,7 @@ def _schema_payload(content_type: str, payload: Any) -> dict[str, Any]:
     schemas: dict[str, tuple[set[str], set[str]]] = {
         CONTENT_TYPES["credentials"]: ({"v", "credential_id", "subject_kid", "public_key", "issuer_kid", "principal_type", "principal_role", "tenant_id", "site_id", "valid_from", "valid_until", "cose_alg", "curve", "key_usage", "trust_anchor_id", "path", "profile_limits"}, set()),
         CONTENT_TYPES["rotations"]: ({"v", "rotation_id", "predecessor_credential_id", "successor_credential_id", "predecessor_kid", "successor_kid", "effective_at", "tenant_id", "site_id", "continuity_sequence"}, set()),
-        CONTENT_TYPES["status_snapshots"]: ({"v", "snapshot_id", "credential_id", "issuer_kid", "produced_at", "next_update", "lease_not_before", "lease_not_after", "profile", "status", "sequence", "tenant_id", "site_id"}, {"compromise_at"}),
+        CONTENT_TYPES["status_snapshots"]: ({"v", "snapshot_id", "credential_id", "issuer_kid", "produced_at", "next_update", "lease_not_before", "lease_not_after", "profile", "status", "sequence", "tenant_id", "site_id"}, {"revoked_at", "compromise_at"}),
         CONTENT_TYPES["requests"]: ({"v", "request_id", "action_intent_digest", "target_ep_kid", "tenant_id", "site_id", "correlation", "freshness", "legal"}, set()),
         CONTENT_TYPES["delegations"]: ({"v", "delegation_id", "issuer_credential_id", "subject_credential_id", "tenant_id", "site_id", "scope", "not_before", "not_after", "use", "replay_domain", "parent_delegations"}, {"invocation_id"}),
         CONTENT_TYPES["epoch_events"]: ({"v", "event_id", "tenant_id", "site_id", "epoch_owner_kid", "epoch_id", "event_seq", "occurred_at", "event", "body"}, {"previous_event_digest"}),
@@ -560,6 +587,39 @@ def _schema_payload(content_type: str, payload: Any) -> dict[str, Any]:
             _fail("schema/bad-type", 6)
         if payload["state"] not in ("assembled", "delivered", "rendered", "human_approved"):
             _fail("schema/enum-unknown", 6)
+    if content_type == CONTENT_TYPES["status_snapshots"]:
+        # D-81, in CDDL field order: the four times, then the closed status
+        # enum (type first), the instant the status requires, then sequence.
+        if any(not _uint(payload[field]) for field in ("produced_at", "next_update", "lease_not_before", "lease_not_after")):
+            _fail("schema/bad-type", 6)
+        if not isinstance(payload["profile"], str):
+            _fail("schema/bad-type", 6)
+        if payload["profile"] not in ("AAR-1", "AAR-2", "AAR-2A", "AAR-3"):
+            _fail("schema/enum-unknown", 6)
+        if not isinstance(payload["status"], str):
+            _fail("schema/bad-type", 6)
+        if payload["status"] not in ("good", "revoked", "compromised", "unknown"):
+            _fail("schema/enum-unknown", 6)
+        instant = STATUS_INSTANTS.get(payload["status"])
+        if instant is not None and instant not in payload:
+            _fail("schema/missing-field", 6)
+        if any(field in payload and not _uint(payload[field]) for field in STATUS_INSTANTS.values()):
+            _fail("schema/bad-type", 6)
+        if not _uint(payload["sequence"]):
+            _fail("schema/bad-type", 6)
+    if content_type == CONTENT_TYPES["requests"]:
+        freshness = payload["freshness"]
+        if not isinstance(freshness, dict):
+            _fail("schema/bad-type", 6)
+        for field in ("issued_at", "expires_at"):
+            if field not in freshness:
+                _fail("schema/missing-field", 6)
+            if not _uint(freshness[field]):
+                _fail("schema/bad-type", 6)
+    # Every time and sequence field the lifecycle and signing-time logic reads
+    # (D-81 round 2); presence is the closed-map check above.
+    if any(not _uint(payload[field]) for field in UINT_FIELDS.get(content_type, ())):
+        _fail("schema/bad-type", 6)
     for field, size in PAYLOAD_FIXED_FIELDS[content_type]:
         value = payload.get(field)
         if not isinstance(value, bytes):
@@ -792,7 +852,7 @@ def _validate_envelope(state: State, category: str, index: int, value: Any,
         selector = state.bundle["selector"]
         if claims.get("tenant_id") != selector["tenant_id"] or claims.get("site_id") != selector["site_id"]:
             _fail("credential/usage-mismatch", 6)
-    signing_time = payload["emission"].get("committed_at") if category == "receipts" else state.evaluated_at
+    signing_time = _signing_time(category, payload, state.evaluated_at)
     if not _uint(signing_time):
         _fail("schema/bad-type", 6)
     if not _uint(claims.get("valid_from")) or not _uint(claims.get("valid_until")):
@@ -990,10 +1050,16 @@ def _credential_lifecycle(state: State) -> None:
     store = state.bundle["trust_inputs"]["trust_store"]
     roots = {root["root_kid"]: root for root in store["roots"]}
     by_id = {envelope.payload["credential_id"]: envelope for envelope in credentials}
-    used_kids = {envelope.protected[4] for category in ARTIFACT_ORDER
-                 for envelope in state.envelopes[category]}
-    used_kids.update(envelope.protected[4] for envelope in state.envelopes["presentations"])
-    used_kids.update(envelope.protected[4] for envelope in state.embedded_delegations.values())
+    # D-81: every step-6 envelope uses its signer's key at its signing time;
+    # the verifier's own key is used at the evaluation time (step 20).
+    uses: dict[bytes, list[int]] = defaultdict(list)
+    for category in ARTIFACT_ORDER + ("presentations",):
+        for envelope in state.envelopes[category]:
+            uses[envelope.protected[4]].append(_signing_time(category, envelope.payload, state.evaluated_at))
+    for envelope in state.embedded_delegations.values():
+        uses[envelope.protected[4]].append(state.evaluated_at)
+    used_kids = set(uses)
+    uses[key_id(TEST_SCALARS["verifier_signing"])].append(state.evaluated_at)
     mediator_kids = {envelope.protected[4] for envelope in state.envelopes["mediator_countersignatures"]}
 
     role_kids: dict[str, set[bytes]] = defaultdict(set)
@@ -1044,15 +1110,23 @@ def _credential_lifecycle(state: State) -> None:
                     and credential["key_usage"] not in root["allowed_key_usages"]):
             _fail("countersign/credential-invalid" if mediator_credential else "credential/root-not-accepted", 8)
 
+    # D-80: bind every record (ids/kids, predecessor's issuer signs, tenant and
+    # site) in array order before any ordering check.
     rotations = [envelope.payload for envelope in state.envelopes["rotations"]]
-    by_pair: dict[tuple[bytes, bytes], list[dict[str, Any]]] = defaultdict(list)
-    for rotation in rotations:
+    for envelope in state.envelopes["rotations"]:
+        rotation = envelope.payload
         predecessor = by_id.get(rotation["predecessor_credential_id"])
         successor = by_id.get(rotation["successor_credential_id"])
         if predecessor is None or successor is None \
                 or predecessor.payload["subject_kid"] != rotation["predecessor_kid"] \
-                or successor.payload["subject_kid"] != rotation["successor_kid"]:
+                or successor.payload["subject_kid"] != rotation["successor_kid"] \
+                or envelope.protected[4] != predecessor.payload["issuer_kid"] \
+                or any(credential.payload["tenant_id"] != rotation["tenant_id"]
+                       or credential.payload["site_id"] != rotation["site_id"]
+                       for credential in (predecessor, successor)):
             _fail("credential/rotation-invalid", 8)
+    by_pair: dict[tuple[bytes, bytes], list[dict[str, Any]]] = defaultdict(list)
+    for rotation in rotations:
         by_pair[(rotation["tenant_id"], rotation["site_id"])].append(rotation)
     for items in by_pair.values():
         ordered = sorted(items, key=lambda item: (item["effective_at"], item["continuity_sequence"]))
@@ -1070,12 +1144,16 @@ def _credential_lifecycle(state: State) -> None:
         if snapshot["lease_not_after"] - snapshot["lease_not_before"] > max_lease:
             _fail("credential/lease-too-long", 8)
         if state.evaluated_at - snapshot["produced_at"] > max_age \
-                or state.evaluated_at > snapshot["next_update"]:
+                or state.evaluated_at >= snapshot["next_update"]:
             _fail("credential/status-stale", 8)
-        if snapshot["status"] == "revoked":
-            _fail("credential/revoked", 8)
-        if snapshot["status"] == "compromised" and state.evaluated_at >= snapshot.get("compromise_at", 0):
-            _fail("credential/compromised", 8)
+        # D-81: judged at use time; an unresolved subject fails closed as if
+        # used at the evaluation time.
+        instant = STATUS_INSTANTS.get(snapshot["status"])
+        if instant is not None:
+            credential = by_id.get(snapshot["credential_id"])
+            used = [state.evaluated_at] if credential is None else uses.get(credential.payload["subject_kid"], [])
+            if any(use >= snapshot[instant] for use in used):
+                _fail(f"credential/{snapshot['status']}", 8)
         if snapshot["status"] == "unknown":
             _fail("credential/status-unknown", 8)
         if state.evaluated_at < snapshot["lease_not_before"]:
@@ -1603,6 +1681,11 @@ def _authorization_dominance(state: State, graph: dict[bytes, list[bytes]]) -> N
         delegation_payload = delegation.payload
         if auth_body["decision"].get("delegation_id") != delegation_payload["delegation_id"]:
             _fail("graph/dominator-missing", 13)
+        # D-79: the delegation names the enforcement point that signed the attempt.
+        subject_id = delegation_payload["subject_credential_id"]
+        subject = state.credentials_by_id.get(subject_id) if isinstance(subject_id, bytes) else None
+        if subject is None or subject.payload["subject_kid"] != attempt.protected[4]:
+            _fail("delegation/scope", 13)
         attempt_body = attempt.payload["body"]
         action = attempt_body["action"]
         scope = delegation_payload["scope"]
@@ -1615,7 +1698,8 @@ def _authorization_dominance(state: State, graph: dict[bytes, list[bytes]]) -> N
                 or decision_profile not in scope["allowed_profiles"] \
                 or delegation_payload["tenant_id"] != attempt.payload["binding"]["tenant_id"] \
                 or delegation_payload["site_id"] != attempt.payload["binding"]["site_id"] \
-                or ("invocation_id" in delegation_payload and delegation_payload["invocation_id"] != invocation):
+                or ("invocation_id" in delegation_payload and delegation_payload["invocation_id"] != invocation) \
+                or (delegation_payload["use"] == "one_time" and "invocation_id" not in delegation_payload):
             _fail("delegation/scope", 13)
         committed = attempt.payload["emission"]["committed_at"]
         if committed < delegation_payload["not_before"]:
@@ -2139,7 +2223,7 @@ def _limits_digest() -> bytes:
     return hashes.domain_hash("AAR-VERDICT-LIMITS-v1", LIMITS)
 
 
-BUILD_DIGEST = hashes.sha256(b"pyref-aar-v0.2.3-d78-input-origin-build-v1")
+BUILD_DIGEST = hashes.sha256(b"pyref-aar-v0.2.4-d79-d81-bindings-build-v1")
 CONFIG_DIGEST = hashes.sha256(b"pyref-aar-v0.2-gate4-c2-fixed-conformance-config-v1")
 
 
@@ -2274,7 +2358,7 @@ def _verdict_fields(state: State, result: str, reason: str | None, step: int) ->
         "bundle_digest": hashes.sha256(state.raw),
         "selector_commitment": selector_commitment,
         "verifier": {
-            "product": "pyref", "version": "v0.2.3",
+            "product": "pyref", "version": "v0.2.4",
             "build_digest": BUILD_DIGEST, "config_digest": CONFIG_DIGEST,
             "limits_digest": _limits_digest(),
         },
