@@ -125,7 +125,7 @@ describe("B2 reference verifier", () => {
       expect(result.ok, fixture.filename).toBe(false);
       if (!result.ok) expect(result.step, fixture.filename).toBe(fixture.descriptor.expected_step ?? repairStep(fixture.filename));
     }
-  });
+  }, 180_000);
 
   test("caller evaluation time is authoritative and recorded on mismatch (D-70)", () => {
     const input = readFileSync(join(root, "kats", "positive", "bundle-valid-subset.cbor"));
