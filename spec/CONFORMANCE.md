@@ -55,7 +55,10 @@ normative as the step order itself (D-54).
    that order.
 3. **Bundle schema.** Check the closed top-level map, `v`, required fields, field
    types, fixed-size values, enums/ranges, and sorted/unique
-   arrays, in that order. Occurrence ceilings listed as section 1 resource limits
+   arrays, in that order; the shape of `trust_inputs` (snapshot, root records,
+   expected anchor heads) and the sort order and uniqueness of every artifact
+   array are checked here, before step 6 touches any envelope (D-82).
+   Occurrence ceilings listed as section 1 resource limits
    are deferred to step 4 so their `resource/*` code is reachable. The optional
    `artifacts.mediator_countersignatures` array is closed and sorted by primary
    ID like the other artifact arrays; absence is the pre-D-67 encoding. Check
@@ -75,8 +78,10 @@ normative as the step order itself (D-54).
 6. **Envelope mechanics.** For each signed object, in this artifact order —
    credentials, rotation records, status snapshots, request envelopes,
    delegations, epoch events, epoch manifests, anchor records, Merkle batches,
-   mediator countersignatures, then receipts (including any nested signed
-   presentation manifest) — perform:
+   mediator countersignatures, then receipts (each receipt followed immediately
+   by its embedded delegation, then by its nested signed presentation manifest,
+   D-82) — perform, completing sub-steps 1 to 9 for one object before decoding
+   the next (D-82):
 
    1. decode the untagged four-element COSE array and require deterministic CBOR;
    2. require protected to be a bstr containing a closed deterministic map;
@@ -110,7 +115,23 @@ normative as the step order itself (D-54).
       enum, a `revoked` snapshot without `revoked_at` or a `compromised`
       snapshot without `compromise_at` is `schema/missing-field`, and a
       present `revoked_at` or `compromise_at` that is not a `unix-time` is
-      `schema/bad-type` (D-81).
+      `schema/bad-type` (D-81). More generally (D-82), in CDDL field order
+      within each production, validate every closed scalar enum (credential
+      `key_usage` and `principal_role`; delegation `use`; epoch event `event`;
+      manifest `close_reason`, `late_arrival_policy`, and `fork_policy`;
+      transformation `kind`; `phase`; `format`; `reversibility`; outcome
+      `state`; evidence `time.class`, `provenance.class`, and `outcome.level`;
+      and every enum D-73, D-77, D-78, and D-81 already name), every
+      `unix-time` and `sequence` field for presence then type, and a receipt's
+      `freshness` and `binding` sub-maps for presence then type of each member.
+      Absence is `schema/missing-field`, a wrong type `schema/bad-type`, an
+      unlisted value `schema/enum-unknown`. Three pinned precedences stand: a
+      credential's `principal_type` enum before its fixed-size ids; a
+      presentation's `state` enum before its ids; and a request envelope's
+      coordinate fields (`tenant_id`, `site_id`, `target_ep_kid`,
+      `correlation`) are judged at step 7 as `request/coordinate-mismatch`,
+      never as a step-6 schema failure. Traversal of every remaining field is
+      a separate ruling.
    7. resolve a P-256 verification key through the accepted credential path
       and check the resolved signer, in this order (D-77):
       1. a carried credential whose `subject_kid` equals the protected kid
@@ -287,8 +308,11 @@ normative as the step order itself (D-54).
     `parameters_digest` equal the normalized action's `action_name`,
     `target_id`, and `parameters_digest`; an undecodable command is
     disagreement; when `parameters` is present its deterministic encoding MUST
-    hash to `parameters_digest`); and dispatch/outcome subject agreement,
-    in that order. Then evaluate mediator countersignatures in artifact-array
+    hash to `parameters_digest`); and dispatch/outcome subject agreement (an
+    `outcome_observation` MUST carry exactly one `observed_outcome` parent, and
+    that parent's receipt id MUST equal the body's `subject_id`; zero or
+    several such parents, or a different id, is
+    `receipt/outcome-subject-mismatch`, D-82), in that order. Then evaluate mediator countersignatures in artifact-array
     order: `action_attempt_receipt_digest` MUST equal SHA-256 of exactly one
     carried `action_attempt` receipt-envelope's received deterministic-CBOR
     bytes, and `command_digest` MUST equal that attempt's already-verified
@@ -342,7 +366,14 @@ normative as the step order itself (D-54).
     carries `invocation_id`, and a `one_time` delegation without
     `invocation_id` fails it); then `not_before` (`delegation/not-yet-valid`);
     then `not_after` (`delegation/expired`); then `parent_delegations`
-    (`delegation/chain-invalid`). For each dispatch in array order, after that dispatch's
+    (`delegation/chain-invalid`), traversed transitively (D-82): every link
+    MUST resolve to a carried top-level delegation; contain the child's
+    `[not_before, not_after]`; contain each of the child's `actions`,
+    `targets`, `purpose_ids`, and `allowed_profiles` as a subset; share the
+    child's `tenant_id` and `site_id`; not widen `use` (a `one_time` parent
+    forbids a `reusable` child, and a parent `invocation_id` MUST equal the
+    child's); and not name a delegation already on the path. Links are
+    followed in `parent_delegations` array order, depth first. For each dispatch in array order, after that dispatch's
     dominance, embedded-delegation, scope, time and parent-delegation checks
     succeed, apply D-66 before moving to the next dispatch (D-54). On an AAR-3
     profile, the linked `action_attempt` is committed
@@ -388,7 +419,14 @@ normative as the step order itself (D-54).
 14. **Epoch state machine.** Validate owner/event chains, monotonic epoch IDs and
     event sequences, predecessor manifest digest, one open and one close, duration,
     sequence span/count, immutable close, late-arrival routing, anchor deadline,
-    and fork rules. Two distinct manifests for one owner/epoch are a fork.
+    and fork rules. Two distinct manifests for one owner/epoch are a fork, and a
+    carried `fork_declared` event is itself `epoch/fork`: its `handling` is
+    `reject_and_surface`, so the verifier rejects the epoch and surfaces the
+    declaration in its report; conflicting event chains fail `epoch/event-chain`
+    at chain linkage, before any fork rule (D-82). A receipt whose
+    `late_for_epoch_id` is not lower than its own `epoch_id` is
+    `epoch/late-insertion`, whether or not that epoch's manifest is carried
+    (D-82).
     D-73: a carried manifest whose owner/epoch has no event group, and an
     event group with no carried manifest, are each `epoch/open-close` — a
     closed epoch is the manifest **and** its open/close events.
@@ -527,7 +565,9 @@ All edges are same tenant/site. They are same epoch unless they carry
 - `observed_outcome` with reason `long_running_action` or `late_outcome`.
 
 The source epoch MUST be earlier, closed, anchored, and named by the exact source
-manifest and anchor. Authorization, request, trigger, and attempt edges never cross
+manifest and anchor: the named manifest MUST belong to the parent receipt's
+epoch owner, epoch, tenant, and site, and the named anchor MUST bind that
+manifest; otherwise `graph/cross-epoch-unanchored` (D-82). Authorization, request, trigger, and attempt edges never cross
 an epoch boundary.
 
 ## 3. Closed reason-code table
@@ -609,7 +649,7 @@ one input has several defects, section 2 selects the first verifier code.
 | `receipt/hazard-class-unbound` | A normalized action carries `hazard_class="life_safety"`, but its `action_name` does not occur in the bound trust policy's `life_safety_action_names` list, including when that optional list is absent. |
 | `receipt/action-command-mismatch` | Normalized action and command action/target/parameter commitment disagree. |
 | `receipt/dispatch-attempt-mismatch` | Dispatch does not name the command and attempt selected by `attempted_as`. |
-| `receipt/outcome-subject-mismatch` | Outcome subject is not its `observed_outcome` dispatch/attempt parent. |
+| `receipt/outcome-subject-mismatch` | Outcome subject is not its `observed_outcome` dispatch/attempt parent, or the outcome carries zero or several `observed_outcome` parents (D-82). |
 | `journal/unavailable` | Operational refusal reason: before an AAR-3 non-life-safety action-bearing send, neither the primary nor emergency journal can durably commit the `action_attempt`; the EP emits a `not_dispatched` attempt carrying this exact `refusal_reason`. This code never appears as a verifier verdict reason. |
 | `journal/uncommitted-dispatch` | On an AAR-3 profile, a dispatch's linked attempt lacks the prior journal commitment defined at step 13 and is not the marked life-safety exception. |
 | `credential/root-not-accepted` | Credential path ends at a root not accepted for the bound tenant/site, or a credential that signs a verified envelope has a key usage its root does not allow (D-77). |
@@ -636,7 +676,7 @@ one input has several defects, section 2 selects the first verifier code.
 | `delegation/not-yet-valid` | Attempt precedes delegation `not_before`. |
 | `delegation/expired` | Attempt is at or after delegation `not_after`. |
 | `delegation/scope` | The delegation's subject is not the enforcement point that signed the attempt (D-79), or action, target, purpose, tenant, site, profile, or invocation is outside delegation scope. |
-| `delegation/chain-invalid` | Parent delegation is missing, cyclic, expired, or grants less authority than its child. |
+| `delegation/chain-invalid` | A parent delegation on the transitive chain is missing, already on the path, does not contain the child's window or its four scope lists, differs in tenant or site, or widens `use` or `invocation_id` (D-82). |
 | `graph/dangling-parent` | A parent id cannot be resolved in the bundle when closure is required. |
 | `graph/parent-metadata-mismatch` | Parent kind/tenant/site/epoch metadata differs from the resolved parent. |
 | `graph/edge-illegal` | Edge parent-kind/child-kind pair is absent from the closed matrix. |
@@ -644,7 +684,7 @@ one input has several defects, section 2 selects the first verifier code.
 | `graph/root-forbidden` | Node kind/root kind pair is unlisted, or a non-root carries `root`. |
 | `graph/tenant-site-splice` | Parent and child have different tenant or site. |
 | `graph/cross-epoch-forbidden` | Cross-epoch edge type/reason is unlisted or an unequal epoch lacks `cross_epoch`. |
-| `graph/cross-epoch-unanchored` | Cross-epoch source is not earlier, closed, and bound to the named valid anchor/manifest. |
+| `graph/cross-epoch-unanchored` | Cross-epoch source is not earlier, closed, and bound to the named valid anchor/manifest; or the named manifest does not belong to the parent's owner/epoch/tenant/site, or the named anchor does not bind that manifest (D-82). |
 | `graph/dominator-missing` | Dispatch lacks its one exact dominating authorization/delegation path. |
 | `graph/dominator-ambiguous` | More than one authorization or delegation dominates a dispatch. |
 | `epoch/event-chain` | Event sequence or previous-event digest does not form one owner/epoch chain. |
@@ -653,9 +693,9 @@ one input has several defects, section 2 selects the first verifier code.
 | `epoch/open-close` | Epoch lacks exactly one valid open followed by one valid close. |
 | `epoch/duration-exceeded` | Close is more than 86,400 seconds after open. |
 | `epoch/span-count-mismatch` | First/last sequence, item count, manifest count, or empty-padding rules disagree. |
-| `epoch/late-insertion` | A receipt is inserted into a closed epoch instead of the next epoch with `late_for_epoch_id`. |
+| `epoch/late-insertion` | A receipt is inserted into a closed epoch instead of the next epoch with `late_for_epoch_id`, or its `late_for_epoch_id` is not lower than its own `epoch_id` (D-82). |
 | `epoch/anchor-deadline` | Closed event does not set deadline to close+86,400, or its anchor-submitted event occurs after that declared deadline. |
-| `epoch/fork` | Conflicting event chains or distinct manifests exist for one owner/epoch. |
+| `epoch/fork` | Distinct manifests exist for one owner/epoch, or a `fork_declared` event is carried; conflicting event chains are `epoch/event-chain` first (D-82). |
 | `manifest/index-order` | Objective entries are not strictly ordered by committed time, epoch sequence, receipt ID. |
 | `manifest/index-gap` | Leaf indices are not contiguous from zero or epoch sequences have an unexplained gap in a complete manifest. |
 | `manifest/index-duplicate` | Index repeats receipt ID or epoch sequence. |
@@ -916,15 +956,28 @@ implementation MUST keep each value stable for one released build or effective
 configuration and MUST document its selected preimage; these fields bind verifier
 identity and are not interoperability digests.
 
-If bundle decoding fails before scope or trust policy is known, the signed verdict
-uses the normative early-failure sentinel: every unknown ID, digest, and numeric
-scope/trust time is all-zero; `receipt_kinds=["observation"]`,
+A `nonconformant` or `indeterminate` verdict is populated by this table and
+nothing else (D-82). The normative early-failure sentinel is: every unknown ID,
+digest, and numeric scope/trust time all-zero; `receipt_kinds=["observation"]`,
 `coverage="valid_subset"`, `ingress_completeness="not_established"`, and the
-requested profile defaults to `AAR-1`. The actual evaluation time remains in both
-`evaluated_at` and `trust_policy.evaluation_time`. A requested scope, profile, or
-trust value explicitly configured at the verifier replaces only its corresponding
-sentinel. A decoded valid requested value is likewise used even when a later step
-fails.
+requested profile `AAR-1`.
+
+| Field | Population on a failure verdict |
+|---|---|
+| `scope` (`tenant_id`, `site_id`, `committed_from`, `committed_until`, `receipt_kinds`, `coverage`), `limits.requested_profile`, `selector_commitment` | The decoded bundle values once step 3 has succeeded as a whole; else the sentinel. |
+| `trust_policy.trust_store_digest`, `trust_store_snapshot_id`, `verifier_policy_digest`, `anchor_heads_digest` | The validated values once step 5 has succeeded as a whole; else the sentinel. |
+| `trust_policy.evaluation_time`, `evaluated_at` | Always the caller's explicitly supplied time. |
+| `trust_policy.replay_state_digest`, `prior_emissions_digest` | Always the digest of the supplied input (an empty supplied state binds the digest of an empty map); all-zero only when nothing was supplied. |
+| `limits.evaluated_profile` | `below_AAR-1`. |
+| `limits.technical_integrity` | `not_evaluated` when the failing step is 1 to 5; `not_satisfied` from step 6 on. |
+| `limits.discovery_completeness` | `not_established`. |
+| `limits.maximum_time_class`, `maximum_provenance_class`, `maximum_outcome_level`, `input_origin_ancestry` | `not_evaluated`; aggregates computed at step 19 are discarded on a later failure. |
+| `observations` | Empty. |
+
+A requested scope, profile, or trust value explicitly configured at the verifier
+replaces only its corresponding sentinel. The shape of `trust_inputs` (snapshot,
+root records, expected anchor heads) is part of the step-3 bundle schema in both
+verifiers; step 5 validates its content.
 
 `reason` MUST be absent for `conformant` and MUST be exactly one section 3 code for
 `nonconformant` or `indeterminate`. A `conformant` verdict MUST carry a fully

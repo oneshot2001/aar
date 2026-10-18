@@ -1641,3 +1641,109 @@ self-asserted by the party whose key is in question. Exempting unresolved
 subjects as "unused": lets a dangling `credential_id` downgrade
 `credential/revoked` to `credential/status-missing`, the masking D-52
 forbids.
+
+## D-82 — Verifier parity: one failure-verdict table, forks reject, nested envelopes travel with their receipt, chains are transitive, the schema table is bounded
+
+**Decision.** Ten parts, no wire change (v0.2.5; verdict `v: 4`; protected
+content types unchanged). Each closes a cross-implementation divergence the
+2026-10-08 parity audit (`docs/verifier-parity-audit-2026-10-08.md`) or the
+2026-10-17 scoping pass found. Every rule is pinned by a fixture in both
+verifiers before the audited rows are re-pinned.
+
+1. **Failure-verdict population (§5).** A `nonconformant` or `indeterminate`
+   verdict is populated by the §5 table and nothing else: scope,
+   `requested_profile` and `selector_commitment` carry decoded bundle values
+   once step 3 has succeeded as a whole; the four trust values once step 5
+   has; `evaluation_time` is always the caller's; replay and prior digests
+   always bind the supplied inputs and are zero only when nothing was
+   supplied; `evaluated_profile` is `below_AAR-1`; `technical_integrity` is
+   `not_evaluated` for a failure at steps 1 to 5 and `not_satisfied` from
+   step 6 on; `discovery_completeness` is `not_established`; every maximum
+   class and `input_origin_ancestry` is `not_evaluated`, step-19 aggregates
+   discarded on a later failure; `observations` is empty. The shape of
+   `trust_inputs` is step-3 bundle schema in both verifiers.
+2. **Forks.** A carried `fork_declared` event is `epoch/fork` at step 14: the
+   wire's `handling` is `reject_and_surface`, so the verifier rejects the
+   epoch and surfaces the declaration in its report. Conflicting event chains
+   fail `epoch/event-chain` at chain linkage, before any fork rule; distinct
+   manifests for one owner/epoch remain `epoch/fork`. The former positive
+   fixture `epoch-event-fork-declared` becomes a negative (`epoch/fork`, step
+   14); a branching-chain fixture pins the `epoch/event-chain` precedence.
+3. **Ordering at step 3.** Sort order and uniqueness of every artifact array
+   are checked at step 3 before step 6 touches any envelope (§2 already said
+   so; pyref checked them per category after verifying it). A non-rejecting
+   credential index may be built first, because an envelope may reference a
+   credential that appears later in array order.
+4. **Per-envelope traversal and nested position (step 6).** Each signed object
+   completes sub-steps 1 to 9 before the next is decoded; an embedded
+   delegation is validated immediately after its enclosing authorization
+   receipt, and that receipt's nested presentation manifest immediately after
+   the delegation. The harness's parse-everything-first pass is replaced; the
+   masking class recorded under D-77, D-78, and D-81 closes.
+5. **Outcome subject edge (step 10).** An `outcome_observation` MUST carry
+   exactly one `observed_outcome` parent whose receipt id equals the body's
+   `subject_id`; zero or several such parents, or a different id, is
+   `receipt/outcome-subject-mismatch`.
+6. **Evidence-class initialisation (step 19).** Every maximum class starts at
+   `not_evaluated` in both verifiers. This changes one successful verdict: an
+   observation-only bundle reported `self_asserted` provenance in pyref and
+   `not_evaluated` in the harness; `not_evaluated` is the ruled value and the
+   pyref bytes change. Observation-only and receipt-free subsets are fixtured.
+7. **Late insertion and cross-epoch binding (step 14, §2.1).** A receipt whose
+   `late_for_epoch_id` is not lower than its own `epoch_id` is
+   `epoch/late-insertion`, manifest carried or not. A cross-epoch link's
+   manifest MUST belong to the parent receipt's epoch owner, epoch, tenant,
+   and site, and the link's anchor MUST bind that manifest; otherwise
+   `graph/cross-epoch-unanchored`. pyref gains both rules; a wrong-number and
+   a same-number-different-owner fixture pin them.
+8. **Bounded schema table (step 6).** In CDDL field order within each
+   production: every closed scalar enum (listed in 6.6), every `unix-time`
+   and `sequence` field for presence then type, and a receipt's `freshness`
+   and `binding` sub-maps for presence then type of each member. Three
+   pinned precedences stand: credential `principal_type` before fixed-size
+   ids; presentation `state` before ids; request coordinate fields judged at
+   step 7 as `request/coordinate-mismatch`. An unknown evidence class is
+   therefore a step-6 `schema/enum-unknown`; it was an uncaught exception in
+   pyref and an unvalidated string copied into the signed verdict by the
+   harness. Traversal of every remaining field is a separate ruling
+   (BACKLOG).
+9. **Delegation chains (step 13).** `parent_delegations` is traversed
+   transitively, array order, depth first. Every link MUST resolve to a
+   carried top-level delegation; contain the child's window; contain each of
+   the child's four scope lists as a subset; share tenant and site; not widen
+   `use` (a `one_time` parent forbids a `reusable` child, and a parent
+   `invocation_id` MUST equal the child's); and not name a delegation already
+   on the path. Any failure is `delegation/chain-invalid`. Both verifiers
+   inspected only immediate parents; pyref checked existence only.
+10. **Full-corpus gate.** pyref's corpus rows carry `first_failure_step`; the
+    harness cross-implementation test compares result, reason, step, and
+    verdict bytes on every fixture the Python enumeration lists, with the
+    count derived from that enumeration, and is no longer skipped. The
+    audited rows are re-pinned once, after every rule above lands, as the
+    measured change set (the audit's 39 field-only rows, its one result row,
+    and the rows parts 1 and 6 add), never before.
+
+**Why.** Two clean-room verifiers agreeing byte for byte is the whole value of
+the corpus gate; a divergence on identical bytes means one implementation is
+wrong or the spec was silent, and the audit rightly forbade re-pinning the 40
+rows by fiat. Each part says which. Parts 1 and 2 are spec silence resolved;
+3, 5, 6, 7, and 9 are pyref or harness defects against text that already
+existed; 4 and 8 close the masking class and the crash-or-overclaim class the
+builds since D-77 kept logging. The Codex challenge of 2026-10-17 corrected the
+first draft on five points: the fork rule had been read backwards (pyref's
+`>1` manifest check rejects, it does not license accepting a declaration);
+scope containment on chains is four finite subset checks, not a deferral;
+pyref's artifact ordering ran after verification; the acceptance table had
+to be per field, not "whichever step validated it"; and a universal CDDL
+traversal would have reversed three pinned precedences, so the table is
+bounded and the precedences are written down.
+
+**Alternatives considered.** Accept a fork declaration as mere surfacing:
+contradicts `reject_and_surface` and the `epoch/fork` row. Window-only chain
+checks with scope deferred: leaves a normative row unenforced for a cheap
+check. Universal field traversal now: reverses pinned precedences and moves
+generated malformed-input variants from later steps to step 6 without a
+ruling. Keep pyref's `self_asserted` initialisation: a successful verdict
+would claim a provenance class for a bundle with no inference. Re-pin the 40
+rows first and rule later: launders bugs as identity changes, which the
+audit forbids.
