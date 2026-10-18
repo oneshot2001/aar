@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-root-kind-list",
+  "expected_code": "graph/root-forbidden",
+  "mutation_description": "The parentless observation's root kind is a one-element list (amendment p; pyref had used it as a dict key).",
+  "expected_result": "nonconformant",
+  "expected_step": 12
+}

@@ -1,0 +1,7 @@
+{
+  "name": "receipt-outcome-two-subject-edges",
+  "expected_code": "receipt/outcome-subject-mismatch",
+  "mutation_description": "The outcome observation carries observed_outcome edges to both the dispatch and its attempt; the subject still names the dispatch.",
+  "expected_result": "nonconformant",
+  "expected_step": 10
+}

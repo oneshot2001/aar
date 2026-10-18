@@ -1,0 +1,7 @@
+{
+  "name": "schema-enum-evidence-outcome-level",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Dispatch evidence outcome level acknowledged.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,7 @@
+{
+  "name": "schema-enum-manifest-late-arrival-policy",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Manifest late_arrival_policy same_epoch.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

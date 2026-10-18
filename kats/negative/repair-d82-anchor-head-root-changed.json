@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-anchor-head-root-changed",
+  "expected_code": "anchor/head-mismatch",
+  "mutation_description": "The anchor record's head.root differs from the expected head at the same tree size (amendment y; the harness had compared anchor_root).",
+  "expected_result": "nonconformant",
+  "expected_step": 17
+}

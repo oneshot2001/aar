@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-selector-kinds-duplicate-unsorted",
+  "expected_code": "schema/unsorted-set",
+  "mutation_description": "receipt_kinds [inference, observation, inference]: the first disordered pair is reported before the later duplicate (amendment i).",
+  "expected_result": "nonconformant",
+  "expected_step": 3
+}

@@ -1,0 +1,7 @@
+{
+  "name": "graph-cross-epoch-same-number-other-owner",
+  "expected_code": "graph/cross-epoch-unanchored",
+  "mutation_description": "A historical edge from epoch 42 into 43 names a carried, anchored epoch-42 manifest of a different owner (an outsider EP).",
+  "expected_result": "nonconformant",
+  "expected_step": 12
+}

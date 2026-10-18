@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-dispatch-dispatched-at-text",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The dispatch body dispatched_at is text.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

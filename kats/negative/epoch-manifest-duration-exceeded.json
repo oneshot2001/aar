@@ -1,0 +1,7 @@
+{
+  "name": "epoch-manifest-duration-exceeded",
+  "expected_code": "epoch/duration-exceeded",
+  "mutation_description": "The manifest's opened_at precedes its closed_at by more than 86,400 s while the open/close events stay within; the manifest pair is judged first.",
+  "expected_result": "nonconformant",
+  "expected_step": 14
+}

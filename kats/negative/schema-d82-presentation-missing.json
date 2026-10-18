@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-presentation-missing",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "Presentation transform without operation.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

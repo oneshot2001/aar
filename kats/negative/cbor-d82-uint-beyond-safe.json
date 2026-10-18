@@ -1,0 +1,5 @@
+{
+  "name": "cbor-d82-uint-beyond-safe",
+  "expected_code": "cbor/malformed",
+  "mutation_description": "The integer 2^53 (outside the profile)."
+}

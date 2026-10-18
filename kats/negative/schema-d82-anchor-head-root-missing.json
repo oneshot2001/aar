@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-anchor-head-root-missing",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "The anchor record's head lacks root; the harness had said conformant.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

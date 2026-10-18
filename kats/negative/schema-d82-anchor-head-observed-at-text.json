@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-anchor-head-observed-at-text",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The anchor record head.observed_at is text.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,5 @@
+{
+  "name": "cbor-d82-depth-33",
+  "expected_code": "resource/cbor-depth",
+  "mutation_description": "Thirty-three arrays nested in a top-level array, innermost empty: the thirty-third nested container exceeds the bound (amendment ao)."
+}

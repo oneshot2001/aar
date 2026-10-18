@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-cose-protected-undecodable",
+  "expected_code": "cose/protected-not-map",
+  "mutation_description": "The first credential's protected bstr does not decode (amendment h).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-native-attestation-int-keyed",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "A root observation native attestation that is an int-keyed map.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,7 @@
+{
+  "name": "schema-enum-presentation-transform-operation",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Presentation transform operation rotate.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

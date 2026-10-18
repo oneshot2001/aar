@@ -1,0 +1,5 @@
+{
+  "name": "cbor-d82-float64",
+  "expected_code": "cbor/float-forbidden",
+  "mutation_description": "A top-level double (1.0); the float is recognised before its bytes are read as an argument (amendment ao)."
+}

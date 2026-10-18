@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-presentation-null",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The approval authorization carries presentation: null; a present null nested envelope is a step-6 type failure (amendment g).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

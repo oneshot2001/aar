@@ -1,0 +1,7 @@
+{
+  "name": "schema-enum-outcome-state",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Outcome observation body state pending.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

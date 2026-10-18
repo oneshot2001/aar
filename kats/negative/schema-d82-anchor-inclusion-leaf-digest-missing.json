@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-anchor-inclusion-leaf-digest-missing",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "The anchor record's inclusion lacks leaf_digest.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

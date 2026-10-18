@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-boundary-entry-epoch-seq-text",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The complete range carries a left_boundary whose entry epoch_seq is text.",
+  "expected_result": "nonconformant",
+  "expected_step": 3
+}

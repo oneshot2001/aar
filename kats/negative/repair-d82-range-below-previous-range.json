@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-range-below-previous-range",
+  "expected_code": "bundle/range-noncontiguous",
+  "mutation_description": "The selector window starts at a later index entry; range 1 is the valid slice and range 2 carries leaf 0 with a bad sibling: ranges of one manifest must carry strictly increasing leaf indices, judged before the proofs (amendment al; pyref had said range-proof-invalid).",
+  "expected_result": "nonconformant",
+  "expected_step": 18
+}

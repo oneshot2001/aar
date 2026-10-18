@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-range-manifest-id-missing",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "The complete range lacks manifest_id; every member of a range proof is checked at step 3 (amendment ab; round 4 had pinned bundle/range-manifest-missing at 18).",
+  "expected_result": "nonconformant",
+  "expected_step": 3
+}

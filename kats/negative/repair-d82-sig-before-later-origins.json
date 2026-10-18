@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-sig-before-later-origins",
+  "expected_code": "sig/verify-failed",
+  "mutation_description": "Corrupt credentials[0]'s signature and give a later inference a non-array origins; each envelope completes sub-steps 1 to 9 before the next is decoded.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

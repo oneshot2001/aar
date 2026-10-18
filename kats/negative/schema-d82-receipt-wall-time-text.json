@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-receipt-wall-time-text",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "Root observation evidence.time.wall_time text; formerly conformant in both verifiers.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

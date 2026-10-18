@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-range-boundary-proof-invalid",
+  "expected_code": "bundle/range-proof-invalid",
+  "mutation_description": "The complete range carries a left_boundary whose entry issuer_seq was changed after its proof was built (the harness had not verified boundary proofs).",
+  "expected_result": "nonconformant",
+  "expected_step": 18
+}

@@ -1,8 +1,9 @@
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildClassBoundaryFixtures, buildNegativeFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
+import { buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildD82PositiveFixtures, buildClassBoundaryFixtures, buildNegativeFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
 import { buildStatefulFixtures } from "./stateful-fixtures";
+import { buildFixtures } from "./fixtures";
 
 const harnessDirectory = dirname(fileURLToPath(import.meta.url));
 const outputDirectory = join(harnessDirectory, "..", "kats", "negative");
@@ -17,6 +18,10 @@ for (const fixture of fixtures) {
   await writeFile(join(outputDirectory, `${fixture.filename}.cbor`), fixture.bytes);
   await writeFile(join(outputDirectory, `${fixture.filename}.json`), `${JSON.stringify(fixture.descriptor, null, 2)}\n`);
 }
+
+const fork = buildFixtures().forkDeclared;
+await writeFile(join(outputDirectory, `${fork.filename}.cbor`), fork.bytes);
+await writeFile(join(outputDirectory, `${fork.filename}.json`), `${JSON.stringify(fork.descriptor, null, 2)}\n`);
 
 const statefulDirectory = join(outputDirectory, "stateful");
 await mkdir(statefulDirectory, { recursive: true });
@@ -48,7 +53,7 @@ for (const fixture of terminalOutcomes) {
 
 console.log(`generated ${fixtures.length} stateless, ${stateful.length} stateful, ${classBoundaries.length} class-boundary, and ${terminalOutcomes.length} terminal-state KATs`);
 
-for (const fixture of [...buildD77PositiveFixtures(), ...buildD80D81PositiveFixtures()]) {
+for (const fixture of [...buildD77PositiveFixtures(), ...buildD80D81PositiveFixtures(), ...buildD82PositiveFixtures()]) {
   const directory = join(outputDirectory, "..", "positive");
   await writeFile(join(directory, `${fixture.filename}.cbor`), fixture.bytes);
   await writeFile(join(directory, `${fixture.filename}.json`), `${JSON.stringify(fixture.descriptor, null, 2)}\n`);

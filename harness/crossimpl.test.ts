@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
-import { buildD78ItemVariants, buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildEvidenceCommitFixtures, buildNegativeFixtures, buildPresentationEnumVariants } from "./negative-fixtures";
+import { buildD78ItemVariants, buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildD82PositiveFixtures, buildEvidenceCommitFixtures, buildNegativeFixtures, buildPresentationEnumVariants } from "./negative-fixtures";
 import { verifyBundle } from "./verifier";
 import { parseStatefulPrior } from "./stateful-fixtures";
 
@@ -39,7 +39,7 @@ function cases(): Case[] {
     ...buildD78ItemVariants().map((fixture) => ({ ...fixture, at: AT })),
     ...buildD78ReportVariants().map((fixture) => ({ name: fixture.name, bytes: fixture.bytes, at: AT, code: null, step: null })),
     ...buildD78Fixtures().map((fixture) => ({ name: fixture.filename, bytes: fixture.bytes, at: AT, code: fixture.descriptor.expected_code, step: fixture.descriptor.expected_step ?? null })),
-    ...[...buildD77PositiveFixtures(), ...buildD80D81PositiveFixtures()].map((fixture) => ({ name: fixture.filename, bytes: fixture.bytes, at: AT, code: null, step: null })),
+    ...[...buildD77PositiveFixtures(), ...buildD80D81PositiveFixtures(), ...buildD82PositiveFixtures()].map((fixture) => ({ name: fixture.filename, bytes: fixture.bytes, at: AT, code: null, step: null })),
     ...buildPresentationEnumVariants().map((fixture) => ({ ...fixture, at: AT })),
     ...buildNegativeFixtures().filter((fixture) => fixture.filename.startsWith("repair-")).map((fixture) => ({
       name: fixture.filename, bytes: fixture.bytes, at: AT, code: fixture.descriptor.expected_code, step: fixture.descriptor.expected_step ?? repairStep(fixture.filename),
@@ -103,18 +103,21 @@ for path in _c2_fixture_paths():
     i = r.verdict["verifier"]
     rows.append({"path": str(path), "context": context.hex() if context else None, "prior": prior,
       "expected_code": sidecar.get("expected_code"), "expected_result": sidecar.get("expected_result", _expected_result(sidecar.get("expected_code"))),
-      "result": r.result, "reason": r.reason, "hex": r.verdict_bytes.hex(),
+      "expected_step": sidecar.get("expected_step"),
+      "result": r.result, "reason": r.reason, "step": r.report["first_failure_step"], "hex": r.verdict_bytes.hex(),
       "product": i["product"], "version": i["version"], "build": i["build_digest"].hex(), "config": i["config_digest"].hex()})
-print(json.dumps(rows))
+print(json.dumps({"count": len(_c2_fixture_paths()), "rows": rows}))
 `;
 
-// Skipped: 40 pre-existing failure-verdict gaps (docs/verifier-parity-audit-2026-10-08.md);
-// un-skipping it is the done line of the differential-fuzzing freeze blocker in BACKLOG.md.
-test.skip("every corpus fixture has identical result, reason, and signed verdict bytes in shared context", () => {
+// D-82 part 10: the full-corpus gate. Every fixture the Python enumeration
+// lists must agree on result, reason, first-failure step, and signed verdict
+// bytes; the row count comes from that enumeration, never a literal.
+test("every corpus fixture has identical result, reason, step, and signed verdict bytes in shared context", () => {
   const proc = Bun.spawnSync(["python3", "-B", "-c", PYREF_CORPUS], { cwd: root });
   expect(proc.exitCode, proc.stderr.toString()).toBe(0);
-  const rows = JSON.parse(proc.stdout.toString());
-  expect(rows).toHaveLength(244);
+  const { count, rows } = JSON.parse(proc.stdout.toString());
+  expect(count).toBeGreaterThan(0);
+  expect(rows).toHaveLength(count);
   for (const row of rows) {
     const ts = verifyBundle(row.context ? fromHex(row.context) : readFileSync(row.path), {
       evaluationTime: AT, replayState: [], priorEmissions: row.prior ? parseStatefulPrior(row.prior) : undefined,
@@ -122,8 +125,10 @@ test.skip("every corpus fixture has identical result, reason, and signed verdict
     });
     expect(row.result, row.path).toBe(row.expected_result);
     expect(row.reason, row.path).toBe(row.expected_code);
+    if (row.expected_step !== null) expect(row.step, row.path).toBe(row.expected_step);
     expect(ts.result, row.path).toBe(row.result);
     expect(ts.ok ? null : ts.reason, row.path).toBe(row.reason);
+    expect(ts.ok ? null : ts.step, row.path).toBe(row.step);
     expect(toHex(ts.verdictEnvelope!), row.path).toBe(row.hex);
   }
 }, 300_000);

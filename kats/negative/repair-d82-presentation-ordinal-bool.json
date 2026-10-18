@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-presentation-ordinal-bool",
+  "expected_code": "receipt/manifest-inconsistent",
+  "mutation_description": "The approval presentation's single artifact carries ordinal true; a bool is never a uint (amendment ah).",
+  "expected_result": "nonconformant",
+  "expected_step": 10
+}

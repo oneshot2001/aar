@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-index-root-int-array",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The manifest index root is the array of its own bytes (round 8; the harness had said conformant).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

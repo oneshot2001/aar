@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-expected-head-larger-same-root",
+  "expected_code": "anchor/head-mismatch",
+  "mutation_description": "The expected head is one leaf larger than the record's head with the same root (amendment y; pyref had accepted it).",
+  "expected_result": "nonconformant",
+  "expected_step": 17
+}

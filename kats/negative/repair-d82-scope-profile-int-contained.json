@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-scope-profile-int-contained",
+  "expected_code": "delegation/scope",
+  "mutation_description": "The permit decision's profile is 7 and the delegation's allowed_profiles is [7]; a non-text value is never contained (amendment ag).",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

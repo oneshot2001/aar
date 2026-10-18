@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-root-null-with-parents",
+  "expected_code": "graph/root-forbidden",
+  "mutation_description": "The derived observation carries root: null beside its parents; a present null is a present root (amendment u).",
+  "expected_result": "nonconformant",
+  "expected_step": 12
+}

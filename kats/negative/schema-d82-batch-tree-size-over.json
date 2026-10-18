@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-batch-tree-size-over",
+  "expected_code": "schema/out-of-range",
+  "mutation_description": "The Merkle batch tree_size is 1,048,577 (amendment ak).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-range-entry-committed-at-text",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The complete range's first entry committed_at is text.",
+  "expected_result": "nonconformant",
+  "expected_step": 3
+}

@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-anchor-manifest-id-not-bytes",
+  "expected_code": "anchor/target-unplanned",
+  "mutation_description": "The anchor record's manifest_id is the integer 5 (record re-identified, re-signed): an unresolved manifest has no plan, so the target is unplanned (step-17 order).",
+  "expected_result": "nonconformant",
+  "expected_step": 17
+}

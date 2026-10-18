@@ -8,5 +8,8 @@
   "computed_ids": {
     "event_id": "ac1ac2d00b87c5d97d7ce659a26e6e83af62b17feae99702019ef8e98ced4d0d",
     "previous_event_digest": "e0ba356c29ce4356ceeeb0500c992517c69e8da0015fa8163de264c1bd4a691e"
-  }
+  },
+  "expected_result": "nonconformant",
+  "expected_code": "epoch/fork",
+  "expected_step": 14
 }

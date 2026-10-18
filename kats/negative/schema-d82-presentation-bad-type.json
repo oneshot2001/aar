@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-presentation-bad-type",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "Presentation transforms text.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-delegation-bad-type",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "Top-level delegation not_after text.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,7 @@
+{
+  "name": "graph-cross-epoch-reason-not-text",
+  "expected_code": "graph/cross-epoch-forbidden",
+  "mutation_description": "A cross-epoch link whose reason is an empty list; formerly an uncaught TypeError in pyref.",
+  "expected_result": "nonconformant",
+  "expected_step": 12
+}

@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-expected-heads-duplicate-target-id",
+  "expected_code": "schema/duplicate-entry",
+  "mutation_description": "The trust inputs name the expected head's target twice (the copy with another root); the first is the good one (amendment ap).",
+  "expected_result": "nonconformant",
+  "expected_step": 3
+}

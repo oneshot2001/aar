@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-anchor-manifest-digest-null",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The anchor record's manifest_digest is null (round 8).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

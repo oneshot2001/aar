@@ -59,14 +59,19 @@ def dumps(value: Any) -> bytes:
 
 @dataclass
 class _Decoder:
+    """Second phase: decode an item the scanner accepted (amendment ao). The
+    scanner owns depth, canonical form, duplicates, tags, floats, and UTF-8;
+    what remains here is structural belt-and-braces (unreachable after the
+    scanner) plus the two defects only this phase sees: a negative integer
+    beyond the profile and a compound map key, both cbor/malformed."""
+
     data: bytes
     offset: int = 0
-    max_depth: int = 32
 
     def _take(self, size: int) -> bytes:
         end = self.offset + size
         if end > len(self.data):
-            raise CBORError("truncated CBOR item", "cbor/malformed")
+            raise CBORError("truncated CBOR item")  # unreachable: the scanner walked the whole item
         result = self.data[self.offset:end]
         self.offset = end
         return result
@@ -74,84 +79,153 @@ class _Decoder:
     def _argument(self, additional: int) -> int:
         if additional < 24:
             return additional
-        sizes = {24: 1, 25: 2, 26: 4, 27: 8}
-        size = sizes.get(additional)
+        size = {24: 1, 25: 2, 26: 4, 27: 8}.get(additional)
         if size is None:
-            if additional == 31:
-                raise CBORError(
-                    "indefinite-length CBOR is forbidden", "cbor/indefinite-length"
-                )
-            raise CBORError("reserved CBOR additional information")
-        value = int.from_bytes(self._take(size), "big")
-        if (size == 1 and value < 24) or (
-            size == 2 and value <= 0xFF
-        ) or (size == 4 and value <= 0xFFFF) or (
-            size == 8 and value <= 0xFFFFFFFF
-        ):
-            raise CBORError("non-shortest CBOR argument", "cbor/non-canonical")
-        return value
+            raise CBORError("reserved CBOR additional information")  # unreachable: the scanner raised first
+        return int.from_bytes(self._take(size), "big")
 
-    def item(self, depth: int = 0) -> Any:
+    def item(self) -> Any:
         initial = self._take(1)[0]
         major, additional = initial >> 5, initial & 0x1F
         if major == 0:
             return self._argument(additional)
         if major == 1:
-            return -1 - self._argument(additional)
+            value = self._argument(additional)
+            if value >= 2 ** 53 - 1:  # -2^53 and below are outside the profile (harness safe-integer parity)
+                raise CBORError("negative integer beyond the profile's safe range")
+            return -1 - value
         if major == 2:
             return self._take(self._argument(additional))
         if major == 3:
-            raw = self._take(self._argument(additional))
-            try:
-                return raw.decode("utf-8")
-            except UnicodeDecodeError as exc:
-                raise CBORError("invalid UTF-8 text string", "cbor/invalid-utf8") from exc
+            return self._take(self._argument(additional)).decode("utf-8")
         if major == 4:
-            if depth >= self.max_depth:
-                raise CBORError("CBOR nesting depth exceeds 32", "resource/cbor-depth")
-            return [self.item(depth + 1) for _ in range(self._argument(additional))]
+            return [self.item() for _ in range(self._argument(additional))]
         if major == 5:
-            if depth >= self.max_depth:
-                raise CBORError("CBOR nesting depth exceeds 32", "resource/cbor-depth")
-            count = self._argument(additional)
             result: dict[Any, Any] = {}
-            encoded_keys: set[bytes] = set()
-            previous_order: tuple[int, bytes] | None = None
-            for _ in range(count):
-                key_start = self.offset
-                key = self.item(depth + 1)
-                key_bytes = self.data[key_start:self.offset]
-                if key_bytes in encoded_keys:
-                    raise CBORError("duplicate map key", "cbor/duplicate-key")
-                encoded_keys.add(key_bytes)
-                order = (len(key_bytes), key_bytes)
-                if previous_order is not None and order <= previous_order:
-                    raise CBORError(
-                        "non-deterministic map-key ordering", "cbor/non-canonical"
-                    )
-                previous_order = order
+            for _ in range(self._argument(additional)):
+                key = self.item()
                 try:
-                    result[key] = self.item(depth + 1)
+                    result[key] = self.item()
                 except TypeError as exc:
                     raise CBORError("unhashable map key") from exc
             return result
         if major == 6:
-            raise CBORError("CBOR tags are forbidden", "cbor/tag-forbidden")
+            raise CBORError("CBOR tags are forbidden", "cbor/tag-forbidden")  # unreachable: the scanner flagged it
         if additional == 20:
             return False
         if additional == 21:
             return True
         if additional == 22:
             return None
-        if additional in {25, 26, 27}:
-            raise CBORError("CBOR floating-point values are forbidden", "cbor/float-forbidden")
-        raise CBORError("unsupported CBOR simple value")
+        raise CBORError("unsupported CBOR simple value")  # floats included; unreachable: the scanner flagged or raised
+
+
+@dataclass
+class _Scan:
+    invalid_utf8: bool = False
+    duplicate: bool = False
+    tag: bool = False
+    float: bool = False
+    non_canonical: bool = False
+
+
+@dataclass
+class _Scanner:
+    """Harness CborScanner parity (D-82 amendment ae): the whole item is walked
+    first; structural defects (depth, indefinite length, truncation, reserved
+    additional information, unsupported simple values, integers beyond 2^53 - 1)
+    raise at once, while profile defects are flagged and reported afterwards in
+    a fixed precedence, so an item that is non-canonical and later malformed is
+    cbor/malformed."""
+
+    data: bytes
+    max_depth: int
+
+    def _arg(self, offset: int, additional: int, scan: _Scan) -> tuple[int, int]:
+        if additional < 24:
+            return additional, offset
+        count = {24: 1, 25: 2, 26: 4, 27: 8}.get(additional, 0)
+        if count == 0:
+            if additional == 31:
+                raise CBORError("indefinite-length CBOR is forbidden", "cbor/indefinite-length")
+            raise CBORError("reserved CBOR additional information")
+        if offset + count > len(self.data):
+            raise CBORError("truncated CBOR item")
+        value = int.from_bytes(self.data[offset:offset + count], "big")
+        if value > 2 ** 53 - 1:
+            raise CBORError("CBOR integer exceeds the profile's safe range")
+        shortest = 0 if value < 24 else 1 if value <= 0xFF else 2 if value <= 0xFFFF else 4 if value <= 0xFFFFFFFF else 8
+        if shortest != count:
+            scan.non_canonical = True
+        return value, offset + count
+
+    def item(self, offset: int, depth: int, scan: _Scan) -> int:
+        if depth > self.max_depth:
+            raise CBORError("CBOR nesting depth exceeds 32", "resource/cbor-depth")
+        if offset >= len(self.data):
+            raise CBORError("truncated CBOR item")
+        initial = self.data[offset]
+        major, additional = initial >> 5, initial & 0x1F
+        if major == 6:
+            scan.tag = True
+            return self.item(self._arg(offset + 1, additional, scan)[1], depth, scan)
+        if major == 7:
+            if additional in (25, 26, 27):  # amendment (ao): a float is recognised before its bytes are read as an argument
+                scan.float = True
+                end = offset + 1 + {25: 2, 26: 4, 27: 8}[additional]
+                if end > len(self.data):
+                    raise CBORError("truncated CBOR item")
+                return end
+            if additional not in (20, 21, 22):
+                raise CBORError("unsupported CBOR simple value")
+            return offset + 1
+        value, cursor = self._arg(offset + 1, additional, scan)
+        if major in (0, 1):
+            return cursor
+        if major in (2, 3):
+            end = cursor + value
+            if end > len(self.data):
+                raise CBORError("truncated CBOR item")
+            if major == 3:
+                try:
+                    self.data[cursor:end].decode("utf-8")
+                except UnicodeDecodeError:
+                    scan.invalid_utf8 = True
+            return end
+        if major == 4:
+            for _ in range(value):
+                cursor = self.item(cursor, depth + 1, scan)
+            return cursor
+        seen: set[bytes] = set()
+        previous: bytes | None = None
+        for _ in range(value):
+            key_start = cursor
+            cursor = self.item(cursor, depth + 1, scan)
+            key = self.data[key_start:cursor]
+            if key in seen:
+                scan.duplicate = True
+            seen.add(key)
+            if previous is not None and (len(previous), previous) >= (len(key), key):
+                scan.non_canonical = True
+            previous = key
+            cursor = self.item(cursor, depth + 1, scan)
+        return cursor
 
 
 def loads(data: bytes, *, max_depth: int = 32) -> Any:
     """Decode exactly one deterministic AAR-profile CBOR item."""
-    decoder = _Decoder(data, max_depth=max_depth)
-    value = decoder.item()
-    if decoder.offset != len(data):
+    scan = _Scan()
+    end = _Scanner(data, max_depth).item(0, 0, scan)
+    if scan.invalid_utf8:
+        raise CBORError("invalid UTF-8 text string", "cbor/invalid-utf8")
+    if scan.duplicate:
+        raise CBORError("duplicate map key", "cbor/duplicate-key")
+    if scan.tag:
+        raise CBORError("CBOR tags are forbidden", "cbor/tag-forbidden")
+    if scan.float:
+        raise CBORError("CBOR floating-point values are forbidden", "cbor/float-forbidden")
+    if end != len(data):
         raise CBORError("trailing bytes after CBOR item", "cbor/trailing-bytes")
-    return value
+    if scan.non_canonical:
+        raise CBORError("non-canonical CBOR encoding", "cbor/non-canonical")
+    return _Decoder(data).item()

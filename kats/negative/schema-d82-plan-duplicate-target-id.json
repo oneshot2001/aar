@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-plan-duplicate-target-id",
+  "expected_code": "schema/duplicate-entry",
+  "mutation_description": "The manifest's anchor plan names its first target twice (the copy under another operator); the first matches the anchor record (amendment ap; pyref had taken the last, the harness the first).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

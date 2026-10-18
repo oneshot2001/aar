@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-graph-dangling-before-root-missing",
+  "expected_code": "graph/dangling-parent",
+  "mutation_description": "The epoch-seq-0 observation lacks its root descriptor and the later derived observation names a parent nobody carries; parents are resolved over every receipt before root rules (amendment c).",
+  "expected_result": "nonconformant",
+  "expected_step": 12
+}

@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-independence-groups-member-int",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The manifest's independence.groups is [5] (round 8; pyref had crashed).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

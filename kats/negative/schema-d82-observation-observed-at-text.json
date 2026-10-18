@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-observation-observed-at-text",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "Root observation body observed_at text; formerly conformant in both verifiers.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

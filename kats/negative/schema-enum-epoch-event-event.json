@@ -1,0 +1,7 @@
+{
+  "name": "schema-enum-epoch-event-event",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Last event event reopen.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

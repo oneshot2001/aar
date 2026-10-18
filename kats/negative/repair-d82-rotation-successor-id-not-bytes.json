@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-rotation-successor-id-not-bytes",
+  "expected_code": "credential/rotation-invalid",
+  "mutation_description": "The rotation's successor_credential_id is the integer 5.",
+  "expected_result": "nonconformant",
+  "expected_step": 8
+}

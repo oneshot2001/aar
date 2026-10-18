@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-trust-snapshot-zero",
+  "expected_code": "schema/out-of-range",
+  "mutation_description": "The trust store's snapshot_id is 32 zero bytes, the verdict's not-evaluated sentinel (digest recomputed) (amendment ah).",
+  "expected_result": "nonconformant",
+  "expected_step": 5
+}

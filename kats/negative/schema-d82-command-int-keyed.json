@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-command-int-keyed",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "An action attempt whose command is an int-keyed map.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

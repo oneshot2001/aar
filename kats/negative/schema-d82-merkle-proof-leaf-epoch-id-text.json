@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-merkle-proof-leaf-epoch-id-text",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "A Merkle proof leaf epoch_id is text; a bundle-level field, judged at step 3.",
+  "expected_result": "nonconformant",
+  "expected_step": 3
+}

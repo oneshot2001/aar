@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-manifest-missing",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "Manifest without opened_at (anchor_deadline is mirrored into the close event, so it would carry a second fault).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

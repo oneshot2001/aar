@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-trust-inputs-missing",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "The bundle has no trust_inputs member (amendment j).",
+  "expected_result": "nonconformant",
+  "expected_step": 3
+}

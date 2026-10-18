@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-issuer-role-list",
+  "expected_code": "receipt/signer-role-mismatch",
+  "mutation_description": "The outcome observation's issuer_role is a list, mirrored in protected -70006; a non-text role matches no role (amendment q).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

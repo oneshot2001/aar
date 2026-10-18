@@ -1,0 +1,8 @@
+{
+  "name": "d82-receipt-verified-after-window",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "The root observation's freshness window closes one second after it was committed; the window bounds emission, not evaluation (amendment v)."
+}

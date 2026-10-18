@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-close-manifest-id-missing",
+  "expected_code": "epoch/span-count-mismatch",
+  "mutation_description": "The close event's body lacks manifest_id (event re-identified, chain relinked); the manifest falls back to the only carried one and the close names none.",
+  "expected_result": "nonconformant",
+  "expected_step": 14
+}

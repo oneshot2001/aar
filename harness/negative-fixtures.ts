@@ -1,5 +1,5 @@
 import { CborScalar, CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
-import { deterministicId, domainHash, hash, id16, P256_HALF_ORDER, signDetached } from "./crypto";
+import { deterministicId, domainHash, hash, id16, P256_HALF_ORDER, P256_ORDER, signDetached } from "./crypto";
 import { buildFixtures } from "./fixtures";
 import { buildCountersignFixtures } from "./countersign-fixtures";
 import { promotedProofWithDomain, promotedRoot, rfc6962Leaf } from "./merkle";
@@ -241,15 +241,16 @@ export function buildMalformedTypeVariants(): { label: string; bytes: Uint8Array
     { label: "receipt binding non-map", code: "schema/bad-type", step: 6, build: (bundle) => swapPayload(bundle, "receipts", (value) => { value.binding = 5; }) },
     { label: "request_id array", code: "schema/bad-type", step: 6, build: (bundle) => swapPayload(bundle, "requests", (value) => { value.request_id = [...(value.request_id as Uint8Array)]; }) },
     { label: "receipt committed_at non-uint", code: "schema/bad-type", step: 6, build: (bundle) => swapPayload(bundle, "receipts", (value) => { (value.emission as Obj).committed_at = "soon"; }) },
-    { label: "receipt committed_at missing", code: "schema/bad-type", step: 6, build: (bundle) => swapPayload(bundle, "receipts", (value) => { delete (value.emission as Obj).committed_at; }) },
+    // D-82 part 8: the receipt sub-map members are presence-then-type at step 6.
+    { label: "receipt committed_at missing", code: "schema/missing-field", step: 6, build: (bundle) => swapPayload(bundle, "receipts", (value) => { delete (value.emission as Obj).committed_at; }) },
     { label: "credential subject_kid array", code: "schema/bad-type", step: 6, build: (bundle) => swapPayload(bundle, "credentials", (value) => { value.subject_kid = [...(value.subject_kid as Uint8Array)]; }) },
     // Post-signature classes: re-signed so the guarded step is actually reached.
     { label: "canonical_command non-bstr", code: "schema/bad-type", step: 7, build: (bundle) => mutateReceipt(bundle, "action_attempt", (value) => { ((value.body as Obj).command as Obj).canonical_command = "not-bytes"; }) },
-    { label: "binding epoch_owner_kid array", code: "schema/bad-type", step: 9, build: (bundle) => mutateReceiptWhere(bundle, (value) => !object(value.root), (value) => { const binding = value.binding as Obj; binding.epoch_owner_kid = [...(binding.epoch_owner_kid as Uint8Array)]; }) },
-    { label: "freshness issued_at non-uint", code: "schema/bad-type", step: 11, build: (bundle) => mutateReceiptWhere(bundle, (value) => !object(value.root), (value) => { (value.freshness as Obj).issued_at = "soon"; }) },
+    { label: "binding epoch_owner_kid array", code: "schema/bad-type", step: 6, build: (bundle) => mutateReceiptWhere(bundle, (value) => !object(value.root), (value) => { const binding = value.binding as Obj; binding.epoch_owner_kid = [...(binding.epoch_owner_kid as Uint8Array)]; }) },
+    { label: "freshness issued_at non-uint", code: "schema/bad-type", step: 6, build: (bundle) => mutateReceiptWhere(bundle, (value) => !object(value.root), (value) => { (value.freshness as Obj).issued_at = "soon"; }) },
     // Both impls must skip a non-map parent edge at the step-10 dispatch clause
     // and converge on the step-11 parents guard (gate-proven divergence class).
-    { label: "dispatch parent edge non-map", code: "schema/bad-type", step: 11, build: (bundle) => mutateReceipt(bundle, "dispatch", (value) => { const parents = value.parents as CborValue[]; const index = parents.findIndex((parent) => object(parent) && parent.edge_type === "attempted_as"); if (index < 0) throw new Error("attempted_as edge missing"); parents[index] = 5; }) },
+    { label: "dispatch parent edge non-map", code: "schema/bad-type", step: 6, build: (bundle) => mutateReceipt(bundle, "dispatch", (value) => { const parents = value.parents as CborValue[]; const index = parents.findIndex((parent) => object(parent) && parent.edge_type === "attempted_as"); if (index < 0) throw new Error("attempted_as edge missing"); parents[index] = 5; }) },
     // A parent edge omitting a CDDL-required field converges on the same
     // step-11 guard (round-2 gate class: pyref died KeyError at step 12).
     { label: "parent edge missing edge_type", code: "schema/bad-type", step: 11, build: (bundle) => mutateReceipt(bundle, "dispatch", (value) => { const parents = value.parents as CborValue[]; const index = parents.findIndex((parent) => object(parent) && parent.edge_type === "attempted_as"); if (index < 0) throw new Error("attempted_as edge missing"); delete (parents[index] as Obj).edge_type; }) },
@@ -453,6 +454,9 @@ function addLaterDominatorDefect(bundle: Obj): void {
   sortArtifacts(bundle, "receipts");
 }
 
+// n arrays nested one in the next, innermost empty (the reviewer's round-3 shape).
+function nest(n: number): CborValue { let value: CborValue = []; for (let i = 1; i < n; i += 1) value = [value]; return value; }
+
 function withoutField(value: Obj, field: string): Obj {
   return Object.fromEntries(Object.entries(value).filter(([key]) => key !== field));
 }
@@ -499,6 +503,11 @@ function mutateEmbeddedDelegation(bundle: Obj, mutation: (value: Obj) => void): 
   }
 }
 
+// Probe-test entry point (verifier.test.ts): the embedded-delegation mutator with cascade.
+export function mutateEmbeddedDelegationForProbe(bundle: Obj, mutation: (value: Obj) => void): void {
+  mutateEmbeddedDelegation(bundle, mutation);
+}
+
 function rebuildEventChain(bundle: Obj, manifest: Obj): void {
   const events = (artifacts(bundle).epoch_events as CborValue[]).map((entry) => ({ envelope: entry, value: clone(payload(entry)) }))
     .sort((a, b) => (a.value.event_seq as number) - (b.value.event_seq as number));
@@ -542,25 +551,13 @@ function rebuildAnchor(bundle: Obj, oldManifestId: Uint8Array, manifestEnvelopeV
   const envelope = anchors.find((entry) => equalBytes(payload(entry).manifest_id as Uint8Array, oldManifestId));
   if (envelope === undefined) throw new Error("anchor for rebuilt manifest missing");
   if (!Array.isArray(manifestEnvelopeValue)) throw new Error("rebuilt manifest envelope malformed");
-  const manifestEnvelope = manifestEnvelopeValue;
-  const manifest = payload(manifestEnvelope);
-  const next = clone(payload(envelope));
-  next.manifest_id = manifest.manifest_id!;
-  next.manifest_digest = hash(manifestEnvelope[0] as Uint8Array);
-  delete next.consistency;
-  const leafObject: Obj = { tenant_id: next.tenant_id!, site_id: next.site_id!, epoch_id: next.epoch_id!, manifest_id: next.manifest_id!, manifest_digest: next.manifest_digest! };
-  const leaf = rfc6962Leaf(encodeCbor(["AAR-ANCHOR-LEAF-v1", leafObject]));
-  const inclusion = next.inclusion as Obj;
-  inclusion.leaf_digest = leaf;
-  const root = rfcRootFromProof(leaf, inclusion.leaf_index as number, inclusion.tree_size as number, inclusion.siblings as Uint8Array[]);
-  next.anchor_root = root;
-  (next.head as Obj).root = root;
-  next.anchor_id = domainHash("AAR-ANCHOR-ID-v1", Object.fromEntries(Object.entries(next).filter(([key]) => key !== "anchor_id")));
-  anchors[anchors.indexOf(envelope)] = resign(envelope, next);
+  const rebound = rebindAnchor(envelope, manifestEnvelopeValue);
+  const next = payload(rebound);
+  anchors[anchors.indexOf(envelope)] = rebound;
   sortArtifacts(bundle, "anchors");
   const heads = ((bundle.trust_inputs as Obj).expected_anchor_heads as Obj[]);
   const expected = heads.find((entry) => same(entry.target_id, (next.target as Obj).target_id));
-  if (expected !== undefined) expected.root = root;
+  if (expected !== undefined) expected.root = next.anchor_root!;
 }
 
 function rebuildManifest(bundle: Obj, mutation: (manifest: Obj) => void, keepAnchor = false): void {
@@ -1087,6 +1084,213 @@ export function buildD80D81PositiveFixtures() {
   ];
 }
 
+// D-82 helpers.
+function flipSignature(envelope: CborValue): CborValue[] {
+  const value = cose(envelope);
+  const signature = new Uint8Array(value[3] as Uint8Array);
+  signature[0] = signature[0]! ^ 1;
+  value[3] = signature;
+  return [(envelope as CborValue[])[0]!, encodeCbor(value)];
+}
+
+// Single-fault kit (Codex P2, round 2): every schema fixture carries exactly
+// its fault, with content ids recomputed over the mutated claims and every
+// touched envelope re-signed by its key.
+// Mutate the nested presentation of the approval authorization: presentation
+// re-identified and re-signed by the approver, the enclosing receipt re-signed.
+function mutatePresentation(bundle: Obj, mutate: (value: Obj) => void): void {
+  mutateReceiptWhere(bundle, (p) => p.kind === "authorization" && (p.body as Obj).presentation !== undefined, (p) => {
+    const presentation = (p.body as Obj).presentation!;
+    const next = clone(payload(presentation));
+    mutate(next);
+    next.presentation_id = domainHash("AAR-PRESENTATION-MANIFEST-v1", withoutField(next, "presentation_id"));
+    (p.body as Obj).presentation = signDetached(next, contentType(presentation), signerFor(presentation)).envelope;
+  });
+}
+
+// Mutate receipts matching the predicate and re-derive every dependent receipt
+// id (parent edges, body references, intended parents) through rewriteD78Receipts.
+function mutateReceiptsCascade(bundle: Obj, predicate: (value: Obj) => boolean, mutate: (value: Obj) => void): void {
+  rewriteD78Receipts(bundle, (r) => { if (predicate(r)) mutate(r); });
+}
+
+// Re-link previous_event_digest along the event chain without touching bodies
+// (rebuildEventChain rewrites close/anchor bodies from the manifest).
+function relinkEventChain(bundle: Obj): void {
+  const list = artifacts(bundle).epoch_events as CborValue[];
+  const events = list.map((envelope) => ({ envelope, value: clone(payload(envelope)) })).sort((a, b) => (a.value.event_seq as number) - (b.value.event_seq as number));
+  let priorPayload: Uint8Array | undefined;
+  const rebuilt: CborValue[] = [];
+  for (const event of events) {
+    if (priorPayload !== undefined) event.value.previous_event_digest = hash(priorPayload);
+    event.value.event_id = domainHash("AAR-EPOCH-EVENT-ID-v1", withoutField(event.value, "event_id"));
+    const signed = resign(event.envelope, event.value);
+    rebuilt.push(signed);
+    priorPayload = signed[0] as Uint8Array;
+  }
+  artifacts(bundle).epoch_events = rebuilt;
+  sortArtifacts(bundle, "epoch_events");
+}
+
+// Mutate the last event of the chain (nothing links to it), re-identified and re-signed.
+function mutateLastEvent(bundle: Obj, mutate: (value: Obj) => void): void {
+  mutateArtifact(bundle, "epoch_events", (p) => p.event === "anchor_submitted", mutate);
+}
+
+// Mutate the Merkle batch and point the carried proofs at its recomputed id (the leaf preimage excludes batch_id).
+function mutateMerkleBatch(bundle: Obj, mutate: (value: Obj) => void): void {
+  mutateArtifact(bundle, "merkle_batches", () => true, mutate);
+  const batchId = payload((artifacts(bundle).merkle_batches as CborValue[])[0]!).batch_id!;
+  for (const proof of artifacts(bundle).merkle_proofs as Obj[]) proof.batch_id = batchId;
+  sortArtifacts(bundle, "merkle_proofs");
+}
+
+// A ladder of top-level delegations: `levels` deep, `width` wide, every
+// delegation naming every delegation of the next level (shared ancestors).
+// Returns the ids of the first level for the embedded delegation to name.
+export function addDelegationLadder(bundle: Obj, levels: number, width: number): Uint8Array[] {
+  const list = artifacts(bundle).delegations as CborValue[];
+  const template = clone(payload(list[0]!));
+  list.length = 0; // the unreferenced base delegation leaves room under the 1,000 ceiling
+  let next: Uint8Array[] = [];
+  for (let level = levels - 1; level >= 0; level -= 1) {
+    const ids: Uint8Array[] = [];
+    for (let column = 0; column < width; column += 1) {
+      const claims = clone(template);
+      claims.replay_domain = deterministicId(`d82-ladder:${level}:${column}`);
+      claims.parent_delegations = next;
+      claims.delegation_id = domainHash("AAR-DELEGATION-ID-v1", withoutField(claims, "delegation_id"));
+      list.push(signDetached(claims, "application/aar-delegation+cbor;v=0.2", "authority_signing").envelope);
+      ids.push(claims.delegation_id as Uint8Array);
+    }
+    next = ids;
+  }
+  sortArtifacts(bundle, "delegations");
+  return next;
+}
+
+// Re-bind an anchor record to a (possibly new) manifest envelope: leaf digest,
+// inclusion root, head root, and anchor_id are recomputed and the record re-signed.
+function rebindAnchor(envelope: CborValue, manifestEnvelope: CborValue[], epochId?: number): CborValue[] {
+  const manifest = payload(manifestEnvelope);
+  const next = clone(payload(envelope));
+  next.manifest_id = manifest.manifest_id!;
+  next.manifest_digest = hash(manifestEnvelope[0] as Uint8Array);
+  if (epochId !== undefined) next.epoch_id = epochId;
+  delete next.consistency;
+  const leafObject: Obj = { tenant_id: next.tenant_id!, site_id: next.site_id!, epoch_id: next.epoch_id!, manifest_id: next.manifest_id!, manifest_digest: next.manifest_digest! };
+  const leaf = rfc6962Leaf(encodeCbor(["AAR-ANCHOR-LEAF-v1", leafObject]));
+  const inclusion = next.inclusion as Obj;
+  inclusion.leaf_digest = leaf;
+  const root = rfcRootFromProof(leaf, inclusion.leaf_index as number, inclusion.tree_size as number, inclusion.siblings as Uint8Array[]);
+  next.anchor_root = root;
+  (next.head as Obj).root = root;
+  next.anchor_id = domainHash("AAR-ANCHOR-ID-v1", withoutField(next, "anchor_id"));
+  return resign(envelope, next);
+}
+
+// Add a second manifest (same plan) for epochId under owner, with an anchor
+// record that binds it; no events accompany it (step 12 fixtures never reach 14).
+function addManifestWithAnchor(bundle: Obj, epochId: number, owner: TestKeyName): { manifest: Obj; anchor: Obj } {
+  const manifestEnvelope = (artifacts(bundle).epoch_manifests as CborValue[])[0]!;
+  const manifest = clone(payload(manifestEnvelope));
+  manifest.epoch_id = epochId; manifest.epoch_owner_kid = TEST_KEYS[owner].kid;
+  manifest.manifest_id = domainHash("AAR-EPOCH-MANIFEST-ID-v1", withoutField(manifest, "manifest_id"));
+  const signed = signDetached(manifest, contentType(manifestEnvelope), owner).envelope;
+  (artifacts(bundle).epoch_manifests as CborValue[]).push(signed); sortArtifacts(bundle, "epoch_manifests");
+  const anchor = rebindAnchor((artifacts(bundle).anchors as CborValue[])[0]!, signed, epochId);
+  (artifacts(bundle).anchors as CborValue[]).push(anchor); sortArtifacts(bundle, "anchors");
+  return { manifest, anchor: payload(anchor) };
+}
+
+// Keep only the root observation and its derived child; move the child to a later
+// epoch with a cross-epoch link naming the given manifest and anchor.
+function crossEpochChild(bundle: Obj, manifestId: Uint8Array, anchorId: Uint8Array): void {
+  keepReceipts(bundle, (p) => p.kind === "observation");
+  mutateReceiptWhere(bundle, (p) => p.kind === "observation" && !object(p.root), (p) => {
+    (p.binding as Obj).epoch_id = 43;
+    ((p.parents as Obj[])[0]!).cross_epoch = { source_manifest_id: manifestId, source_anchor_id: anchorId, reason: "historical_evidence" };
+  });
+}
+
+// Clone the top-level delegation with a mutation, re-identify and re-sign it, and carry it.
+function addTopLevelDelegation(bundle: Obj, mutate: (delegation: Obj) => void): Obj {
+  const list = artifacts(bundle).delegations as CborValue[];
+  const next = clone(payload(list[0]!));
+  mutate(next);
+  next.delegation_id = domainHash("AAR-DELEGATION-ID-v1", withoutField(next, "delegation_id"));
+  list.push(resign(list[0]!, next)); sortArtifacts(bundle, "delegations");
+  return next;
+}
+
+const TRANSFORM: Obj = {
+  ordinal: 0, operation: "crop", input_digest: deterministicId("transform:in"), output_digest: deterministicId("transform:out"),
+  parameters_digest: deterministicId("transform:parameters"), implementation_id: "aar-kat-transform", implementation_version: "1.0.0",
+};
+
+// D-82 part 6: conformant subsets whose maximum classes start at not_evaluated.
+export function buildD82PositiveFixtures() {
+  const make = (filename: string, description: string, mutate: (bundle: Obj) => void) => {
+    const bundle = baseBundle(); mutate(bundle);
+    return { filename, bytes: encodeCbor(bundle), descriptor: { name: filename, object_type: "bundle" as const,
+      expectation: "conformant" as const, expected_result: "conformant" as const, expected_code: null, mutation_description: description } };
+  };
+  return [
+    make("d82-observer-independent-of-unrelated-observation", "The outcome declares independently_sensed with a qualifying predicate and an observer whose failure domain matches a new parentless observation that is not in the outcome's ancestry (amendment s); the round-4 pyref judged every carried observation.", (bundle) => {
+      clearJournal(bundle);
+      const domain = id16("failure-domain:unrelated-observer");
+      const rootEnvelope = receiptBy(bundle, (p) => p.kind === "observation" && object(p.root));
+      const unrelated = clone(payload(rootEnvelope));
+      unrelated.root = { kind: "human_request", request_id: id16("request:human:unrelated"), request_commitment: deterministicId("human-request:unrelated") };
+      (unrelated.binding as Obj).epoch_seq = 10; (unrelated.emission as Obj).issuer_seq = 110; (unrelated.emission as Obj).committed_at = 1_735_689_710;
+      (unrelated.freshness as Obj).nonce = id16("nonce:unrelated-observation");
+      ((unrelated.body as Obj).source_device as Obj).failure_domain_id = domain;
+      receiptList(bundle).push(resign(rootEnvelope, unrelated, true)); sortArtifacts(bundle, "receipts");
+      const predicateId = addOpaquePayload(bundle, "qualification:independent");
+      mutateReceiptWhere(bundle, (p) => p.kind === "outcome_observation", (p) => {
+        const outcome = (p.evidence as Obj).outcome as Obj; outcome.level = "independently_sensed"; outcome.qualifying_predicate_id = predicateId;
+        ((p.body as Obj).observer as Obj).failure_domain_id = domain;
+      });
+    }),
+    make("d82-chain-shared-ancestors", "The embedded delegation names two carried parents that each name their own parent, both naming one shared grandparent: five delegations, each chain evaluated once.", (bundle) => {
+      mutateEmbeddedDelegation(bundle, (d) => { d.parent_delegations = addDelegationLadder(bundle, 3, 2).slice(0, 2); });
+    }),
+    make("d82-chain-two-levels", "The embedded delegation names a carried parent that names a carried grandparent; every link contains the child's window and scope lists and widens nothing.", (bundle) => {
+      const grandparent = addTopLevelDelegation(bundle, (d) => { const scope = d.scope as Obj; scope.actions = ["camera.ptz.preset", "camera.stream.view"]; scope.allowed_profiles = ["AAR-1", "AAR-2", "AAR-2A", "AAR-3"]; d.not_before = (d.not_before as number) - 100; d.not_after = (d.not_after as number) + 100; });
+      const parent = addTopLevelDelegation(bundle, (d) => { d.parent_delegations = [grandparent.delegation_id!]; d.not_before = (d.not_before as number) - 50; d.not_after = (d.not_after as number) + 50; });
+      mutateEmbeddedDelegation(bundle, (d) => { d.parent_delegations = [parent.delegation_id!]; });
+    }),
+    make("d82-observation-only-subset", "Only the two observation receipts, no journal: no inference, so maximum_provenance_class is not_evaluated in both verifiers.", (bundle) => {
+      clearJournal(bundle); keepReceipts(bundle, (p) => p.kind === "observation");
+    }),
+    make("d82-no-receipts-subset", "An empty selected set with no journal: every maximum class is not_evaluated.", (bundle) => {
+      clearJournal(bundle); keepReceipts(bundle, () => false);
+    }),
+    make("d82-receipt-verified-after-window", "The root observation's freshness window closes one second after it was committed; the window bounds emission, not evaluation (amendment v).", (bundle) => {
+      clearJournal(bundle); mutateReceiptsCascade(bundle, (p) => p.kind === "observation" && object(p.root), (p) => { (p.freshness as Obj).expires_at = ((p.emission as Obj).committed_at as number) + 1; });
+    }),
+    make("d82-invocation-differs-across-derived-from", "The derived observation carries another invocation_id and no correlation binding: it is in no action flow (amendment z).", (bundle) => {
+      clearJournal(bundle); mutateReceiptsCascade(bundle, (p) => p.kind === "observation" && !object(p.root), (p) => { (p.freshness as Obj).invocation_id = id16("other-invocation"); delete p.correlation; });
+    }),
+    make("d82-manifest-predecessor-uncarried", "The only manifest names an uncarried predecessor (amendment w).", (bundle) => rebuildManifest(bundle, (m) => { m.predecessor_manifest_digest = deterministicId("uncarried-predecessor"); }, true)),
+    make("d82-anchor-head-newer-than-expected", "The anchor record's head is three leaves past the expected head with a different root: no conflict (amendment y).", (bundle) => mutateArtifact(bundle, "anchors", () => true, (p) => { const head = p.head as Obj; head.tree_size = (head.tree_size as number) + 3; head.root = deterministicId("newer-head"); })),
+    make("d82-parent-delegation-invocation-absent", "A carried parent delegation without invocation_id and an embedded child without one (the control for amendment u at the chain link).", (bundle) => {
+      const parent = addTopLevelDelegation(bundle, (d) => { delete d.invocation_id; (d.scope as Obj).actions = ["camera.ptz.preset", "camera.stream.view"]; (d.scope as Obj).allowed_profiles = ["AAR-1", "AAR-2", "AAR-2A", "AAR-3"]; d.not_before = (d.not_before as number) - 100; d.not_after = (d.not_after as number) + 100; d.replay_domain = deterministicId("u:parent"); });
+      mutateEmbeddedDelegation(bundle, (d) => { d.parent_delegations = [parent.delegation_id!]; delete d.invocation_id; });
+    }),
+    make("d82-index-order-not-seq-order", "The manifest index holds two uncarried entries whose committed_at order is not their epoch_seq order; the span is the minimum and maximum epoch_seq (amendment ad).", (bundle) => {
+      keepReceipts(bundle, () => false);
+      rebuildManifest(bundle, (m) => {
+        const template = ((m.receipt_index as Obj).entries as Obj[])[0]!;
+        const entries = [{ ...clone(template), leaf_index: 0, receipt_id: deterministicId("uncarried-a"), epoch_seq: 5, committed_at: template.committed_at }, { ...clone(template), leaf_index: 1, receipt_id: deterministicId("uncarried-b"), epoch_seq: 3, committed_at: (template.committed_at as number) + 1 }];
+        m.receipt_index = { ...(m.receipt_index as Obj), entries, leaf_count: 2, root: promotedRoot(entries.map((entry) => domainHash("AAR-MANIFEST-INDEX-LEAF-v1", entry)), "AAR-MANIFEST-INDEX-NODE-v1") };
+        m.item_count = 2; m.sequence_span = { first: 3, last: 5 };
+      }, true);
+      mutateArtifact(bundle, "epoch_events", (p) => p.event === "open", (p) => { (p.body as Obj).first_epoch_seq = 3; }); relinkEventChain(bundle);
+    }),
+  ];
+}
+
 export function buildNegativeFixtures(): NegativeFixture[] {
   const result: NegativeFixture[] = [];
   const add = (value: NegativeFixture): void => { result.push(value); };
@@ -1351,6 +1555,366 @@ export function buildNegativeFixtures(): NegativeFixture[] {
     add({ ...item, filename: name, descriptor: { ...item.descriptor, name, expected_result: "nonconformant", expected_step: step } });
   }
 
+  // D-82 repairs: ordering at step 3, per-envelope traversal at step 6.
+  const d82Repairs: [string, string, number, string, (bundle: Obj) => void][] = [
+    ["repair-d82-order-before-signature", "schema/unsorted-set", 3, "Reverse the receipt array and corrupt the first credential's signature; artifact order is judged at step 3 before any envelope is verified.", (bundle) => {
+      (artifacts(bundle).receipts as CborValue[]).reverse();
+      modifyCose(bundle, "credentials", 0, (value) => { const signature = new Uint8Array(value[3] as Uint8Array); signature[0] = signature[0]! ^ 1; value[3] = signature; });
+    }],
+    ["repair-d82-sig-before-later-origins", "sig/verify-failed", 6, "Corrupt credentials[0]'s signature and give a later inference a non-array origins; each envelope completes sub-steps 1 to 9 before the next is decoded.", (bundle) => {
+      modifyCose(bundle, "credentials", 0, (value) => { const signature = new Uint8Array(value[3] as Uint8Array); signature[0] = signature[0]! ^ 1; value[3] = signature; });
+      mutateReceiptsCascade(bundle, (p) => p.kind === "inference", (p) => { (p.body as Obj).origins = "principal"; });
+    }],
+    ["repair-d82-embedded-delegation-before-later-receipt", "schema/enum-unknown", 6, "The approval authorization's embedded delegation carries use twice (re-identified, re-signed, decision repaired; replay_domain salted so the authorization sorts before another receipt) and the next receipt in array order carries a corrupted signature; a traversal that visited every receipt before its embedded delegation would report sig/verify-failed.", (bundle) => {
+      for (let salt = 0; salt < 1024; salt += 1) {
+        const candidate = clone(bundle);
+        mutateReceiptWhere(candidate, (p) => p.kind === "authorization" && (p.body as Obj).presentation !== undefined, (p) => {
+          const body = p.body as Obj; const d = clone(payload(body.delegation!)); d.use = "twice"; d.replay_domain = deterministicId(`d82-pin:${salt}`);
+          d.delegation_id = domainHash("AAR-DELEGATION-ID-v1", withoutField(d, "delegation_id"));
+          body.delegation = resign(body.delegation!, d);
+          const decision = body.decision as Obj; decision.delegation_id = d.delegation_id!;
+          decision.decision_commitment = domainHash("AAR-DECISION-RECORD-v1", withoutField(decision, "decision_commitment"));
+        });
+        const list = receiptList(candidate);
+        const index = list.findIndex((entry) => { const d = payload(entry); return d.kind === "authorization" && (d.body as Obj).presentation !== undefined; });
+        if (index + 1 < list.length) { list[index + 1] = flipSignature(list[index + 1]!); Object.assign(bundle, candidate); return; }
+      }
+      throw new Error("no salt places the authorization before another receipt");
+    }],
+  ];
+  // D-82 stage 2: outcome subject edge (part 5), cross-epoch binding and late
+  // insertion (part 7), transitive chains (part 9), the step-20 verdict (part 10).
+  const chainRepair = (mutateParent: (parent: Obj) => void) => (bundle: Obj): void => {
+    const parent = addTopLevelDelegation(bundle, mutateParent);
+    mutateEmbeddedDelegation(bundle, (d) => { d.parent_delegations = [parent.delegation_id!]; });
+  };
+  d82Repairs.push(
+    ["receipt-outcome-no-subject-edge", "receipt/outcome-subject-mismatch", 10, "The outcome observation carries only a supports parent (the derived observation) and no observed_outcome edge.", (bundle) => {
+      const observation = payload(receiptBy(bundle, (p) => p.kind === "observation" && !object(p.root)));
+      mutateReceipt(bundle, "outcome_observation", (p) => {
+        const edge = clone((p.parents as Obj[])[0]!); edge.edge_type = "supports"; edge.parent_id = observation.receipt_id!; edge.parent_kind = "observation";
+        p.parents = [edge]; (p.freshness as Obj).intended_parents = [edge.parent_id!];
+      });
+    }],
+    ["receipt-outcome-two-subject-edges", "receipt/outcome-subject-mismatch", 10, "The outcome observation carries observed_outcome edges to both the dispatch and its attempt; the subject still names the dispatch.", (bundle) => {
+      const attempt = payload(receiptBy(bundle, (p) => p.kind === "action_attempt" && (p.body as Obj).disposition === "eligible_for_dispatch"));
+      mutateReceipt(bundle, "outcome_observation", (p) => {
+        const edge = clone((p.parents as Obj[])[0]!); edge.parent_id = attempt.receipt_id!; edge.parent_kind = "action_attempt";
+        (p.parents as Obj[]).push(edge); (p.freshness as Obj).intended_parents = (p.parents as Obj[]).map((e) => e.parent_id!);
+      });
+    }],
+    ["graph-cross-epoch-wrong-epoch-manifest", "graph/cross-epoch-unanchored", 12, "A historical edge from epoch 42 into 43 names a carried, anchored manifest of epoch 41 under the same owner.", (bundle) => {
+      const { manifest, anchor } = addManifestWithAnchor(bundle, 41, "ep_signing");
+      crossEpochChild(bundle, manifest.manifest_id as Uint8Array, anchor.anchor_id as Uint8Array);
+    }],
+    ["graph-cross-epoch-same-number-other-owner", "graph/cross-epoch-unanchored", 12, "A historical edge from epoch 42 into 43 names a carried, anchored epoch-42 manifest of a different owner (an outsider EP).", (bundle) => {
+      d77Credential(bundle, "d77_outsider", "ep_signing", "credential_issuing", [d77Root(bundle).credential_id!], "credential_issuing");
+      const { manifest, anchor } = addManifestWithAnchor(bundle, 42, "d77_outsider");
+      crossEpochChild(bundle, manifest.manifest_id as Uint8Array, anchor.anchor_id as Uint8Array);
+    }],
+    ["repair-d82-late-for-epoch-equal", "epoch/late-insertion", 14, "The outcome observation declares late_for_epoch_id equal to its own epoch_id; no manifest is carried.", (bundle) => {
+      clearJournal(bundle);
+      mutateReceipt(bundle, "outcome_observation", (p) => { (p.binding as Obj).late_for_epoch_id = (p.binding as Obj).epoch_id!; });
+    }],
+    ["repair-d82-branching-chain", "epoch/event-chain", 14, "A second close event reuses event_seq 1 with a different previous_event_digest: conflicting chains fail at chain linkage, before any fork rule.", (bundle) => {
+      const list = artifacts(bundle).epoch_events as CborValue[];
+      const close = list.find((entry) => payload(entry).event === "close")!;
+      const next = clone(payload(close)); next.previous_event_digest = deterministicId("d82-branch");
+      next.event_id = domainHash("AAR-EPOCH-EVENT-ID-v1", withoutField(next, "event_id"));
+      list.push(resign(close, next)); sortArtifacts(bundle, "epoch_events");
+    }],
+    ["repair-d82-chain-scope-widened", "delegation/chain-invalid", 13, "The embedded delegation names a carried parent whose actions omit the child's camera.stream.view.", chainRepair((d) => { (d.scope as Obj).actions = ["camera.ptz.preset"]; })],
+    ["repair-d82-chain-grandparent-missing", "delegation/chain-invalid", 13, "The embedded delegation names a carried parent that names an uncarried grandparent.", chainRepair((d) => { d.parent_delegations = [deterministicId("d82-missing-grandparent")]; })],
+    ["repair-d82-chain-use-widened", "delegation/chain-invalid", 13, "The embedded reusable delegation names a carried one_time parent.", chainRepair((d) => { d.use = "one_time"; })],
+    ["graph-cross-epoch-reason-not-text", "graph/cross-epoch-forbidden", 12, "A cross-epoch link whose reason is an empty list; formerly an uncaught TypeError in pyref.", (bundle) => {
+      const manifest = payload((artifacts(bundle).epoch_manifests as CborValue[])[0]!); const anchor = payload((artifacts(bundle).anchors as CborValue[])[0]!);
+      crossEpochChild(bundle, manifest.manifest_id as Uint8Array, anchor.anchor_id as Uint8Array);
+      mutateReceiptWhere(bundle, (p) => p.kind === "observation" && !object(p.root), (p) => { (((p.parents as Obj[])[0]!).cross_epoch as Obj).reason = []; });
+    }],
+    ["repair-d82-delegation-scope-not-map", "delegation/scope", 13, "The embedded delegation's scope is the integer 5; formerly an uncaught TypeError in pyref.", (bundle) => mutateEmbeddedDelegation(bundle, (d) => { d.scope = 5; })],
+    ["repair-d82-delegation-scope-actions-not-array", "delegation/scope", 13, "The embedded delegation's scope.actions is the integer 5.", (bundle) => mutateEmbeddedDelegation(bundle, (d) => { (d.scope as Obj).actions = 5; })],
+    ["epoch-manifest-duration-exceeded", "epoch/duration-exceeded", 14, "The manifest's opened_at precedes its closed_at by more than 86,400 s while the open/close events stay within; the manifest pair is judged first.", (bundle) => {
+      rebuildManifest(bundle, (m) => { m.opened_at = (m.opened_at as number) - 200_000; }, true);
+    }],
+    // Stage B (round 2): parity on malformed inputs.
+    ["repair-d82-presentation-null", "schema/bad-type", 6, "The approval authorization carries presentation: null; a present null nested envelope is a step-6 type failure (amendment g).", (bundle) => mutateReceiptWhere(bundle, (p) => p.kind === "authorization" && (p.body as Obj).presentation !== undefined, (p) => { (p.body as Obj).presentation = null; })],
+    ["repair-d82-delegation-null", "schema/bad-type", 6, "The approval authorization carries delegation: null.", (bundle) => mutateReceiptWhere(bundle, (p) => p.kind === "authorization" && (p.body as Obj).presentation !== undefined, (p) => { (p.body as Obj).delegation = null; })],
+    ["repair-d82-credential-envelope-three-elements", "schema/bad-type", 6, "The root credential envelope carries a third element; both loose indexes still resolve it for the earlier credential, and it fails at its own position (amendment f).", (bundle) => {
+      const list = artifacts(bundle).credentials as CborValue[];
+      const index = list.findIndex((entry) => (payload(entry).path as CborValue[]).length === 0);
+      list[index] = [...(list[index] as CborValue[]), 0];
+    }],
+    ["repair-d82-cose-protected-empty-map", "cose/alg-missing", 6, "The first credential's protected bstr holds an empty map (amendment h).", (bundle) => modifyCose(bundle, "credentials", 0, (value) => { value[0] = encodeCbor(new Map<CborScalar, CborValue>()); })],
+    ["repair-d82-cose-protected-undecodable", "cose/protected-not-map", 6, "The first credential's protected bstr does not decode (amendment h).", (bundle) => modifyCose(bundle, "credentials", 0, (value) => { value[0] = Uint8Array.of(0xff); })],
+    ["repair-d82-sig-r-at-order", "sig/verify-failed", 6, "The first credential's signature carries r equal to the group order with its original low s; sub-step 5 passes, verification fails (amendment h).", (bundle) => modifyCose(bundle, "credentials", 0, (value) => { value[3] = concat(bigint32(P256_ORDER), (value[3] as Uint8Array).slice(32)); })],
+    ["repair-d82-selector-kinds-duplicate-unsorted", "schema/unsorted-set", 3, "receipt_kinds [inference, observation, inference]: the first disordered pair is reported before the later duplicate (amendment i).", (bundle) => { (bundle.selector as Obj).receipt_kinds = ["inference", "observation", "inference"]; recalcSelector(bundle); }],
+    ["repair-d82-trust-inputs-missing", "schema/missing-field", 3, "The bundle has no trust_inputs member (amendment j).", (bundle) => { delete bundle.trust_inputs; }],
+    ["repair-d82-graph-dangling-before-root-missing", "graph/dangling-parent", 12, "The epoch-seq-0 observation lacks its root descriptor and the later derived observation names a parent nobody carries; parents are resolved over every receipt before root rules (amendment c).", (bundle) => {
+      clearJournal(bundle); keepReceipts(bundle, (p) => p.kind === "observation");
+      mutateReceiptWhere(bundle, (p) => object(p.root), (p) => { delete p.root; });
+      mutateReceiptWhere(bundle, (p) => (p.parents as CborValue[]).length > 0, (p) => { ((p.parents as Obj[])[0]!).parent_id = deterministicId("d82-dangling"); (p.freshness as Obj).intended_parents = [deterministicId("d82-dangling")]; });
+    }],
+    // Round 3 (B-11): step-12 artifact order and root guard, step-13 guarded scope reads.
+    ["repair-d82-graph-root-order-artifact", "graph/root-forbidden", 12, "Two parentless receipts: the inference root (smaller receipt_id, epoch_seq 1) carries a standing_condition_trigger root, forbidden for an inference; the observation root (larger receipt_id, epoch_seq 0) lacks its descriptor. Artifact order reports root-forbidden; epoch_seq order would report root-missing. The observation's nonce is salted until the ids order that way.", (bundle) => {
+      clearJournal(bundle); keepReceipts(bundle, (p) => (p.parents as CborValue[]).length === 0 && p.kind !== "authorization");
+      mutateReceiptWhere(bundle, (p) => p.kind === "inference", (p) => { (p.root as Obj).kind = "standing_condition_trigger"; });
+      const inferenceId = payload(receiptBy(bundle, (p) => p.kind === "inference")).receipt_id!;
+      for (let salt = 0; salt < 1024; salt += 1) {
+        const candidate = clone(bundle);
+        mutateReceiptWhere(candidate, (p) => p.kind === "observation", (p) => { delete p.root; (p.freshness as Obj).nonce = id16(`d82-root-order:${salt}`); });
+        if (compare(inferenceId, payload(receiptBy(candidate, (p) => p.kind === "observation")).receipt_id!) < 0) { Object.assign(bundle, candidate); return; }
+      }
+      throw new Error("no salt orders the observation after the inference");
+    }],
+    ["repair-d82-root-not-map", "graph/root-missing", 12, "The parentless observation's root is the integer 5; formerly an AttributeError at step 7 in pyref.", (bundle) => {
+      clearJournal(bundle); keepReceipts(bundle, (p) => (p.parents as CborValue[]).length === 0);
+      mutateReceiptWhere(bundle, (p) => p.kind === "observation", (p) => { p.root = 5; });
+    }],
+    ["repair-d82-root-kind-missing", "graph/root-forbidden", 12, "The parentless observation's root lacks kind; formerly a KeyError at step 12 in pyref.", (bundle) => {
+      clearJournal(bundle); keepReceipts(bundle, (p) => (p.parents as CborValue[]).length === 0);
+      mutateReceiptWhere(bundle, (p) => p.kind === "observation", (p) => { delete (p.root as Obj).kind; });
+    }],
+    ["repair-d82-attempt-legal-not-map", "delegation/scope", 13, "The dispatched attempt's legal is the integer 5; its purpose is not contained (amendment o).", (bundle) => mutateReceiptsCascade(bundle, (p) => p.kind === "action_attempt" && (p.body as Obj).disposition === "eligible_for_dispatch", (p) => { p.legal = 5; })],
+    ["repair-d82-decision-profile-missing", "delegation/scope", 13, "The permit authorization's decision lacks profile (commitment recomputed); the profile is not contained (amendment o).", (bundle) => mutateReceiptsCascade(bundle, (p) => p.kind === "authorization" && ((p.body as Obj).decision as Obj).decision === "permit", (p) => {
+      const decision = (p.body as Obj).decision as Obj; delete decision.profile;
+      decision.decision_commitment = domainHash("AAR-DECISION-RECORD-v1", withoutField(decision, "decision_commitment"));
+    })],
+    // Round 4 (B-14): reference lookups through guards (amendment q), presentation ordinals (amendment r).
+    ["repair-d82-issuer-role-list", "receipt/signer-role-mismatch", 6, "The outcome observation's issuer_role is a list, mirrored in protected -70006; a non-text role matches no role (amendment q).", (bundle) => mutateReceipt(bundle, "outcome_observation", (p) => { p.issuer_role = ["outcome_observer"]; })],
+    ["repair-d82-credential-path-member-not-bytes", "credential/path-invalid", 8, "The verifier credential's path is [5].", (bundle) => mutateArtifact(bundle, "credentials", (p) => p.key_usage === "verifier_signing", (p) => { p.path = [5]; })],
+    ["repair-d82-rotation-successor-id-not-bytes", "credential/rotation-invalid", 8, "The rotation's successor_credential_id is the integer 5.", (bundle) => mutateArtifact(bundle, "rotations", () => true, (p) => { p.successor_credential_id = 5; })],
+    ["repair-d82-status-credential-id-not-bytes", "credential/status-missing", 8, "A refreshed good snapshot names credential_id 5.", (bundle) => addStatusSnapshot(bundle, (s) => { s.credential_id = 5; })],
+    ["repair-d82-status-snapshot-id-member-not-bytes", "credential/status-missing", 8, "The permit authorization's decision.status_snapshot_ids is [5] (commitment recomputed).", (bundle) => mutateReceiptsCascade(bundle, (p) => p.kind === "authorization" && ((p.body as Obj).decision as Obj).decision === "permit", (p) => {
+      const decision = (p.body as Obj).decision as Obj; decision.status_snapshot_ids = [5];
+      decision.decision_commitment = domainHash("AAR-DECISION-RECORD-v1", withoutField(decision, "decision_commitment"));
+    })],
+    ["repair-d82-close-manifest-id-missing", "epoch/span-count-mismatch", 14, "The close event's body lacks manifest_id (event re-identified, chain relinked); the manifest falls back to the only carried one and the close names none.", (bundle) => { mutateArtifact(bundle, "epoch_events", (p) => p.event === "close", (p) => { delete (p.body as Obj).manifest_id; }); relinkEventChain(bundle); }],
+    ["repair-d82-close-item-count-list", "epoch/span-count-mismatch", 14, "The close event's body item_count is a one-element list.", (bundle) => { mutateArtifact(bundle, "epoch_events", (p) => p.event === "close", (p) => { (p.body as Obj).item_count = [10]; }); relinkEventChain(bundle); }],
+    ["repair-d82-merkle-batch-id-not-bytes", "schema/bad-type", 3, "The carried Merkle proof's batch_id is the integer 5; every member of a membership proof is typed at step 3 (amendment ab; round 4 had pinned merkle/batch-binding at 16).", (bundle) => { ((artifacts(bundle).merkle_proofs as Obj[])[0]!).batch_id = 5; }],
+    ["repair-d82-anchor-manifest-id-not-bytes", "anchor/target-unplanned", 17, "The anchor record's manifest_id is the integer 5 (record re-identified, re-signed): an unresolved manifest has no plan, so the target is unplanned (step-17 order).", (bundle) => mutateArtifact(bundle, "anchors", () => true, (p) => { p.manifest_id = 5; })],
+    ["repair-d82-range-manifest-id-missing", "schema/missing-field", 3, "The complete range lacks manifest_id; every member of a range proof is checked at step 3 (amendment ab; round 4 had pinned bundle/range-manifest-missing at 18).", (bundle) => { makeCompleteRange(bundle); delete (bundle.ranges as Obj[])[0]!.manifest_id; }],
+    ["repair-d82-attestation-id-31-bytes", "evidence/time-class-unsatisfied", 19, "The inference root declares boot_bound time with a 31-byte boot_attestation_id; a non-32-byte id resolves to nothing (pyref formerly said manifest/payload-missing).", (bundle) => { clearJournal(bundle); keepReceipts(bundle, (p) => p.kind === "inference" && object(p.root)); mutateReceiptWhere(bundle, () => true, (p) => { const time = (p.evidence as Obj).time as Obj; time.class = "boot_bound"; time.boot_attestation_id = new Uint8Array(31); }); }],
+    ["repair-d82-presentation-artifacts-ordinals", "receipt/manifest-inconsistent", 10, "The approval presentation carries two artifacts with ordinals [1, 0] (re-identified, re-signed); the round-3 harness never checked presentation ordinals.", (bundle) => mutatePresentation(bundle, (p) => { const first = (p.artifacts as Obj[])[0]!; p.artifacts = [{ ...first, ordinal: 1 }, { ...first, ordinal: 0 }]; })],
+    ["repair-d82-presentation-artifacts-item-not-map", "receipt/manifest-inconsistent", 10, "The approval presentation's first artifact is the integer 5.", (bundle) => mutatePresentation(bundle, (p) => { p.artifacts = [5]; })],
+    // Round 6 stage A (B-20): spec contradictions.
+    ["repair-d82-delegation-scope-null", "delegation/scope", 13, "The embedded delegation's scope is null (amendment l; the harness had dereferenced it).", (bundle) => mutateEmbeddedDelegation(bundle, (d) => { d.scope = null; })],
+    ["repair-d82-root-kind-list", "graph/root-forbidden", 12, "The parentless observation's root kind is a one-element list (amendment p; pyref had used it as a dict key).", (bundle) => {
+      clearJournal(bundle); keepReceipts(bundle, (p) => (p.parents as CborValue[]).length === 0);
+      mutateReceiptWhere(bundle, (p) => p.kind === "observation", (p) => { (p.root as Obj).kind = ["agent_request"]; });
+    }],
+    ["repair-d82-root-kind-constructor", "graph/root-forbidden", 12, "The parentless observation's root kind is the text constructor; own-property lookup leaves it unlisted (amendment af).", (bundle) => {
+      clearJournal(bundle); keepReceipts(bundle, (p) => (p.parents as CborValue[]).length === 0);
+      mutateReceiptWhere(bundle, (p) => p.kind === "observation", (p) => { (p.root as Obj).kind = "constructor"; });
+    }],
+    ["repair-d82-edge-type-constructor", "graph/edge-illegal", 12, "The derived observation's derived_from edge_type is the text constructor; own-property lookup leaves it unlisted (amendment af).", (bundle) => mutateReceiptsCascade(bundle, (p) => p.kind === "observation" && !object(p.root), (p) => { ((p.parents as Obj[])[0]!).edge_type = "constructor"; })],
+    ["repair-d82-scope-mixed-keys", "delegation/scope", 13, "The embedded delegation's scope is a map with text and integer keys (amendment af).", (bundle) => mutateEmbeddedDelegation(bundle, (d) => { d.scope = new Map<CborScalar, CborValue>([...Object.entries(d.scope as Obj), [1, 2]]); })],
+    ["repair-d82-scope-purpose-null-contained", "delegation/scope", 13, "The dispatched attempt's legal.purpose_id is null and the delegation's purpose_ids is [null]; a non-text value is never contained (amendment ag).", (bundle) => {
+      mutateEmbeddedDelegation(bundle, (d) => { (d.scope as Obj).purpose_ids = [null]; });
+      mutateReceiptsCascade(bundle, (p) => p.kind === "action_attempt" && (p.body as Obj).disposition === "eligible_for_dispatch", (p) => { (p.legal as Obj).purpose_id = null; });
+    }],
+    ["repair-d82-scope-profile-int-contained", "delegation/scope", 13, "The permit decision's profile is 7 and the delegation's allowed_profiles is [7]; a non-text value is never contained (amendment ag).", (bundle) => {
+      mutateEmbeddedDelegation(bundle, (d) => { (d.scope as Obj).allowed_profiles = [7]; });
+      mutateReceiptsCascade(bundle, (p) => p.kind === "authorization" && ((p.body as Obj).decision as Obj).decision === "permit", (p) => {
+        const decision = (p.body as Obj).decision as Obj; decision.profile = 7;
+        decision.decision_commitment = domainHash("AAR-DECISION-RECORD-v1", withoutField(decision, "decision_commitment"));
+      });
+    }],
+    ["repair-d82-root-null-with-parents", "graph/root-forbidden", 12, "The derived observation carries root: null beside its parents; a present null is a present root (amendment u).", (bundle) => mutateReceiptsCascade(bundle, (p) => p.kind === "observation" && !object(p.root), (p) => { p.root = null; })],
+    ["repair-d82-cross-epoch-null", "graph/cross-epoch-forbidden", 12, "The derived observation's same-epoch edge carries cross_epoch: null (amendment u).", (bundle) => mutateReceiptsCascade(bundle, (p) => p.kind === "observation" && !object(p.root), (p) => { ((p.parents as Obj[])[0]!).cross_epoch = null; })],
+    ["repair-d82-degraded-null", "receipt/attempt-disposition", 10, "The dispatched attempt's body.degraded is null (amendment u).", (bundle) => mutateReceiptsCascade(bundle, (p) => p.kind === "action_attempt" && (p.body as Obj).disposition === "eligible_for_dispatch", (p) => { (p.body as Obj).degraded = null; })],
+    ["repair-d82-hazard-class-null", "schema/enum-unknown", 10, "The dispatched attempt's action.hazard_class is null; a present non-life_safety value is unknown (amendment u).", (bundle) => mutateReceiptsCascade(bundle, (p) => p.kind === "action_attempt" && (p.body as Obj).disposition === "eligible_for_dispatch", (p) => { ((p.body as Obj).action as Obj).hazard_class = null; })],
+    ["repair-d82-event0-previous-null", "epoch/event-chain", 14, "The open event (event_seq 0) carries previous_event_digest: null; the chain is relinked after it (amendment u).", (bundle) => { mutateArtifact(bundle, "epoch_events", (p) => p.event_seq === 0, (p) => { p.previous_event_digest = null; }); relinkEventChain(bundle); }],
+    ["repair-d82-manifest-predecessor-null", "epoch/predecessor-mismatch", 14, "The only manifest carries predecessor_manifest_digest: null (anchor rebound); a present value that is not a 32-byte digest mismatches (amendments u, w).", (bundle) => rebuildManifest(bundle, (m) => { m.predecessor_manifest_digest = null; }, true)],
+    ["repair-d82-anchor-consistency-null", "schema/bad-type", 6, "The anchor record carries consistency: null; the optional proof is present and not a map (amendments u, ab).", (bundle) => mutateArtifact(bundle, "anchors", () => true, (p) => { p.consistency = null; })],
+    ["repair-d82-manifest-predecessor-not-bytes", "epoch/predecessor-mismatch", 14, "The only manifest's predecessor_manifest_digest is the integer 5 (amendments u, w).", (bundle) => rebuildManifest(bundle, (m) => { m.predecessor_manifest_digest = 5; }, true)],
+    ["repair-d82-anchor-consistency-unrelated", "anchor/consistency-invalid", 17, "The anchor carries a self-consistent proof (old = new = 1, equal roots, empty path) whose new head is not the record's anchor head (amendment x; pyref had accepted it).", (bundle) => mutateArtifact(bundle, "anchors", () => true, (p) => { p.consistency = { old_tree_size: 1, new_tree_size: 1, old_root: deterministicId("unrelated-tree"), new_root: deterministicId("unrelated-tree"), path: [] }; })],
+    ["repair-d82-anchor-head-root-changed", "anchor/head-mismatch", 17, "The anchor record's head.root differs from the expected head at the same tree size (amendment y; the harness had compared anchor_root).", (bundle) => mutateArtifact(bundle, "anchors", () => true, (p) => { (p.head as Obj).root = deterministicId("other-head-root"); })],
+    ["repair-d82-expected-head-larger-same-root", "anchor/head-mismatch", 17, "The expected head is one leaf larger than the record's head with the same root (amendment y; pyref had accepted it).", (bundle) => { const head = ((bundle.trust_inputs as Obj).expected_anchor_heads as Obj[])[0]!; head.tree_size = (head.tree_size as number) + 1; }],
+    ["repair-d82-manifest-byte-length-mismatch", "hash/mismatch", 7, "The inference's prompt_manifest declares byte_length one more than the carried payload (amendment ac; the harness had not checked).", (bundle) => mutateReceiptsCascade(bundle, (p) => p.kind === "inference", (p) => { const ref = (p.body as Obj).prompt_manifest as Obj; ref.byte_length = (ref.byte_length as number) + 1; })],
+    ["repair-d82-presentation-id-mismatch", "identity/artifact-id-mismatch", 7, "The approval presentation's presentation_id does not recompute (re-signed; the authorization is re-identified around it) (amendment ac; the harness had said hash/mismatch).", (bundle) => mutateReceiptWhere(bundle, (p) => p.kind === "authorization" && (p.body as Obj).presentation !== undefined, (p) => {
+      const presentation = (p.body as Obj).presentation!; const next = clone(payload(presentation)); next.presentation_id = deterministicId("wrong-presentation-id");
+      (p.body as Obj).presentation = signDetached(next, contentType(presentation), signerFor(presentation)).envelope;
+    })],
+    ["repair-d82-open-first-seq-mismatch", "epoch/span-count-mismatch", 14, "The open event's first_epoch_seq is one more than the manifest span's first (chain relinked) (amendment ad; the harness had not checked).", (bundle) => { mutateArtifact(bundle, "epoch_events", (p) => p.event === "open", (p) => { (p.body as Obj).first_epoch_seq = ((p.body as Obj).first_epoch_seq as number) + 1; }); relinkEventChain(bundle); }],
+    ["repair-d82-range-boundary-proof-invalid", "bundle/range-proof-invalid", 18, "The complete range carries a left_boundary whose entry issuer_seq was changed after its proof was built (the harness had not verified boundary proofs).", (bundle) => { makeCompleteRange(bundle); const first = clone(((bundle.ranges as Obj[])[0]!.entries as Obj[])[0]!); (first.entry as Obj).issuer_seq = ((first.entry as Obj).issuer_seq as number) + 1; (bundle.ranges as Obj[])[0]!.left_boundary = first; }],
+    ["repair-d82-provenance-on-observation", "evidence/provenance-class-unsatisfied", 10, "The root observation carries a provenance label its kind forbids (amendment ah; the harness had said receipt/kind-body-mismatch).", (bundle) => mutateReceiptsCascade(bundle, (p) => p.kind === "observation" && object(p.root), (p) => { (p.evidence as Obj).provenance = { class: "self_asserted" }; })],
+    ["repair-d82-outcome-label-on-wrong-kind", "evidence/outcome-class-unsatisfied", 10, "The root observation carries an outcome label its kind forbids (amendment ah).", (bundle) => mutateReceiptsCascade(bundle, (p) => p.kind === "observation" && object(p.root), (p) => { (p.evidence as Obj).outcome = { level: "unknown" }; })],
+    ["repair-d82-outcome-level-wrong-kind", "evidence/outcome-class-unsatisfied", 10, "The dispatched attempt's outcome level is dispatched, a level only a dispatch may carry (the harness had no per-kind level rule at step 10).", (bundle) => mutateReceiptsCascade(bundle, (p) => p.kind === "action_attempt" && (p.body as Obj).disposition === "eligible_for_dispatch", (p) => { ((p.evidence as Obj).outcome as Obj).level = "dispatched"; })],
+    ["repair-d82-epoch-coordinate-equivocation", "identity/coordinate-equivocation", 9, "A second root observation reuses the first's epoch coordinate under another issuer_seq and nonce (amendment ah; pyref had said epoch-sequence-rollback).", (bundle) => {
+      clearJournal(bundle);
+      const envelope = receiptBy(bundle, (p) => p.kind === "observation" && object(p.root)); const next = clone(payload(envelope));
+      (next.emission as Obj).issuer_seq = ((next.emission as Obj).issuer_seq as number) + 1000; (next.freshness as Obj).nonce = id16("equivocation");
+      receiptList(bundle).push(resign(envelope, next, true)); sortArtifacts(bundle, "receipts");
+    }],
+    ["repair-d82-presentation-ordinal-bool", "receipt/manifest-inconsistent", 10, "The approval presentation's single artifact carries ordinal true; a bool is never a uint (amendment ah).", (bundle) => mutatePresentation(bundle, (p) => { ((p.artifacts as Obj[])[0]!).ordinal = true; })],
+    ["repair-d82-cose-unprotected-text-label", "cose/unprotected-not-empty", 6, "The first credential's unprotected header is the text-keyed map {\"1\": 5}; a text label is not the alg label (amendment ah).", (bundle) => modifyCose(bundle, "credentials", 0, (value) => { value[1] = { "1": 5 }; })],
+    ["repair-d82-trust-snapshot-zero", "schema/out-of-range", 5, "The trust store's snapshot_id is 32 zero bytes, the verdict's not-evaluated sentinel (digest recomputed) (amendment ah).", (bundle) => { (((bundle.trust_inputs as Obj).trust_store) as Obj).snapshot_id = new Uint8Array(32); recalcTrust(bundle); }],
+    ["repair-d82-range-boundary-mismatch-and-bad-proof", "bundle/range-proof-invalid", 18, "The complete range's first entry proof names leaf_index 999 and its last entry is dropped: the proofs are judged before the temporal slice (amendment ai; the harness had said bundle/range-boundary).", (bundle) => { makeCompleteRange(bundle); const entries = (bundle.ranges as Obj[])[0]!.entries as Obj[]; (entries[0]!.inclusion as Obj).leaf_index = 999; entries.pop(); }],
+    ["repair-d82-payload-depth-33", "resource/cbor-depth", 6, "The root observation's legal is 33 nested arrays (re-identified, re-signed, left in place: neither verifier sorts an array whose payload does not decode); the thirty-third nested container exceeds the bound inside a COSE payload (amendment ao).", (bundle) => {
+      const list = receiptList(bundle); const index = list.findIndex((entry) => payload(entry).kind === "observation" && object(payload(entry).root)); const next = clone(payload(list[index]!)); next.legal = nest(33); list[index] = resign(list[index]!, next, true);
+    }],
+    ["repair-d82-parent-delegation-invocation-null", "delegation/chain-invalid", 13, "A carried parent delegation carries invocation_id: null and the embedded child none; a present null never equals an absent member (amendment u; pyref had compared None with None).", (bundle) => {
+      const parent = addTopLevelDelegation(bundle, (d) => { d.invocation_id = null; (d.scope as Obj).actions = ["camera.ptz.preset", "camera.stream.view"]; (d.scope as Obj).allowed_profiles = ["AAR-1", "AAR-2", "AAR-2A", "AAR-3"]; d.not_before = (d.not_before as number) - 100; d.not_after = (d.not_after as number) + 100; d.replay_domain = deterministicId("u:parent"); });
+      mutateEmbeddedDelegation(bundle, (d) => { d.parent_delegations = [parent.delegation_id!]; delete d.invocation_id; });
+    }],
+    ["repair-d82-anchor-target-id-int-planned", "anchor/target-unplanned", 17, "The plan's first target and the anchor record's target both carry target_id 5; a non-16-byte id resolves to nothing (amendment q; the harness had matched 5 to 5 and gone on to an indeterminate head-missing).", (bundle) => { rebuildManifest(bundle, (m) => { (((m.anchor_plan as Obj).targets as Obj[])[0]!).target_id = 5; }, true); mutateArtifact(bundle, "anchors", () => true, (p) => { (p.target as Obj).target_id = 5; }); }],
+    ["repair-d82-merkle-path-length-impossible", "merkle/path-length", 16, "The carried Merkle proof carries one sibling more than its tree size admits (amendment ak).", (bundle) => { const proof = (artifacts(bundle).merkle_proofs as Obj[])[0]!; proof.siblings = [...(proof.siblings as Uint8Array[]), hash(encodeCbor("extra-sibling"))]; }],
+    ["repair-d82-complete-extra-unindexed-receipt", "bundle/artifact-out-of-scope", 18, "A complete bundle carries a second root observation committed before the selector window that no index entry names and nothing selected reaches (amendment aj; the harness had tolerated unindexed extras).", (bundle) => {
+      makeCompleteRange(bundle);
+      const envelope = receiptBy(bundle, (p) => p.kind === "observation" && object(p.root)); const next = clone(payload(envelope)); const t = ((bundle.selector as Obj).committed_from as number) - 1;
+      (next.binding as Obj).epoch_seq = 777; (next.emission as Obj).issuer_seq = 7777; (next.emission as Obj).committed_at = t; (next.freshness as Obj).issued_at = t - 1; (next.freshness as Obj).nonce = id16("extra-unindexed");
+      receiptList(bundle).push(resign(envelope, next, true)); sortArtifacts(bundle, "receipts");
+    }],
+    ["repair-d82-range-below-previous-range", "bundle/range-noncontiguous", 18, "The selector window starts at a later index entry; range 1 is the valid slice and range 2 carries leaf 0 with a bad sibling: ranges of one manifest must carry strictly increasing leaf indices, judged before the proofs (amendment al; pyref had said range-proof-invalid).", (bundle) => {
+      const manifest = payload((artifacts(bundle).epoch_manifests as CborValue[])[0]!); const entries = (manifest.receipt_index as Obj).entries as Obj[];
+      const k = entries.findIndex((entry) => (entry.committed_at as number) > (entries[0]!.committed_at as number)); if (k < 0) throw new Error("all entries share committed_at");
+      (bundle.selector as Obj).committed_from = entries[k]!.committed_at; recalcSelector(bundle); makeCompleteRange(bundle);
+      const bad = indexProofs(manifest)[0]!; ((bad.inclusion as Obj).siblings as Uint8Array[])[0] = hash(encodeCbor("flip"));
+      (bundle.ranges as Obj[]).push({ manifest_id: manifest.manifest_id!, selector_commitment: bundle.selector_commitment!, tree_size: (manifest.receipt_index as Obj).leaf_count!, first_leaf_index: 0, entries: [bad] });
+    }],
+    ["repair-d82-step7-receipt-hash-before-presentation-id", "hash/mismatch", 7, "The approval authorization's decision_commitment and its own presentation's presentation_id are both wrong; a receipt's commitments precede its nested presentation's id (amendment am).", (bundle) => mutateReceiptWhere(bundle, (p) => p.kind === "authorization" && (p.body as Obj).presentation !== undefined, (p) => {
+      ((p.body as Obj).decision as Obj).decision_commitment = deterministicId("wrong-decision-commitment");
+      const presentation = (p.body as Obj).presentation!; const next = clone(payload(presentation)); next.presentation_id = deterministicId("wrong-presentation-id");
+      (p.body as Obj).presentation = signDetached(next, contentType(presentation), signerFor(presentation)).envelope;
+    })],
+    ["repair-d82-step7-presentation-id-before-later-receipt", "identity/artifact-id-mismatch", 7, "The approval authorization's presentation_id is wrong and a later receipt's (the inference's, nonce salted until it sorts after the authorization) conclusion digest is wrong; the earlier receipt's nested id is reported first (amendment am; the harness had checked every id before any receipt).", (bundle) => {
+      for (let salt = 0; salt < 2048; salt += 1) {
+        const candidate = clone(bundle);
+        mutateReceiptsCascade(candidate, (p) => p.kind === "inference", (p) => { ((p.body as Obj).conclusion as Obj).digest = deterministicId("wrong-conclusion-digest"); (p.freshness as Obj).nonce = id16(`step7-order:${salt}`); });
+        mutateReceiptWhere(candidate, (p) => p.kind === "authorization" && (p.body as Obj).presentation !== undefined, (p) => {
+          const presentation = (p.body as Obj).presentation!; const next = clone(payload(presentation)); next.presentation_id = deterministicId("wrong-presentation-id");
+          (p.body as Obj).presentation = signDetached(next, contentType(presentation), signerFor(presentation)).envelope;
+        });
+        const authorizationId = payload(receiptBy(candidate, (p) => p.kind === "authorization" && (p.body as Obj).presentation !== undefined)).receipt_id!;
+        const inferenceId = payload(receiptBy(candidate, (p) => p.kind === "inference")).receipt_id!;
+        if (compare(authorizationId, inferenceId) < 0) { Object.assign(bundle, candidate); return; }
+      }
+      throw new Error("no salt orders the authorization before the inference");
+    }],
+    ["repair-d82-cose-truncated", "cbor/malformed", 6, "The first credential's COSE bstr lacks its last byte; an undecodable item takes the decoder's own code (amendment an; the harness had said cose/bad-structure).", (bundle) => modifyCose(bundle, "credentials", 0, (_value, envelope) => { envelope[1] = (envelope[1] as Uint8Array).slice(0, -1); })],
+    ["repair-d82-cose-nested-tag", "cbor/tag-forbidden", 6, "The first credential's COSE signature bstr is wrapped in tag 24 inside the COSE array; a tag nested inside the item is cbor/tag-forbidden, cose/tagged is the wrapping tag only (amendment aq).", (bundle) => modifyCose(bundle, "credentials", 0, (_value, envelope) => {
+      const c = envelope[1] as Uint8Array; if (c[c.length - 66] !== 0x58 || c[c.length - 65] !== 0x40) throw new Error("signature shape"); envelope[1] = concat(c.slice(0, -66), Uint8Array.of(0xd8, 0x18), c.slice(-66));
+    })],
+    ["repair-d82-verifier-key-not-found", "key/not-found", 20, "Drop the verifier_signing credential; the bundle reaches step 20 and the verdict is a signed indeterminate populated per the section 5 table.", (bundle) => {
+      artifacts(bundle).credentials = (artifacts(bundle).credentials as CborValue[]).filter((entry) => payload(entry).key_usage !== "verifier_signing");
+    }],
+  );
+  for (const [name, code, step, description, mutate] of d82Repairs) {
+    const item = bundleFixture(code, description, mutate);
+    add({ ...item, filename: name, descriptor: { ...item.descriptor, name, expected_result: code === "key/not-found" ? "indeterminate" : "nonconformant", expected_step: step } });
+  }
+
+  // D-82 part 8: the bounded step-6 schema table. One enum row each, then per
+  // production one missing, one wrong-type, and one paired fault. A missing
+  // top-level field is caught by the closed-map pass before the CDDL-ordered
+  // traversal, so paired faults on flat productions pair a wrong type with an
+  // unknown enum; receipts pair a nested absence with an enum, both orders.
+  // The verifier credential signs nothing and no earlier credential resolves it;
+  // the root is resolved (loosely) by credentials[0]'s signer lookup first.
+  const credential = (p: Obj) => p.key_usage === "verifier_signing";
+  const root = (p: Obj) => p.kind === "observation" && object(p.root);
+  const schemaTable: [string, string, string, (bundle: Obj) => void][] = [
+    ["schema-enum-credential-principal-role", "schema/enum-unknown", "Verifier credential principal_role root.", (b) => mutateArtifact(b, "credentials", credential, (p) => { p.principal_role = "root"; })],
+    ["schema-enum-credential-key-usage", "schema/enum-unknown", "Verifier credential key_usage signing.", (b) => mutateArtifact(b, "credentials", credential, (p) => { p.key_usage = "signing"; })],
+    ["schema-enum-delegation-use", "schema/enum-unknown", "Top-level delegation use twice.", (b) => mutateArtifact(b, "delegations", () => true, (p) => { p.use = "twice"; })],
+    ["schema-enum-epoch-event-event", "schema/enum-unknown", "Last event event reopen.", (b) => mutateLastEvent(b, (p) => { p.event = "reopen"; })],
+    ["schema-enum-manifest-close-reason", "schema/enum-unknown", "Manifest close_reason manual.", (b) => rebuildManifest(b, (p) => { p.close_reason = "manual"; }, true)],
+    ["schema-enum-manifest-late-arrival-policy", "schema/enum-unknown", "Manifest late_arrival_policy same_epoch.", (b) => rebuildManifest(b, (p) => { p.late_arrival_policy = "same_epoch"; }, true)],
+    ["schema-enum-manifest-fork-policy", "schema/enum-unknown", "Manifest fork_policy accept.", (b) => rebuildManifest(b, (p) => { p.fork_policy = "accept"; }, true)],
+    ["schema-enum-transformation-operation", "schema/enum-unknown", "Root observation consumption item transformation operation rotate.", (b) => mutateReceiptsCascade(b, root, (p) => { (((p.body as Obj).consumption as Obj).items as Obj[])[0]!.transformations = [{ ...TRANSFORM, operation: "rotate" }]; })],
+    ["schema-enum-correlation-phase", "schema/enum-unknown", "Root observation correlation phase settled.", (b) => mutateReceiptsCascade(b, root, (p) => { (p.correlation as Obj).phase = "settled"; })],
+    ["schema-enum-native-attestation-format", "schema/enum-unknown", "Root observation native attestation format sigstore.", (b) => mutateReceiptsCascade(b, root, (p) => { ((p.body as Obj).native_attestations as Obj[])[0]!.format = "sigstore"; })],
+    ["schema-enum-action-informational-reversibility", "schema/enum-unknown", "Action attempt informational_reversibility partially.", (b) => mutateReceiptsCascade(b, (p) => p.kind === "action_attempt", (p) => { ((p.body as Obj).action as Obj).informational_reversibility = "partially"; })],
+    ["schema-enum-action-operational-reversibility", "schema/enum-unknown", "Action attempt operational_reversibility partial.", (b) => mutateReceiptsCascade(b, (p) => p.kind === "action_attempt", (p) => { ((p.body as Obj).action as Obj).operational_reversibility = "partial"; })],
+    ["schema-enum-outcome-state", "schema/enum-unknown", "Outcome observation body state pending.", (b) => mutateReceipt(b, "outcome_observation", (p) => { (p.body as Obj).state = "pending"; })],
+    ["schema-enum-evidence-time-class", "schema/enum-unknown", "Root observation evidence time class gps_bound; formerly an uncaught KeyError in pyref and an unvalidated string in the harness verdict.", (b) => mutateReceiptsCascade(b, root, (p) => { ((p.evidence as Obj).time as Obj).class = "gps_bound"; })],
+    ["schema-enum-evidence-provenance-class", "schema/enum-unknown", "Inference evidence provenance class self_signed.", (b) => mutateReceiptsCascade(b, (p) => p.kind === "inference", (p) => { ((p.evidence as Obj).provenance as Obj).class = "self_signed"; })],
+    ["schema-enum-evidence-outcome-level", "schema/enum-unknown", "Dispatch evidence outcome level acknowledged.", (b) => mutateReceiptsCascade(b, (p) => p.kind === "dispatch", (p) => { ((p.evidence as Obj).outcome as Obj).level = "acknowledged"; })],
+    ["schema-enum-presentation-transform-operation", "schema/enum-unknown", "Presentation transform operation rotate.", (b) => mutatePresentation(b, (p) => { p.transforms = [{ ...TRANSFORM, operation: "rotate" }]; })],
+    ["schema-d82-credential-missing", "schema/missing-field", "Verifier credential without key_usage.", (b) => mutateArtifact(b, "credentials", credential, (p) => { delete p.key_usage; })],
+    ["schema-d82-credential-bad-type", "schema/bad-type", "Verifier credential valid_from text.", (b) => mutateArtifact(b, "credentials", credential, (p) => { p.valid_from = "yesterday"; })],
+    ["schema-d82-credential-paired", "schema/enum-unknown", "Verifier credential principal_role root AND key_usage 7; principal_role is earlier in CDDL order.", (b) => mutateArtifact(b, "credentials", credential, (p) => { p.principal_role = "root"; p.key_usage = 7; })],
+    ["schema-d82-delegation-missing", "schema/missing-field", "Top-level delegation without not_before.", (b) => mutateArtifact(b, "delegations", () => true, (p) => { delete p.not_before; })],
+    ["schema-d82-delegation-bad-type", "schema/bad-type", "Top-level delegation not_after text.", (b) => mutateArtifact(b, "delegations", () => true, (p) => { p.not_after = "later"; })],
+    ["schema-d82-delegation-paired", "schema/bad-type", "Top-level delegation not_before text AND use twice; not_before is earlier in CDDL order.", (b) => mutateArtifact(b, "delegations", () => true, (p) => { p.not_before = "early"; p.use = "twice"; })],
+    ["schema-d82-epoch-event-missing", "schema/missing-field", "Last event without event_seq.", (b) => mutateLastEvent(b, (p) => { delete p.event_seq; })],
+    ["schema-d82-epoch-event-bad-type", "schema/bad-type", "Last event occurred_at text.", (b) => mutateLastEvent(b, (p) => { p.occurred_at = "now"; })],
+    ["schema-d82-epoch-event-paired", "schema/bad-type", "Last event event_seq text AND event reopen; event_seq is earlier in CDDL order.", (b) => mutateLastEvent(b, (p) => { p.event_seq = "one"; p.event = "reopen"; })],
+    ["schema-d82-manifest-missing", "schema/missing-field", "Manifest without opened_at (anchor_deadline is mirrored into the close event, so it would carry a second fault).", (b) => rebuildManifest(b, (p) => { delete p.opened_at; }, true)],
+    ["schema-d82-manifest-bad-type", "schema/bad-type", "Manifest closed_at text.", (b) => rebuildManifest(b, (p) => { p.closed_at = "soon"; }, true)],
+    ["schema-d82-manifest-paired", "schema/enum-unknown", "Manifest close_reason manual AND fork_policy 1; close_reason is earlier in CDDL order.", (b) => rebuildManifest(b, (p) => { p.close_reason = "manual"; p.fork_policy = 1; }, true)],
+    ["schema-d82-receipt-missing", "schema/missing-field", "Root observation freshness without nonce (binding members are mirrored into the protected header, so their absence cannot be single-fault).", (b) => mutateReceiptsCascade(b, root, (p) => { delete (p.freshness as Obj).nonce; })],
+    ["schema-d82-receipt-bad-type", "schema/bad-type", "Root observation freshness invocation_id integer.", (b) => mutateReceiptsCascade(b, root, (p) => { (p.freshness as Obj).invocation_id = 5; })],
+    ["schema-d82-receipt-paired-missing-first", "schema/missing-field", "Root observation freshness without nonce AND evidence time class gps_bound; freshness is earlier in CDDL order.", (b) => mutateReceiptsCascade(b, root, (p) => { delete (p.freshness as Obj).nonce; ((p.evidence as Obj).time as Obj).class = "gps_bound"; })],
+    ["schema-d82-receipt-paired-enum-first", "schema/enum-unknown", "Root observation evidence time class gps_bound AND correlation without phase; evidence is earlier in CDDL order.", (b) => mutateReceiptsCascade(b, root, (p) => { ((p.evidence as Obj).time as Obj).class = "gps_bound"; delete (p.correlation as Obj).phase; })],
+    ["schema-d82-presentation-missing", "schema/missing-field", "Presentation transform without operation.", (b) => mutatePresentation(b, (p) => { p.transforms = [withoutField(TRANSFORM, "operation")]; })],
+    ["schema-d82-presentation-bad-type", "schema/bad-type", "Presentation transforms text.", (b) => mutatePresentation(b, (p) => { p.transforms = "none"; })],
+    ["schema-d82-presentation-paired", "schema/enum-unknown", "Presentation transform operation rotate AND delivered_at text; transforms is earlier in CDDL order.", (b) => mutatePresentation(b, (p) => { p.transforms = [{ ...TRANSFORM, operation: "rotate" }]; p.delivered_at = "later"; })],
+  ];
+  // Amendment (b): every unix-time, sequence, and epoch-id field, nested and array members included.
+  const outcome = (p: Obj) => p.kind === "outcome_observation";
+  schemaTable.push(
+    ["schema-d82-receipt-wall-time-text", "schema/bad-type", "Root observation evidence.time.wall_time text; formerly conformant in both verifiers.", (b) => mutateReceiptsCascade(b, root, (p) => { ((p.evidence as Obj).time as Obj).wall_time = "bad"; })],
+    ["schema-d82-observation-observed-at-text", "schema/bad-type", "Root observation body observed_at text; formerly conformant in both verifiers.", (b) => mutateReceiptsCascade(b, root, (p) => { (p.body as Obj).observed_at = "bad"; })],
+    ["schema-d82-event-epoch-id-list", "schema/bad-type", "The anchor_submitted event's epoch_id is a one-element list; formerly an unhashable-type crash in pyref.", (b) => mutateLastEvent(b, (p) => { p.epoch_id = [42]; })],
+    ["schema-d82-event-close-last-seq-text", "schema/bad-type", "The close event's last_epoch_seq is text; the close event is re-identified and the chain rebuilt.", (b) => { mutateArtifact(b, "epoch_events", (p) => p.event === "close", (p) => { (p.body as Obj).last_epoch_seq = "nine"; }); relinkEventChain(b); }],
+    ["schema-d82-dispatch-dispatched-at-text", "schema/bad-type", "The dispatch body dispatched_at is text.", (b) => mutateReceiptsCascade(b, (p) => p.kind === "dispatch", (p) => { (p.body as Obj).dispatched_at = "bad"; })],
+    ["schema-d82-outcome-observed-at-text", "schema/bad-type", "The outcome observation body observed_at is text.", (b) => mutateReceipt(b, "outcome_observation", (p) => { (p.body as Obj).observed_at = "bad"; })],
+    ["schema-d82-parent-edge-epoch-id-text", "schema/bad-type", "The outcome observation's parent edge parent_epoch_id is text.", (b) => mutateReceipt(b, "outcome_observation", (p) => { ((p.parents as Obj[])[0]!).parent_epoch_id = "bad"; })],
+    ["schema-d82-manifest-span-first-text", "schema/bad-type", "The manifest sequence_span.first is text.", (b) => rebuildManifest(b, (m) => { (m.sequence_span as Obj).first = "zero"; }, true)],
+    ["schema-d82-manifest-index-entry-committed-at-text", "schema/bad-type", "The first manifest index entry's committed_at is text (array member rule).", (b) => rebuildManifest(b, (m) => { (((m.receipt_index as Obj).entries as Obj[])[0]!).committed_at = "bad"; }, true)],
+    ["schema-d82-anchor-head-observed-at-text", "schema/bad-type", "The anchor record head.observed_at is text.", (b) => mutateArtifact(b, "anchors", () => true, (p) => { (p.head as Obj).observed_at = "bad"; })],
+    ["schema-d82-merkle-batch-epoch-id-text", "schema/bad-type", "The Merkle batch epoch_id is text; proofs re-point at the recomputed batch id.", (b) => mutateMerkleBatch(b, (p) => { p.epoch_id = "bad"; })],
+  );
+  // Amendment (ab): proof-bearing productions, presence then type of every member at step 6.
+  schemaTable.push(
+    ["schema-d82-anchor-head-root-missing", "schema/missing-field", "The anchor record's head lacks root; the harness had said conformant.", (b) => mutateArtifact(b, "anchors", () => true, (p) => { delete (p.head as Obj).root; })],
+    ["schema-d82-anchor-inclusion-leaf-digest-missing", "schema/missing-field", "The anchor record's inclusion lacks leaf_digest.", (b) => mutateArtifact(b, "anchors", () => true, (p) => { delete (p.inclusion as Obj).leaf_digest; })],
+    ["schema-d82-index-entry-receipt-id-missing", "schema/missing-field", "The first manifest index entry lacks receipt_id.", (b) => rebuildManifest(b, (m) => { delete (((m.receipt_index as Obj).entries as Obj[])[0]!).receipt_id; }, true)],
+    ["schema-d82-batch-tree-size-text", "schema/bad-type", "The Merkle batch tree_size is text.", (b) => mutateMerkleBatch(b, (p) => { p.tree_size = "bad"; })],
+  );
+  schemaTable.push(
+    ["schema-d82-index-root-null", "schema/bad-type", "The manifest index root is null (round 8; the harness had crashed in equalBytes).", (b) => rebuildManifest(b, (m) => { (m.receipt_index as Obj).root = null; }, true)],
+    ["schema-d82-index-root-int-array", "schema/bad-type", "The manifest index root is the array of its own bytes (round 8; the harness had said conformant).", (b) => rebuildManifest(b, (m) => { (m.receipt_index as Obj).root = Array.from((m.receipt_index as Obj).root as Uint8Array); }, true)],
+    ["schema-d82-anchor-root-null", "schema/bad-type", "The anchor record's anchor_root is null (round 8).", (b) => mutateArtifact(b, "anchors", () => true, (p) => { p.anchor_root = null; })],
+    ["schema-d82-anchor-manifest-digest-null", "schema/bad-type", "The anchor record's manifest_digest is null (round 8).", (b) => mutateArtifact(b, "anchors", () => true, (p) => { p.manifest_digest = null; })],
+    ["schema-d82-independence-groups-member-int", "schema/bad-type", "The manifest's independence.groups is [5] (round 8; pyref had crashed).", (b) => rebuildManifest(b, (m) => { ((m.anchor_plan as Obj).independence as Obj).groups = [5]; }, true)],
+    ["schema-d82-independence-groups-missing", "schema/missing-field", "The manifest's independence lacks groups (round 8; both had crashed).", (b) => rebuildManifest(b, (m) => { delete ((m.anchor_plan as Obj).independence as Obj).groups; }, true)],
+    ["schema-d82-batch-tree-size-over", "schema/out-of-range", "The Merkle batch tree_size is 1,048,577 (amendment ak).", (b) => mutateMerkleBatch(b, (p) => { p.tree_size = 1_048_577; })],
+  );
+  schemaTable.push(["schema-d82-plan-duplicate-target-id", "schema/duplicate-entry", "The manifest's anchor plan names its first target twice (the copy under another operator); the first matches the anchor record (amendment ap; pyref had taken the last, the harness the first).", (b) => rebuildManifest(b, (m) => { const t = ((m.anchor_plan as Obj).targets as Obj[])[0]!; (m.anchor_plan as Obj).targets = [t, { ...clone(t), operator_id: id16("other-operator") }]; }, true)]);
+  schemaTable.push(["schema-d82-credential-path-nine", "schema/out-of-range", "The verifier credential's path names nine credentials; the bound is judged at step 6 (amendment ah).", (b) => mutateArtifact(b, "credentials", (p) => p.key_usage === "verifier_signing", (p) => { p.path = Array.from({ length: 9 }, (_, index) => hash(encodeCbor(index))); })]);
+  schemaTable.push(["schema-d82-anchor-plan-mixed-keys", "schema/bad-type", "The manifest's anchor_plan is a map with text and integer keys (amendment af).", (b) => rebuildManifest(b, (m) => { m.anchor_plan = new Map<CborScalar, CborValue>([...Object.entries(m.anchor_plan as Obj), [1, 2]]); }, true)]);
+  // Amendment (k): hand-written nested-map guards use the text-keyed-map rule.
+  const intKeyed = () => new Map<CborScalar, CborValue>([[1, 2]]);
+  schemaTable.push(
+    ["schema-d82-presentation-transform-int-keyed", "schema/bad-type", "A presentation transform that is an int-keyed map.", (b) => mutatePresentation(b, (p) => { p.transforms = [intKeyed()]; })],
+    ["schema-d82-native-attestation-int-keyed", "schema/bad-type", "A root observation native attestation that is an int-keyed map.", (b) => mutateReceiptsCascade(b, root, (p) => { (p.body as Obj).native_attestations = [intKeyed()]; })],
+    ["schema-d82-action-int-keyed", "schema/bad-type", "An action attempt whose action is an int-keyed map.", (b) => mutateReceiptsCascade(b, (p) => p.kind === "action_attempt", (p) => { (p.body as Obj).action = intKeyed(); })],
+    ["schema-d82-command-int-keyed", "schema/bad-type", "An action attempt whose command is an int-keyed map.", (b) => mutateReceiptsCascade(b, (p) => p.kind === "action_attempt", (p) => { (p.body as Obj).command = intKeyed(); })],
+  );
+  for (const [name, code, description, mutate] of schemaTable) {
+    const item = bundleFixture(code, description, mutate);
+    add({ ...item, filename: name, descriptor: { ...item.descriptor, name, expected_result: "nonconformant", expected_step: 6 } });
+  }
+  // Amendment (n): range-proof and boundary entries at step 3, on the coverage: complete base of the bundle/range-* KATs (makeCompleteRange over bundle-valid-subset).
+  for (const [name, description, mutate] of [
+    ["schema-d82-range-entry-committed-at-text", "The complete range's first entry committed_at is text.", (b: Obj) => { makeCompleteRange(b); ((((b.ranges as Obj[])[0]!.entries as Obj[])[0]!).entry as Obj).committed_at = "bad"; }],
+    ["schema-d82-boundary-entry-epoch-seq-text", "The complete range carries a left_boundary whose entry epoch_seq is text.", (b: Obj) => { makeCompleteRange(b); const first = clone(((b.ranges as Obj[])[0]!.entries as Obj[])[0]!); (first.entry as Obj).epoch_seq = "bad"; (b.ranges as Obj[])[0]!.left_boundary = first; }],
+    ["schema-d82-range-inclusion-missing", "The complete range's first entry lacks its inclusion proof (amendment ab).", (b: Obj) => { makeCompleteRange(b); delete (((b.ranges as Obj[])[0]!.entries as Obj[])[0]!).inclusion; }],
+    ["schema-d82-merkle-proof-siblings-missing", "The carried Merkle proof lacks siblings (amendment ab).", (b: Obj) => { delete (artifacts(b).merkle_proofs as Obj[])[0]!.siblings; }],
+    ["schema-d82-claimed-profile-int", "The bundle's claimed_profile is the integer 5 (round 6: pyref had said enum-unknown).", (b: Obj) => { b.claimed_profile = 5; }],
+    ["schema-d82-v-negative-created-at-text", "The bundle's v is -1 and its created_at is text; v is typed first (round 6).", (b: Obj) => { b.v = -1; b.created_at = "x"; }],
+    ["schema-d82-delegations-1001", "1,001 delegation envelope shells; the CDDL occurrence bound is step-3 schema (D-82).", (b: Obj) => { artifacts(b).delegations = Array.from({ length: 1_001 }, (_, index) => [encodeCbor({ delegation_id: hash(encodeCbor(index)) }), new Uint8Array()]); sortArtifacts(b, "delegations"); }],
+    ["schema-d82-merkle-proof-21-siblings", "The carried Merkle proof carries 21 siblings; the CDDL bound is step-3 schema (amendment ak).", (b: Obj) => { (artifacts(b).merkle_proofs as Obj[])[0]!.siblings = Array.from({ length: 21 }, (_, index) => hash(encodeCbor(index))); }],
+    ["schema-d82-expected-heads-duplicate-target-id", "The trust inputs name the expected head's target twice (the copy with another root); the first is the good one (amendment ap).", (b: Obj) => { const heads = (b.trust_inputs as Obj).expected_anchor_heads as Obj[]; const h = heads[0]!; (b.trust_inputs as Obj).expected_anchor_heads = [h, { ...clone(h), root: deterministicId("other-root") }]; }],
+  ] as const) {
+    const item = bundleFixture(name.endsWith("-missing") ? "schema/missing-field" : name.endsWith("-1001") || name.endsWith("-21-siblings") ? "schema/out-of-range" : name.endsWith("-duplicate-target-id") ? "schema/duplicate-entry" : "schema/bad-type", description, mutate);
+    add({ ...item, filename: name, descriptor: { ...item.descriptor, name, expected_result: "nonconformant", expected_step: 3 } });
+  }
+  const leafProof = bundleFixture("schema/bad-type", "A Merkle proof leaf epoch_id is text; a bundle-level field, judged at step 3.", (b) => { ((artifacts(b).merkle_proofs as Obj[])[0]!.leaf as Obj).epoch_id = "bad"; });
+  add({ ...leafProof, filename: "schema-d82-merkle-proof-leaf-epoch-id-text", descriptor: { ...leafProof.descriptor, name: "schema-d82-merkle-proof-leaf-epoch-id-text", expected_result: "nonconformant", expected_step: 3 } });
+
   add(fixture("resource/bundle-too-large", "Append bytes until the exact input exceeds the fixed bundle limit.", concat(validBytes, new Uint8Array(16_777_217 - validBytes.length))));
   add(fixture("resource/cbor-depth", "Wrap a scalar in 33 nested arrays.", concat(new Uint8Array(33).fill(0x81), Uint8Array.of(0xf6))));
   add(bundleFixture("resource/node-count", "Replace receipts with 10,001 compact, uniquely identified envelope shells.", (bundle) => {
@@ -1370,24 +1934,15 @@ export function buildNegativeFixtures(): NegativeFixture[] {
     }
     artifacts(bundle).receipts = list; sortArtifacts(bundle, "receipts");
   }));
-  add(bundleFixture("resource/proof-too-large", "Repeat valid manifest range entries until one encoded proof object exceeds 65,536 bytes.", (bundle) => {
-    const manifestEnvelope = (artifacts(bundle).epoch_manifests as CborValue[])[0]!;
-    const manifest = payload(manifestEnvelope);
-    const entries = (((manifest.receipt_index as Obj).entries) as Obj[]);
-    const proofEntries: Obj[] = [];
-    let range: Obj;
-    do {
-      const entry = clone(entries[proofEntries.length % entries.length]!);
-      proofEntries.push({ entry, inclusion: { tree_size: 10_000, leaf_index: proofEntries.length - 1, siblings: Array.from({ length: 14 }, (_, index) => hash(encodeCbor([proofEntries.length, index]))) } });
-      range = { manifest_id: manifest.manifest_id!, selector_commitment: bundle.selector_commitment!, tree_size: 10_000, first_leaf_index: 0, entries: proofEntries };
-    } while (encodeCbor(range).length <= 65_536);
-    bundle.ranges = [range!];
+  add(bundleFixture("resource/proof-too-large", "Give the complete range's first inclusion proof 2,000 siblings so that one encoded proof object exceeds 65,536 bytes (amendment ah: proofs are counted, not their containers).", (bundle) => {
+    makeCompleteRange(bundle);
+    ((((bundle.ranges as Obj[])[0]!.entries as Obj[])[0]!).inclusion as Obj).siblings = Array.from({ length: 2_000 }, (_, index) => hash(encodeCbor(index)));
   }));
   add(bundleFixture("resource/proofs-too-large", "Add valid-shape unique Merkle proofs until aggregate deterministic encoding exceeds 4 MiB.", (bundle) => {
     const batchId = (artifacts(bundle).merkle_proofs as Obj[])[0]!.batch_id!;
     const proofs: Obj[] = []; let total = 0; let index = 0;
     while (total <= 4_194_304) {
-      const proof: Obj = { batch_id: batchId, tree_size: 1_000_000, leaf_index: index, leaf: { tree_size: 1_000_000, leaf_index: index, tenant_id: id16("tenant:acme-security"), site_id: id16("site:denver-lab"), epoch_id: 42, item_digest: hash(encodeCbor(index)) }, siblings: Array.from({ length: 64 }, (_, sibling) => hash(encodeCbor([index, sibling]))) };
+      const proof: Obj = { batch_id: batchId, tree_size: 1_000_000, leaf_index: index, leaf: { tree_size: 1_000_000, leaf_index: index, tenant_id: id16("tenant:acme-security"), site_id: id16("site:denver-lab"), epoch_id: 42, item_digest: hash(encodeCbor(index)) }, siblings: Array.from({ length: 20 }, (_, sibling) => hash(encodeCbor([index, sibling]))) }; // 20 siblings: the CDDL bound (amendment ak)
       proofs.push(proof); total += encodeCbor(proof).length; index += 1;
     }
     artifacts(bundle).merkle_proofs = proofs; sortArtifacts(bundle, "merkle_proofs");
@@ -1401,6 +1956,19 @@ export function buildNegativeFixtures(): NegativeFixture[] {
   add(fixture("cbor/tag-forbidden", "Wrap the bundle in CBOR tag 0.", concat(Uint8Array.of(0xc0), validBytes)));
   add(fixture("cbor/float-forbidden", "Use a top-level IEEE-754 float.", Uint8Array.of(0xfa, 0, 0, 0, 0)));
   add(fixture("cbor/non-canonical", "Encode integer 2 with a non-shortest argument.", Uint8Array.of(0xa1, 0x61, 0x76, 0x18, 0x02)));
+  // Amendment (ae): the whole item is walked before profile defects are reported.
+  for (const [name, code, description, bytes] of [
+    ["cbor-d82-noncanonical-then-malformed", "cbor/malformed", "A two-element array whose first item is non-shortest and whose second is a bare break byte.", Uint8Array.of(0x82, 0x18, 0x05, 0xff)],
+    ["cbor-d82-uint-beyond-safe", "cbor/malformed", "The integer 2^53 (outside the profile).", Uint8Array.of(0x1b, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)],
+    ["cbor-d82-half-float", "cbor/float-forbidden", "A top-level half-precision float (-1.0).", Uint8Array.of(0xf9, 0xbc, 0x00)],
+    ["cbor-d82-float64", "cbor/float-forbidden", "A top-level double (1.0); the float is recognised before its bytes are read as an argument (amendment ao).", Uint8Array.of(0xfb, 0x3f, 0xf0, 0, 0, 0, 0, 0, 0)],
+    ["cbor-d82-negative-beyond-safe", "cbor/malformed", "The integer -2^53 (outside the profile; -(2^53 - 1) is inside).", Uint8Array.of(0x3b, 0x00, 0x1f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff)],
+    ["cbor-d82-depth-32-ok", "schema/bad-type", "Thirty-two arrays nested in a top-level array, innermost empty: the thirty-second nested container does not exceed the bound, so step 2 passes and step 3 rejects the non-map (amendment ao).", concat(new Uint8Array(32).fill(0x81), Uint8Array.of(0x80))],
+    ["cbor-d82-depth-33", "resource/cbor-depth", "Thirty-three arrays nested in a top-level array, innermost empty: the thirty-third nested container exceeds the bound (amendment ao).", concat(new Uint8Array(33).fill(0x81), Uint8Array.of(0x80))],
+  ] as const) {
+    const item = fixture(code, description, bytes);
+    add({ ...item, filename: name, descriptor: { ...item.descriptor, name } });
+  }
 
   add(bundleFixture("schema/unknown-field", "Add one field to the closed top-level bundle map.", (bundle) => { bundle.unknown = 1; }));
   add(bundleFixture("schema/missing-field", "Remove required top-level created_at.", (bundle) => { delete bundle.created_at; }));

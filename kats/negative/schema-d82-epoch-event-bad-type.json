@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-epoch-event-bad-type",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "Last event occurred_at text.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-delegation-paired",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "Top-level delegation not_before text AND use twice; not_before is earlier in CDDL order.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

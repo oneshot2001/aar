@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-hazard-class-null",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "The dispatched attempt's action.hazard_class is null; a present non-life_safety value is unknown (amendment u).",
+  "expected_result": "nonconformant",
+  "expected_step": 10
+}

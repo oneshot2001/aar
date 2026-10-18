@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-embedded-delegation-before-later-receipt",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "The approval authorization's embedded delegation carries use twice (re-identified, re-signed, decision repaired; replay_domain salted so the authorization sorts before another receipt) and the next receipt in array order carries a corrupted signature; a traversal that visited every receipt before its embedded delegation would report sig/verify-failed.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

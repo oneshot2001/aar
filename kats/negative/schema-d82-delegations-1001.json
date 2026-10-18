@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-delegations-1001",
+  "expected_code": "schema/out-of-range",
+  "mutation_description": "1,001 delegation envelope shells; the CDDL occurrence bound is step-3 schema (D-82).",
+  "expected_result": "nonconformant",
+  "expected_step": 3
+}

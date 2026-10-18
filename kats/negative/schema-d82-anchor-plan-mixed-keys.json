@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-anchor-plan-mixed-keys",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The manifest's anchor_plan is a map with text and integer keys (amendment af).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

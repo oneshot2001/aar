@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
-import { buildNegativeFixtures, buildRequestCoordinateVariants } from "./negative-fixtures";
+import { addDelegationLadder, buildNegativeFixtures, buildRequestCoordinateVariants, mutateEmbeddedDelegationForProbe } from "./negative-fixtures";
 import { buildStatefulFixtures, parseStatefulPrior } from "./stateful-fixtures";
 import { domainHash, verifySigned } from "./crypto";
 import { TEST_KEYS } from "./testkeys";
@@ -15,6 +15,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 // unreadable (caller-supplied always; the wall clock is never read — pyref --at symmetry). Matches the fixture corpus.
 const AT = 1_735_689_800;
 const negativeFixtures = buildNegativeFixtures();
+const fromHexLocal = (hex: string): Uint8Array => Uint8Array.from(Buffer.from(hex, "hex"));
 const repairStep = (filename: string): number => filename.startsWith("repair-d70") ? 5 : filename.includes("independence") ? 17 : filename.startsWith("repair-d73-command") ? 10 : filename.startsWith("repair-d73-manifest") ? 14 : 6;
 
 describe("B2 reference verifier", () => {
@@ -117,9 +118,9 @@ describe("B2 reference verifier", () => {
     }
   }, 180_000);
 
-  test("release-repair fixtures fail at their specified step, not a later hash step (D-68..D-81)", () => {
+  test("release-repair fixtures fail at their specified step, not a later hash step (D-68..D-82)", () => {
     const repairs = negativeFixtures.filter((fixture) => fixture.filename.startsWith("repair-"));
-    expect(repairs).toHaveLength(68);
+    expect(repairs).toHaveLength(146);
     for (const fixture of repairs) {
       const result = verifyBundle(fixture.bytes, { evaluationTime: AT });
       expect(result.ok, fixture.filename).toBe(false);
@@ -210,6 +211,37 @@ describe("B2 reference verifier", () => {
       expect(output.includes("Traceback"), variant.label).toBe(false);
     }
   }, 180_000);
+
+  // D-82 amendment (e): the chain traversal evaluates each carried delegation
+  // once. Probes, not KATs: a 1,000-link linear chain (no RecursionError in
+  // pyref) and a 2-wide, 30-level ladder of shared ancestors (2^30 paths if
+  // revisited) both verify conformant in both verifiers with identical bytes.
+  test("delegation chain traversal is bounded by the number of carried delegations (D-82 e)", () => {
+    const PYREF = `
+import sys, json, time
+from pyref.verifier import evaluate
+raw = sys.stdin.buffer.read(); started = time.perf_counter()
+r = evaluate(raw, evaluated_at=int(sys.argv[1]), replay_state={"entries": []})
+i = r.verdict["verifier"]
+print(json.dumps({"result": r.result, "reason": r.reason, "hex": r.verdict_bytes.hex(), "seconds": time.perf_counter() - started,
+  "product": i["product"], "version": i["version"], "build": i["build_digest"].hex(), "config": i["config_digest"].hex()}))`;
+    for (const [label, levels, width] of [["linear 1,000-link chain", 1000, 1], ["2x30 shared-ancestor ladder", 30, 2]] as const) {
+      const bundle = decodeCbor(readFileSync(join(root, "kats", "positive", "bundle-valid-subset.cbor")), { strict: true }) as Record<string, CborValue>;
+      mutateEmbeddedDelegationForProbe(bundle, (d) => { d.parent_delegations = addDelegationLadder(bundle, levels, width); });
+      const bytes = encodeCbor(bundle);
+      const started = performance.now();
+      const ts = verifyBundle(bytes, { evaluationTime: AT, replayState: [] });
+      const harnessSeconds = (performance.now() - started) / 1000;
+      expect(ts.ok ? "conformant" : `${ts.reason}@${ts.step}`, label).toBe("conformant");
+      const proc = Bun.spawnSync(["python3", "-B", "-c", PYREF, String(AT)], { cwd: root, stdin: bytes });
+      expect(proc.exitCode, `${label}: ${proc.stderr.toString()}`).toBe(0);
+      const py = JSON.parse(proc.stdout.toString());
+      expect(py.result, label).toBe("conformant");
+      const again = verifyBundle(bytes, { evaluationTime: AT, replayState: [], product: py.product, version: py.version, buildDigest: fromHexLocal(py.build), configDigest: fromHexLocal(py.config) });
+      expect(again.ok && toHex(again.verdictEnvelope) === py.hex, label).toBe(true);
+      console.log(`D-82 chain probe ${label}: ${bytes.length} bytes, harness ${harnessSeconds.toFixed(3)} s, pyref ${py.seconds.toFixed(3)} s, identical verdict bytes`);
+    }
+  }, 300_000);
 
   test("stateful paired fixtures return their exact prior-state identity code", () => {
     for (const fixture of buildStatefulFixtures()) {

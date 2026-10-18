@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-parent-delegation-invocation-null",
+  "expected_code": "delegation/chain-invalid",
+  "mutation_description": "A carried parent delegation carries invocation_id: null and the embedded child none; a present null never equals an absent member (amendment u; pyref had compared None with None).",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

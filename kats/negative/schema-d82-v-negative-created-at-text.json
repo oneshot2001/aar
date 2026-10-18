@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-v-negative-created-at-text",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The bundle's v is -1 and its created_at is text; v is typed first (round 6).",
+  "expected_result": "nonconformant",
+  "expected_step": 3
+}

@@ -1,0 +1,5 @@
+{
+  "name": "cbor-d82-half-float",
+  "expected_code": "cbor/float-forbidden",
+  "mutation_description": "A top-level half-precision float (-1.0)."
+}

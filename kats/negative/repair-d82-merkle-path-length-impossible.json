@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-merkle-path-length-impossible",
+  "expected_code": "merkle/path-length",
+  "mutation_description": "The carried Merkle proof carries one sibling more than its tree size admits (amendment ak).",
+  "expected_result": "nonconformant",
+  "expected_step": 16
+}

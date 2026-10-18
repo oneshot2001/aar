@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
 import { verifySigned } from "./crypto";
 import { buildFixtures } from "./fixtures";
-import { buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildClassBoundaryFixtures, buildEvidenceCommitFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
+import { buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildD82PositiveFixtures, buildClassBoundaryFixtures, buildEvidenceCommitFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
 import { buildCountersignFixtures } from "./countersign-fixtures";
 import { TEST_KEYS } from "./testkeys";
 import { verifyBundle } from "./verifier";
@@ -26,8 +26,9 @@ describe("positive KAT harness", () => {
     }
   });
 
-  test("D-77 and D-80/D-81 positive repairs remain conformant and deterministic", () => {
-    const first = [...buildD77PositiveFixtures(), ...buildD80D81PositiveFixtures()]; const second = [...buildD77PositiveFixtures(), ...buildD80D81PositiveFixtures()];
+  test("D-77, D-80/D-81 and D-82 positive repairs remain conformant and deterministic", () => {
+    const positives = () => [...buildD77PositiveFixtures(), ...buildD80D81PositiveFixtures(), ...buildD82PositiveFixtures()];
+    const first = positives(); const second = positives();
     for (const [index, fixture] of first.entries()) {
       expect(equalBytes(fixture.bytes, second[index]!.bytes)).toBe(true);
       expect(equalBytes(fixture.bytes, readFileSync(join(root, "kats", "positive", `${fixture.filename}.cbor`)))).toBe(true);
@@ -100,6 +101,18 @@ describe("positive KAT harness", () => {
       }
     }
   }, 180_000);
+
+  test("the fork_declared event is a negative KAT: epoch/fork at step 14 in the corpus context (D-82)", () => {
+    const fork = buildFixtures().forkDeclared;
+    expect(equalBytes(fork.bytes, readFileSync(join(root, "kats", "negative", `${fork.filename}.cbor`)))).toBe(true);
+    expect(JSON.parse(readFileSync(join(root, "kats", "negative", `${fork.filename}.json`), "utf8"))).toEqual(fork.descriptor);
+    const bundle = decodeCbor(readFileSync(join(root, "kats", "positive", "bundle-valid-subset.cbor")), { strict: true }) as Record<string, any>;
+    bundle.artifacts.epoch_events.push(decodeCbor(fork.bytes, { strict: true }));
+    bundle.artifacts.epoch_events.sort((a: Uint8Array[], b: Uint8Array[]) => toHex((decodeCbor(a[0]!, { strict: true }) as Record<string, Uint8Array>).event_id!).localeCompare(toHex((decodeCbor(b[0]!, { strict: true }) as Record<string, Uint8Array>).event_id!)));
+    const result = verifyBundle(encodeCbor(bundle), { evaluationTime: AT });
+    expect(result.ok).toBe(false);
+    if (!result.ok) { expect(result.reason).toBe("epoch/fork"); expect(result.step).toBe(14); }
+  });
 
   test("every KAT strict-decodes and round-trips exactly", () => {
     for (const kat of buildFixtures().kats) {

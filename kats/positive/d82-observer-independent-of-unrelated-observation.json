@@ -1,0 +1,8 @@
+{
+  "name": "d82-observer-independent-of-unrelated-observation",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "The outcome declares independently_sensed with a qualifying predicate and an observer whose failure domain matches a new parentless observation that is not in the outcome's ancestry (amendment s); the round-4 pyref judged every carried observation."
+}

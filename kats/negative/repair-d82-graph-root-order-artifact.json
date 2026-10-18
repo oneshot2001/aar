@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-graph-root-order-artifact",
+  "expected_code": "graph/root-forbidden",
+  "mutation_description": "Two parentless receipts: the inference root (smaller receipt_id, epoch_seq 1) carries a standing_condition_trigger root, forbidden for an inference; the observation root (larger receipt_id, epoch_seq 0) lacks its descriptor. Artifact order reports root-forbidden; epoch_seq order would report root-missing. The observation's nonce is salted until the ids order that way.",
+  "expected_result": "nonconformant",
+  "expected_step": 12
+}

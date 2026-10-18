@@ -67,6 +67,9 @@ export interface SignatureCheck {
 
 export interface FixtureSet {
   kats: Kat[];
+  // D-82 part 2: the fork_declared event is a negative standalone KAT; the
+  // verifier rejects the epoch (epoch/fork, step 14) when it is carried.
+  forkDeclared: Kat & { descriptor: KatDescriptor & { expected_result: "nonconformant"; expected_code: "epoch/fork"; expected_step: 14 } };
   signatures: SignatureCheck[];
   derived: DerivedCheck[];
   proofs: { name: string; verify: () => boolean }[];
@@ -336,7 +339,7 @@ function canonicalSort(values: CborValue[]): CborValue[] {
 }
 
 export function buildFixtures(): FixtureSet {
-  const state: FixtureSet = { kats: [], signatures: [], derived: [], proofs: [] };
+  const state: FixtureSet = { kats: [], forkDeclared: undefined as unknown as FixtureSet["forkDeclared"], signatures: [], derived: [], proofs: [] };
   const credentials = buildCredentials(state);
 
   const statusFields: Obj = {
@@ -721,7 +724,13 @@ export function buildFixtures(): FixtureSet {
     const payload: Obj = { event_id: eventId, ...fields };
     const signed = signDetached(payload, CONTENT_TYPES.epochEvent, "ep_signing");
     epochEvents.push(signed);
-    addSignedKat(state, `epoch-event-${event.replaceAll("_", "-")}`, "epoch-event-envelope", signed, { event_id: eventId, ...(previousEventDigest === undefined ? {} : { previous_event_digest: previousEventDigest }) });
+    const name = `epoch-event-${event.replaceAll("_", "-")}`;
+    const ids = { event_id: eventId, ...(previousEventDigest === undefined ? {} : { previous_event_digest: previousEventDigest }) };
+    if (event === "fork_declared") {
+      const item = kat(name, "epoch-event-envelope", signed.envelopeBytes, signed.contentType, [signed.signer], ids);
+      state.forkDeclared = { ...item, descriptor: { ...item.descriptor, expected_result: "nonconformant", expected_code: "epoch/fork", expected_step: 14 } };
+      state.signatures.push({ name, envelopeBytes: signed.envelopeBytes, signer: signed.signer });
+    } else addSignedKat(state, name, "epoch-event-envelope", signed, ids);
     state.derived.push({ name: `epoch-event-${event}:event_id`, expected: eventId, recompute: () => domainHash("AAR-EPOCH-EVENT-ID-v1", fields) });
     previousPayload = signed.payloadBytes;
   }

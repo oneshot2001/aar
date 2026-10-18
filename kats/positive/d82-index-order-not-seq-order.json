@@ -1,0 +1,8 @@
+{
+  "name": "d82-index-order-not-seq-order",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "The manifest index holds two uncarried entries whose committed_at order is not their epoch_seq order; the span is the minimum and maximum epoch_seq (amendment ad)."
+}

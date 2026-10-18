@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-decision-profile-missing",
+  "expected_code": "delegation/scope",
+  "mutation_description": "The permit authorization's decision lacks profile (commitment recomputed); the profile is not contained (amendment o).",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

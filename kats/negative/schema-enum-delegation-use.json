@@ -1,0 +1,7 @@
+{
+  "name": "schema-enum-delegation-use",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Top-level delegation use twice.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

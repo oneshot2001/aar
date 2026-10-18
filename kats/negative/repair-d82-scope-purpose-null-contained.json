@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-scope-purpose-null-contained",
+  "expected_code": "delegation/scope",
+  "mutation_description": "The dispatched attempt's legal.purpose_id is null and the delegation's purpose_ids is [null]; a non-text value is never contained (amendment ag).",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

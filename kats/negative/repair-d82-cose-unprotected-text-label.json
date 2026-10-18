@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-cose-unprotected-text-label",
+  "expected_code": "cose/unprotected-not-empty",
+  "mutation_description": "The first credential's unprotected header is the text-keyed map {\"1\": 5}; a text label is not the alg label (amendment ah).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

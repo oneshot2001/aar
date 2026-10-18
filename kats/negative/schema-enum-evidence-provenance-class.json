@@ -1,0 +1,7 @@
+{
+  "name": "schema-enum-evidence-provenance-class",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Inference evidence provenance class self_signed.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

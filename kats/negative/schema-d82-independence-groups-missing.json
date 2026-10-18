@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-independence-groups-missing",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "The manifest's independence lacks groups (round 8; both had crashed).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-anchor-target-id-int-planned",
+  "expected_code": "anchor/target-unplanned",
+  "mutation_description": "The plan's first target and the anchor record's target both carry target_id 5; a non-16-byte id resolves to nothing (amendment q; the harness had matched 5 to 5 and gone on to an indeterminate head-missing).",
+  "expected_result": "nonconformant",
+  "expected_step": 17
+}

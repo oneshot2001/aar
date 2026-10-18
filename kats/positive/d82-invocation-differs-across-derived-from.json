@@ -1,0 +1,8 @@
+{
+  "name": "d82-invocation-differs-across-derived-from",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "The derived observation carries another invocation_id and no correlation binding: it is in no action flow (amendment z)."
+}

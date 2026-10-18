@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-open-first-seq-mismatch",
+  "expected_code": "epoch/span-count-mismatch",
+  "mutation_description": "The open event's first_epoch_seq is one more than the manifest span's first (chain relinked) (amendment ad; the harness had not checked).",
+  "expected_result": "nonconformant",
+  "expected_step": 14
+}

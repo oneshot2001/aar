@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-branching-chain",
+  "expected_code": "epoch/event-chain",
+  "mutation_description": "A second close event reuses event_seq 1 with a different previous_event_digest: conflicting chains fail at chain linkage, before any fork rule.",
+  "expected_result": "nonconformant",
+  "expected_step": 14
+}

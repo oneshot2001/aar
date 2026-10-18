@@ -1,0 +1,8 @@
+{
+  "name": "d82-manifest-predecessor-uncarried",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "The only manifest names an uncarried predecessor (amendment w)."
+}

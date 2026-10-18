@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-merkle-proof-21-siblings",
+  "expected_code": "schema/out-of-range",
+  "mutation_description": "The carried Merkle proof carries 21 siblings; the CDDL bound is step-3 schema (amendment ak).",
+  "expected_result": "nonconformant",
+  "expected_step": 3
+}

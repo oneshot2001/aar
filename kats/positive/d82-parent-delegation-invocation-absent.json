@@ -1,0 +1,8 @@
+{
+  "name": "d82-parent-delegation-invocation-absent",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "A carried parent delegation without invocation_id and an embedded child without one (the control for amendment u at the chain link)."
+}

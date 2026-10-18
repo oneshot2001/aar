@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-manifest-span-first-text",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The manifest sequence_span.first is text.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

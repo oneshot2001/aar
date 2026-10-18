@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-claimed-profile-int",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The bundle's claimed_profile is the integer 5 (round 6: pyref had said enum-unknown).",
+  "expected_result": "nonconformant",
+  "expected_step": 3
+}

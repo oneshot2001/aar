@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-delegation-null",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The approval authorization carries delegation: null.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

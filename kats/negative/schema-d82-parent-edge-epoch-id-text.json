@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-parent-edge-epoch-id-text",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The outcome observation's parent edge parent_epoch_id is text.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

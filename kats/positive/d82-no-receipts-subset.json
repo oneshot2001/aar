@@ -1,0 +1,8 @@
+{
+  "name": "d82-no-receipts-subset",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "An empty selected set with no journal: every maximum class is not_evaluated."
+}

@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-cross-epoch-null",
+  "expected_code": "graph/cross-epoch-forbidden",
+  "mutation_description": "The derived observation's same-epoch edge carries cross_epoch: null (amendment u).",
+  "expected_result": "nonconformant",
+  "expected_step": 12
+}

@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-batch-tree-size-text",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The Merkle batch tree_size is text.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

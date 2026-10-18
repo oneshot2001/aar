@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-range-boundary-mismatch-and-bad-proof",
+  "expected_code": "bundle/range-proof-invalid",
+  "mutation_description": "The complete range's first entry proof names leaf_index 999 and its last entry is dropped: the proofs are judged before the temporal slice (amendment ai; the harness had said bundle/range-boundary).",
+  "expected_result": "nonconformant",
+  "expected_step": 18
+}

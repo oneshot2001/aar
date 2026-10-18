@@ -1,0 +1,7 @@
+{
+  "name": "schema-enum-action-informational-reversibility",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Action attempt informational_reversibility partially.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -3,7 +3,7 @@
 Status: **draft, unreviewed by counsel, not legal advice.** Written against
 wire `v0.2.1` (verdict v3, D-76) on `main`; the limits table below adds the
 v0.2.3 `input_origin_ancestry` row (verdict v4, D-78), and the verdict digest
-in §0 is re-pinned with the v0.2.4 build (D-79..D-81; verdict shape unchanged). Rules text is against the Federal Rules of Evidence as amended through December 1,
+in §0 is re-pinned with the v0.2.5 build (D-82; verdict shape unchanged). Rules text is against the Federal Rules of Evidence as amended through December 1,
 2024 (the 2023 Rule 702 amendment and the 2024 Rule 1006 / new Rule 107
 amendments). State rules differ; the state notes below are marked for
 verification. This document does not claim that any AAR artifact is
@@ -29,7 +29,7 @@ One real bundle, one real verdict, run offline:
 $ python -m pyref verify kats/positive/bundle-valid-subset.cbor --at 1735689800
 Result: conformant
 Trust policy: producer-declared only
-  verdict_id:        c5cfc32d4cd162a55dbaefffb22c3704b7c6c085e472b3a97ffe737674a350b9
+  verdict_id:        e8bb1eb0a56c3f14bd814cfc820e28c37d43e84bb38048538e5648a58b7be2a7
   bundle_digest:     9571233e3ea5f08ff9cea1e81fa8394b669c135ac113f68c41b0ef59916a5b75
   requested_profile: AAR-2A   evaluated_profile: AAR-2A   coverage: valid_subset
   signed_observations: membership_only, anchor_existence_order_only,

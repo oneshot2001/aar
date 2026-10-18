@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-delegation-scope-actions-not-array",
+  "expected_code": "delegation/scope",
+  "mutation_description": "The embedded delegation's scope.actions is the integer 5.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

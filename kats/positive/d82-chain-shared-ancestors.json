@@ -1,0 +1,8 @@
+{
+  "name": "d82-chain-shared-ancestors",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "The embedded delegation names two carried parents that each name their own parent, both naming one shared grandparent: five delegations, each chain evaluated once."
+}

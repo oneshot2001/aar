@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-presentation-artifacts-ordinals",
+  "expected_code": "receipt/manifest-inconsistent",
+  "mutation_description": "The approval presentation carries two artifacts with ordinals [1, 0] (re-identified, re-signed); the round-3 harness never checked presentation ordinals.",
+  "expected_result": "nonconformant",
+  "expected_step": 10
+}

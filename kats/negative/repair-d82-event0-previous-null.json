@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-event0-previous-null",
+  "expected_code": "epoch/event-chain",
+  "mutation_description": "The open event (event_seq 0) carries previous_event_digest: null; the chain is relinked after it (amendment u).",
+  "expected_result": "nonconformant",
+  "expected_step": 14
+}

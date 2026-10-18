@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-complete-extra-unindexed-receipt",
+  "expected_code": "bundle/artifact-out-of-scope",
+  "mutation_description": "A complete bundle carries a second root observation committed before the selector window that no index entry names and nothing selected reaches (amendment aj; the harness had tolerated unindexed extras).",
+  "expected_result": "nonconformant",
+  "expected_step": 18
+}

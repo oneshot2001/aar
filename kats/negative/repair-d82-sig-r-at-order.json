@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-sig-r-at-order",
+  "expected_code": "sig/verify-failed",
+  "mutation_description": "The first credential's signature carries r equal to the group order with its original low s; sub-step 5 passes, verification fails (amendment h).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

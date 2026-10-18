@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-cose-nested-tag",
+  "expected_code": "cbor/tag-forbidden",
+  "mutation_description": "The first credential's COSE signature bstr is wrapped in tag 24 inside the COSE array; a tag nested inside the item is cbor/tag-forbidden, cose/tagged is the wrapping tag only (amendment aq).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,7 @@
+{
+  "name": "schema-enum-manifest-fork-policy",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Manifest fork_policy accept.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

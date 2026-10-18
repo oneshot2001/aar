@@ -1,0 +1,8 @@
+{
+  "name": "d82-chain-two-levels",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "The embedded delegation names a carried parent that names a carried grandparent; every link contains the child's window and scope lists and widens nothing."
+}

@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-payload-depth-33",
+  "expected_code": "resource/cbor-depth",
+  "mutation_description": "The root observation's legal is 33 nested arrays (re-identified, re-signed, left in place: neither verifier sorts an array whose payload does not decode); the thirty-third nested container exceeds the bound inside a COSE payload (amendment ao).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

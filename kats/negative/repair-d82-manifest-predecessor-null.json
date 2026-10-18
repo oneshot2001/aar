@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-manifest-predecessor-null",
+  "expected_code": "epoch/predecessor-mismatch",
+  "mutation_description": "The only manifest carries predecessor_manifest_digest: null (anchor rebound); a present value that is not a 32-byte digest mismatches (amendments u, w).",
+  "expected_result": "nonconformant",
+  "expected_step": 14
+}

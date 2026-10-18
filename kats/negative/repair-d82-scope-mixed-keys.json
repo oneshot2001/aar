@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-scope-mixed-keys",
+  "expected_code": "delegation/scope",
+  "mutation_description": "The embedded delegation's scope is a map with text and integer keys (amendment af).",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

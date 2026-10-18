@@ -2,17 +2,17 @@
   "checks": {
     "id_digest_recomputation": {
       "failed": 0,
-      "passed": 74,
+      "passed": 84,
       "skipped": 0
     },
     "round_trip": {
       "failed": 0,
-      "passed": 74,
+      "passed": 84,
       "skipped": 0
     },
     "signature_recomputation": {
       "failed": 0,
-      "passed": 74,
+      "passed": 84,
       "skipped": 0
     }
   },
@@ -790,6 +790,182 @@
     {
       "checks": {
         "id_digest_recomputation": {
+          "commitments_checked": 67,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 33,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/d82-anchor-head-newer-than-expected.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 72,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 38,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/d82-chain-shared-ancestors.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 69,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 35,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/d82-chain-two-levels.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 42,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 20,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/d82-index-order-not-seq-order.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 53,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 27,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/d82-invocation-differs-across-derived-from.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 67,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 33,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/d82-manifest-predecessor-uncarried.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 28,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 14,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/d82-no-receipts-subset.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 32,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 16,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/d82-observation-only-subset.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 56,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 28,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/d82-observer-independent-of-unrelated-observation.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 68,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 34,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/d82-parent-delegation-invocation-absent.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
+          "commitments_checked": 53,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 27,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/d82-receipt-verified-after-window.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
           "commitments_checked": 2,
           "status": "passed"
         },
@@ -834,22 +1010,6 @@
         }
       },
       "fixture": "kats/positive/epoch-event-close.cbor"
-    },
-    {
-      "checks": {
-        "id_digest_recomputation": {
-          "commitments_checked": 4,
-          "status": "passed"
-        },
-        "round_trip": {
-          "status": "passed"
-        },
-        "signature_recomputation": {
-          "signatures_checked": 1,
-          "status": "passed"
-        }
-      },
-      "fixture": "kats/positive/epoch-event-fork-declared.cbor"
     },
     {
       "checks": {
@@ -1204,7 +1364,7 @@
       "fixture": "kats/terminal-state/outcome-terminals-unknown-before-contradicted.cbor"
     }
   ],
-  "fixtures_checked": 74,
+  "fixtures_checked": 84,
   "schema_version": 1,
   "slice": "C1"
 }

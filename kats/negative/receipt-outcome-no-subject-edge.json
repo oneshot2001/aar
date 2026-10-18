@@ -1,0 +1,7 @@
+{
+  "name": "receipt-outcome-no-subject-edge",
+  "expected_code": "receipt/outcome-subject-mismatch",
+  "mutation_description": "The outcome observation carries only a supports parent (the derived observation) and no observed_outcome edge.",
+  "expected_result": "nonconformant",
+  "expected_step": 10
+}

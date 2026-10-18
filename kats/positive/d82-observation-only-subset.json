@@ -1,0 +1,8 @@
+{
+  "name": "d82-observation-only-subset",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "Only the two observation receipts, no journal: no inference, so maximum_provenance_class is not_evaluated in both verifiers."
+}

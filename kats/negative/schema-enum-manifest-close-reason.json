@@ -1,0 +1,7 @@
+{
+  "name": "schema-enum-manifest-close-reason",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Manifest close_reason manual.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

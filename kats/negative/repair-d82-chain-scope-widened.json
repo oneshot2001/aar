@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-chain-scope-widened",
+  "expected_code": "delegation/chain-invalid",
+  "mutation_description": "The embedded delegation names a carried parent whose actions omit the child's camera.stream.view.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-index-entry-receipt-id-missing",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "The first manifest index entry lacks receipt_id.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

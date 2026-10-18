@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-root-kind-constructor",
+  "expected_code": "graph/root-forbidden",
+  "mutation_description": "The parentless observation's root kind is the text constructor; own-property lookup leaves it unlisted (amendment af).",
+  "expected_result": "nonconformant",
+  "expected_step": 12
+}

@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-presentation-artifacts-item-not-map",
+  "expected_code": "receipt/manifest-inconsistent",
+  "mutation_description": "The approval presentation's first artifact is the integer 5.",
+  "expected_result": "nonconformant",
+  "expected_step": 10
+}

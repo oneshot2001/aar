@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-root-kind-missing",
+  "expected_code": "graph/root-forbidden",
+  "mutation_description": "The parentless observation's root lacks kind; formerly a KeyError at step 12 in pyref.",
+  "expected_result": "nonconformant",
+  "expected_step": 12
+}

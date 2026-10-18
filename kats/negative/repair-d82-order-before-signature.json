@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-order-before-signature",
+  "expected_code": "schema/unsorted-set",
+  "mutation_description": "Reverse the receipt array and corrupt the first credential's signature; artifact order is judged at step 3 before any envelope is verified.",
+  "expected_result": "nonconformant",
+  "expected_step": 3
+}

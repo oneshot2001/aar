@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-step7-presentation-id-before-later-receipt",
+  "expected_code": "identity/artifact-id-mismatch",
+  "mutation_description": "The approval authorization's presentation_id is wrong and a later receipt's (the inference's, nonce salted until it sorts after the authorization) conclusion digest is wrong; the earlier receipt's nested id is reported first (amendment am; the harness had checked every id before any receipt).",
+  "expected_result": "nonconformant",
+  "expected_step": 7
+}

@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-cose-truncated",
+  "expected_code": "cbor/malformed",
+  "mutation_description": "The first credential's COSE bstr lacks its last byte; an undecodable item takes the decoder's own code (amendment an; the harness had said cose/bad-structure).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-anchor-root-null",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The anchor record's anchor_root is null (round 8).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

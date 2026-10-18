@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-anchor-consistency-unrelated",
+  "expected_code": "anchor/consistency-invalid",
+  "mutation_description": "The anchor carries a self-consistent proof (old = new = 1, equal roots, empty path) whose new head is not the record's anchor head (amendment x; pyref had accepted it).",
+  "expected_result": "nonconformant",
+  "expected_step": 17
+}

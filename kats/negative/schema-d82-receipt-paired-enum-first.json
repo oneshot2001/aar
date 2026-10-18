@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-receipt-paired-enum-first",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Root observation evidence time class gps_bound AND correlation without phase; evidence is earlier in CDDL order.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

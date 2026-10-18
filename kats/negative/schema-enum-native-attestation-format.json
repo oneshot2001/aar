@@ -1,0 +1,7 @@
+{
+  "name": "schema-enum-native-attestation-format",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Root observation native attestation format sigstore.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

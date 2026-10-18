@@ -1,0 +1,5 @@
+{
+  "name": "cbor-d82-depth-32-ok",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "Thirty-two arrays nested in a top-level array, innermost empty: the thirty-second nested container does not exceed the bound, so step 2 passes and step 3 rejects the non-map (amendment ao)."
+}

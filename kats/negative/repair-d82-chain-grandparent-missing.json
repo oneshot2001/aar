@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-chain-grandparent-missing",
+  "expected_code": "delegation/chain-invalid",
+  "mutation_description": "The embedded delegation names a carried parent that names an uncarried grandparent.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

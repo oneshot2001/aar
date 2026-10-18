@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-presentation-paired",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Presentation transform operation rotate AND delivered_at text; transforms is earlier in CDDL order.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

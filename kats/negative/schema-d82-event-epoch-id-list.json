@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-event-epoch-id-list",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The anchor_submitted event's epoch_id is a one-element list; formerly an unhashable-type crash in pyref.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

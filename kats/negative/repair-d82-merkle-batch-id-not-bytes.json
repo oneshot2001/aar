@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-merkle-batch-id-not-bytes",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The carried Merkle proof's batch_id is the integer 5; every member of a membership proof is typed at step 3 (amendment ab; round 4 had pinned merkle/batch-binding at 16).",
+  "expected_result": "nonconformant",
+  "expected_step": 3
+}

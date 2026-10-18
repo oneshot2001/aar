@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-late-for-epoch-equal",
+  "expected_code": "epoch/late-insertion",
+  "mutation_description": "The outcome observation declares late_for_epoch_id equal to its own epoch_id; no manifest is carried.",
+  "expected_result": "nonconformant",
+  "expected_step": 14
+}

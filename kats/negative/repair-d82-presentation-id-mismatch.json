@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-presentation-id-mismatch",
+  "expected_code": "identity/artifact-id-mismatch",
+  "mutation_description": "The approval presentation's presentation_id does not recompute (re-signed; the authorization is re-identified around it) (amendment ac; the harness had said hash/mismatch).",
+  "expected_result": "nonconformant",
+  "expected_step": 7
+}

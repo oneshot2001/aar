@@ -1,0 +1,8 @@
+{
+  "name": "d82-anchor-head-newer-than-expected",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "The anchor record's head is three leaves past the expected head with a different root: no conflict (amendment y)."
+}

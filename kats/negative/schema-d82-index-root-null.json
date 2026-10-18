@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-index-root-null",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The manifest index root is null (round 8; the harness had crashed in equalBytes).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

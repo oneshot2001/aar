@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-verifier-key-not-found",
+  "expected_code": "key/not-found",
+  "mutation_description": "Drop the verifier_signing credential; the bundle reaches step 20 and the verdict is a signed indeterminate populated per the section 5 table.",
+  "expected_result": "indeterminate",
+  "expected_step": 20
+}

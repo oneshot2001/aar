@@ -1,0 +1,5 @@
+{
+  "name": "cbor-d82-noncanonical-then-malformed",
+  "expected_code": "cbor/malformed",
+  "mutation_description": "A two-element array whose first item is non-shortest and whose second is a bare break byte."
+}

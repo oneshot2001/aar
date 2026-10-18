@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-event-close-last-seq-text",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The close event's last_epoch_seq is text; the close event is re-identified and the chain rebuilt.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

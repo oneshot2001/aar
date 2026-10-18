@@ -1,0 +1,7 @@
+{
+  "name": "schema-enum-transformation-operation",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "Root observation consumption item transformation operation rotate.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

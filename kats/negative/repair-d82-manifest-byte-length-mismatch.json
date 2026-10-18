@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-manifest-byte-length-mismatch",
+  "expected_code": "hash/mismatch",
+  "mutation_description": "The inference's prompt_manifest declares byte_length one more than the carried payload (amendment ac; the harness had not checked).",
+  "expected_result": "nonconformant",
+  "expected_step": 7
+}

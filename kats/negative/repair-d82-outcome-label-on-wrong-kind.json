@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-outcome-label-on-wrong-kind",
+  "expected_code": "evidence/outcome-class-unsatisfied",
+  "mutation_description": "The root observation carries an outcome label its kind forbids (amendment ah).",
+  "expected_result": "nonconformant",
+  "expected_step": 10
+}

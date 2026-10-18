@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-cose-protected-empty-map",
+  "expected_code": "cose/alg-missing",
+  "mutation_description": "The first credential's protected bstr holds an empty map (amendment h).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

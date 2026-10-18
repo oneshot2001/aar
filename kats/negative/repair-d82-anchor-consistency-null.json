@@ -1,0 +1,7 @@
+{
+  "name": "repair-d82-anchor-consistency-null",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The anchor record carries consistency: null; the optional proof is present and not a map (amendments u, ab).",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

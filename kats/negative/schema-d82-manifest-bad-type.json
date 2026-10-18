@@ -1,0 +1,7 @@
+{
+  "name": "schema-d82-manifest-bad-type",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "Manifest closed_at text.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}
