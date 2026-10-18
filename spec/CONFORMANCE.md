@@ -52,7 +52,9 @@ normative as the step order itself (D-54).
 2. **Bundle CBOR.** Decode one untagged deterministic-CBOR item with the depth
    bound. Check well-formedness, valid UTF-8, definite lengths, unique keys, no
    tags, no floats, no trailing bytes, and exact deterministic re-encoding, in
-   that order.
+   that order; an item that is both non-canonical and later malformed is
+   `cbor/malformed`, and an integer whose magnitude exceeds 2^53 − 1 is outside
+   the profile and `cbor/malformed` (D-82 amendment ae).
 3. **Bundle schema.** Check the closed top-level map, `v`, required fields, field
    types, fixed-size values, enums/ranges, and sorted/unique
    arrays, in that order; the shape of `trust_inputs` (snapshot, root records,
@@ -61,14 +63,31 @@ normative as the step order itself (D-54).
    Occurrence ceilings listed as section 1 resource limits
    are deferred to step 4 so their `resource/*` code is reachable. The optional
    `artifacts.mediator_countersignatures` array is closed and sorted by primary
-   ID like the other artifact arrays; absence is the pre-D-67 encoding. Check
+   ID like the other artifact arrays; absence is the pre-D-67 encoding. The
+   bare (unsigned) bundle-level productions, a Merkle membership proof's `leaf`
+   and the `entry` of every range-proof and boundary proof, are text-keyed maps
+   whose `unix-time`, `sequence`, and `epoch-id` members are checked for
+   presence then type here, since step 6 never sees them (D-82); likewise every
+   member of a Merkle membership proof, of a range or boundary `inclusion`
+   proof, and of the enclosing range proof is checked for presence then type
+   here (D-82 amendment ab). Every artifact array's CDDL occurrence bound that
+   is not a section 1 limit (for example `delegations` and `credentials`,
+   `0*1000`) is `schema/out-of-range` here. Check
    `selector_commitment` last within this step.
 4. **Static resource counts.** Check artifact counts, parent counts, total edge
    count, individual proof byte lengths, and aggregate proof bytes in that order.
+   A proof object is one inclusion, consistency, or membership proof (a range
+   entry's or boundary's `inclusion`, an anchor's `inclusion` or
+   `consistency`, a Merkle membership proof); each is counted once and the
+   container that carries it is not counted (D-82 amendment ah).
 5. **Trust-policy input.** Validate the trust-store snapshot digest, root records,
    root-key uniqueness, tenant/site scopes, evaluation time, expected anchor
    heads, and policy digest. No two root records may share a `root_kid`; a
-   repeat is `schema/duplicate-entry` (D-77).
+   repeat is `schema/duplicate-entry` (D-77), as is a repeated `target_id`
+   among the expected anchor heads (checked at step 3 with the heads' shape,
+   D-82 amendment ap). A trust-store `snapshot_id`
+   of 32 zero bytes is the verdict's not-evaluated sentinel (section 5) and is
+   `schema/out-of-range` at this step (D-82 amendment ah).
    At the evaluation-time check, require the bundle's `evaluation_time` to
    equal the explicitly supplied verifier evaluation time; then require that
    time to be at least the trust-store snapshot's `created_at`. Either failure
@@ -119,19 +138,34 @@ normative as the step order itself (D-54).
       within each production, validate every closed scalar enum (credential
       `key_usage` and `principal_role`; delegation `use`; epoch event `event`;
       manifest `close_reason`, `late_arrival_policy`, and `fork_policy`;
-      transformation `kind`; `phase`; `format`; `reversibility`; outcome
+      transformation `operation`; `phase`; `format`; `reversibility`; outcome
       `state`; evidence `time.class`, `provenance.class`, and `outcome.level`;
       and every enum D-73, D-77, D-78, and D-81 already name), every
-      `unix-time` and `sequence` field for presence then type, and a receipt's
-      `freshness` and `binding` sub-maps for presence then type of each member.
-      Absence is `schema/missing-field`, a wrong type `schema/bad-type`, an
-      unlisted value `schema/enum-unknown`. Three pinned precedences stand: a
+      `unix-time`, `sequence`, and `epoch-id` field of every production,
+      nested members and array members included (the receipt bodies'
+      `observed_at` and `dispatched_at`, `evidence.time.wall_time`, parent
+      edges' `parent_epoch_id`, event detail sequences and times, manifest
+      `sequence_span` and index entries, anchor and Merkle batch `epoch_id`s), for
+      presence then type, a receipt's `freshness` and `binding` sub-maps
+      for presence then type of each member, and the proof-bearing
+      productions carried in envelopes (an anchor record's `inclusion`,
+      `consistency`, and `head`; a Merkle batch's members; every manifest
+      index entry's members) for presence then type of each member (D-82
+      amendment ab). Absence is
+      `schema/missing-field`, a wrong type `schema/bad-type`, an unlisted
+      value `schema/enum-unknown`. A present `null` is a present value of the
+      wrong type for every optional member of every production, never an
+      absent member (D-82 amendment u, extending g). Within an enveloped production, the closed-map
+      presence check of its top-level members precedes the field-ordered
+      traversal, so a missing top-level member is reported before any type or
+      enum defect of an earlier field. Three pinned precedences stand: a
       credential's `principal_type` enum before its fixed-size ids; a
       presentation's `state` enum before its ids; and a request envelope's
-      coordinate fields (`tenant_id`, `site_id`, `target_ep_kid`,
+      present coordinate fields (`tenant_id`, `site_id`, `target_ep_kid`,
       `correlation`) are judged at step 7 as `request/coordinate-mismatch`,
-      never as a step-6 schema failure. Traversal of every remaining field is
-      a separate ruling.
+      never as a step-6 schema failure (an absent one is the closed-map
+      `schema/missing-field`). Traversal of every remaining field is a
+      separate ruling.
    7. resolve a P-256 verification key through the accepted credential path
       and check the resolved signer, in this order (D-77):
       1. a carried credential whose `subject_kid` equals the protected kid
@@ -192,7 +226,9 @@ normative as the step order itself (D-54).
    `countersign/credential-invalid`, including a failure while validating that
    credential's own envelope.
 
-7. **Content commitments and IDs.** Note (GATE3 F3): artifact IDs bind
+7. **Content commitments and IDs.** Artifacts are visited in the step-6 order
+   (each receipt's commitments, then its embedded delegation's and nested
+   presentation's ids, before the next artifact; D-82 amendment am). Note (GATE3 F3): artifact IDs bind
    content, not signer — reference-by-ID resolves to the carried artifact,
    whose signature is independently validated at use (the credential check
    re-validates the token's signer for its role); revisit signer-in-preimage
@@ -200,9 +236,14 @@ normative as the step order itself (D-54).
    declared digest whose bytes are present. Recompute `delegation_id`,
    `credential_id`, `snapshot_id`, `rotation_id`, `event_id`, `anchor_id`, and
    `batch_id` from their domain-separated deterministic-CBOR claims with their
-   own ID field absent; a mismatch is `identity/artifact-id-mismatch`. For a
+   own ID field absent; a mismatch is `identity/artifact-id-mismatch` (a
+   presentation's `presentation_id` included). For a
    referenced canonical manifest,
-   first require a payload with the declared digest and media type, then hash it.
+   first require a payload with the declared digest, media type, and byte
+   length (a length that disagrees is `hash/mismatch`), then hash it. The
+   commitments recomputed are those at their CDDL positions; a digest-named
+   member at any other position is a shape matter for the body traversal, not
+   a commitment (D-82 amendment ac).
    For every `agent_request` root, resolve exactly one request envelope by
    `request_id` and require the root's `request_commitment` to equal SHA-256 of
    the exact request claims bstr. A missing request envelope is
@@ -285,11 +326,15 @@ normative as the step order itself (D-54).
    `(epoch owner kid, epoch_id, epoch_seq)`. Exact repeated envelope bytes are one
    duplicate observation and are coalesced with an informational verdict entry.
    The same `receipt_id` with different envelope bytes is identity reuse. One
-   coordinate naming different IDs is equivocation. A decreasing issuer sequence
-   or reused epoch sequence is rollback/equivocation. A gap is not itself a reject
+   coordinate naming different IDs is equivocation
+   (`identity/coordinate-equivocation`, whichever coordinate repeats). A
+   decreasing issuer or epoch sequence is rollback. A gap is not itself a reject
    in a `valid_subset` bundle.
 10. **Receipt schema semantics.** Require `kind`/body and kind/signer-role
-    agreement; required evidence label presence; manifest field commitments;
+    agreement; required evidence label presence (a label absent from the kind
+    that requires it, or present on a kind that forbids it, is that class's
+    `evidence/*-class-unsatisfied`); manifest field commitments (an ordinal
+    is a uint; a bool is never one);
     resolve every inference `consumption_manifest_id` to either the
     `manifest_digest` of a consumption manifest carried by a `derived_from`
     parent observation or the `digest` of a bundle
@@ -333,14 +378,26 @@ normative as the step order itself (D-54).
     `hazard_class="life_safety"`, and the attempt remains
     `eligible_for_dispatch`; every other marker combination is
     `receipt/attempt-disposition` (D-54, D-66).
-11. **Replay and freshness.** Require `issued_at <= committed_at < expires_at`,
-    exact intended-parent equality, invocation-ID consistency, unexpired leases,
-    and no prior different use of a one-time `(replay_domain, invocation_id)`.
-    An exact replay of identical bytes is a duplicate; changed content under the
-    same one-time coordinate is rejected.
+11. **Replay and freshness.** Require `issued_at <= committed_at < expires_at`
+    (the freshness window bounds emission, not evaluation: a receipt verified
+    after its window has closed is not expired, D-82 amendment v), exact
+    intended-parent equality, invocation-ID consistency within an action flow
+    (the receipts that share one `correlation_id`; a receipt with no
+    correlation binding is in no flow for this check, amendment z), unexpired
+    leases, and no prior different use of a one-time
+    `(replay_domain, invocation_id)`. An exact replay of identical bytes,
+    whether carried in the bundle or supplied in the replay state with the
+    same `content_digest`, is a duplicate; changed content under the same
+    one-time coordinate is rejected.
 12. **Referential closure and graph.** Resolve every parent, require parent metadata
     to equal the resolved parent, enforce the edge matrix and root rules below,
-    enforce cross-epoch rules, then enforce depth and width.
+    enforce cross-epoch rules, then enforce depth and width. Each listed check
+    runs over every receipt, in artifact order (the `receipts` array order step
+    3 requires), before the next check begins (D-54): a dangling parent anywhere
+    in the graph is reported before a missing root descriptor anywhere in it,
+    and within one check the earlier receipt's defect is reported first. A root
+    descriptor that is not a text-keyed map is `graph/root-missing`; one whose
+    `kind` is absent or unlisted is `graph/root-forbidden`.
 13. **Authorization dominance.** For every dispatch, resolve its single
     `attempted_as` action attempt. The attempt MUST have exactly one
     `authorized_by` authorization ancestor, and that authorization MUST carry
@@ -373,7 +430,10 @@ normative as the step order itself (D-54).
     child's `tenant_id` and `site_id`; not widen `use` (a `one_time` parent
     forbids a `reusable` child, and a parent `invocation_id` MUST equal the
     child's); and not name a delegation already on the path. Links are
-    followed in `parent_delegations` array order, depth first. For each dispatch in array order, after that dispatch's
+    followed in `parent_delegations` array order, depth first; each carried
+    delegation's chain is evaluated at most once per verification, so the
+    traversal is bounded by the number of carried delegations whatever the
+    sharing of ancestors. For each dispatch in array order, after that dispatch's
     dominance, embedded-delegation, scope, time and parent-delegation checks
     succeed, apply D-66 before moving to the next dispatch (D-54). On an AAR-3
     profile, the linked `action_attempt` is committed
@@ -426,48 +486,83 @@ normative as the step order itself (D-54).
     at chain linkage, before any fork rule (D-82). A receipt whose
     `late_for_epoch_id` is not lower than its own `epoch_id` is
     `epoch/late-insertion`, whether or not that epoch's manifest is carried
-    (D-82).
+    (D-82). Duration is judged on both the manifest's `opened_at`/`closed_at`
+    and its paired open and close events' `occurred_at`: either pair more than
+    86,400 seconds apart is `epoch/duration-exceeded`.
     D-73: a carried manifest whose owner/epoch has no event group, and an
     event group with no carried manifest, are each `epoch/open-close` — a
     closed epoch is the manifest **and** its open/close events.
     `previous_event_digest` is absent only on event sequence zero and otherwise
     MUST equal SHA-256 of the exact preceding epoch-event payload bstr; a mismatch
     is `epoch/event-chain`. A predecessor manifest digest is absent only on the
-    first epoch known for that owner; later epochs require it.
+    first epoch known for that owner; later epochs require it. The carried
+    manifests of one owner, in `opened_at` order, chain by it: each later
+    manifest's `predecessor_manifest_digest` MUST equal SHA-256 of the
+    preceding carried manifest's payload bstr (`epoch/predecessor-mismatch`);
+    a predecessor that names no carried manifest is not itself a defect in a
+    `valid_subset` bundle (amendment w). Sequence span and count are judged
+    here: the open event's `first_epoch_seq` and the close event's
+    `last_epoch_seq` MUST equal the manifest's `sequence_span`, and the close
+    event's `item_count`, the manifest's `item_count`, and the index's
+    `leaf_count` MUST equal the index length (`epoch/span-count-mismatch`,
+    amendment ad).
 15. **Manifest index.** Require, in this order: sort order
     (`manifest/index-order`), contiguous leaf indices (`manifest/index-gap`),
     unique receipt IDs/epoch sequences (`manifest/index-duplicate`),
     entry-to-receipt equality (`manifest/index-receipt-mismatch`), and equality
-    of counts and sequence spans. Only after every entry-level requirement holds
+    of sequence spans (the span is the minimum and maximum `epoch_seq` over the
+    entries; a nil span pairs only with an empty padding index, amendment ad).
+    Only after every entry-level requirement holds
     are the entry leaves and root recomputed and compared to the carried root;
     `manifest/index-root-mismatch` fires last (D-54).
 16. **Merkle batches.** Recompute domain-separated leaf/node hashes with
     `batch_id` excluded from the leaf preimage; enforce proof batch ID against the
     signed batch's recomputed ID and enforce index, size, signer,
-    tenant/site/epoch leaf context, and path length, then compare the root. Among
+    tenant/site/epoch leaf context, and path length (a sibling count that is
+    impossible for the batch's tree size is `merkle/path-length`; the CDDL
+    bounds themselves, more than 20 siblings and a `tree_size` outside
+    1..1,048,576, are `schema/out-of-range` at steps 3 and 6, D-82 amendment
+    ak), then compare the root. Among
     successfully proven leaves carried in this bundle for one signed batch,
     reject two leaves at different indices that share
     `(tenant_id, site_id, epoch_id, item_digest)`. The verifier cannot make that
     duplicate claim about unproven leaves. A successful result is recorded only
     as membership.
 17. **Anchors.** Verify target identity and plan membership, inclusion proof,
-    optional consistency proof, manifest/epoch binding, and recompute
+    optional consistency proof (its `new_tree_size` and `new_root` MUST equal
+    the record's `anchor_tree_size` and `anchor_root`, else
+    `anchor/consistency-invalid`, amendment x), manifest/epoch binding, and recompute
     `manifest_digest` as SHA-256 of the exact epoch-manifest payload bstr under
     `anchor/manifest-binding`; then verify submission deadline, expected-head
-    match/freshness, and multi-target independence declaration. An anchor proves
+    match/freshness (the record's head conflicts with the expected head when
+    their sizes are equal and their roots differ, or when their sizes differ
+    and their roots are equal, `anchor/head-mismatch`, amendment y), and
+    multi-target independence declaration. An anchor proves
     existence/order by time only.
     The independence basis compares anchor targets with each other; it does
     not assert that an anchor operator differs from the producer. A
     `same_operator` basis declares no independence: the verifier performs no
     pairwise distinctness check and records existence/order only. The basis
-    enum is validated at step 6 even when no anchor record is carried.
+    enum is validated at step 6 even when no anchor record is carried, and a
+    repeated `target_id` among the plan's targets is `schema/duplicate-entry`
+    at step 6 (amendment ap).
     Observation consumption cardinality and command exclusion shape are
     likewise step-6 schema checks; missing exclusion commitments are not
     deferred to command hashing.
-18. **Bundle ranges and coverage.** Verify each range against the signed manifest
-    index root; require contiguous leaf indices and correct left/right temporal
-    boundaries; evaluate the selector; require every selected entry and its closed
-    graph. Per D-19, a range's `entries` MUST carry every objective index entry in
+18. **Bundle ranges and coverage.** For each range, in this order (D-54, D-82
+    amendment ai): resolve its manifest (`bundle/range-manifest-missing`),
+    match its selector commitment (`bundle/range-selector-mismatch`), require
+    contiguous leaf indices that also lie strictly above the previous range of
+    the same manifest in array order (`bundle/range-noncontiguous`, amendment
+    al), verify every entry
+    proof and every present boundary proof against the signed manifest index
+    root (`bundle/range-proof-invalid`), then require correct left/right
+    temporal boundaries (`bundle/range-boundary`); then evaluate the selector;
+    require every selected entry and its closed
+    graph. Under `complete`, a carried receipt that is not reachable from a
+    selected receipt is judged by its objective index entry: an entry outside
+    the selector, or no entry at all, is `bundle/artifact-out-of-scope`
+    (amendment aj). Per D-19, a range's `entries` MUST carry every objective index entry in
     the half-open temporal slice — including entries whose kind, subject, or
     issuer do not match the selector. Selector predicates are applied locally by
     the verifier only after slice completeness is established; a matching-only
@@ -490,7 +585,10 @@ normative as the step order itself (D-54).
     receipt's own epoch, when present, is the upper bound. `proxy_captured`
     requires the capture artifact; `provider_attested` additionally requires the
     provider artifact; `independently_sensed` requires the qualification artifact
-    and a distinct accepted observer failure domain. v0.2 carries these bytes
+    and an observer whose `failure_domain_id` differs from the
+    `source_device.failure_domain_id` of every observation in the outcome
+    receipt's ancestry (the observations the reported action derived from; an
+    unrelated observation elsewhere in the bundle does not count, D-82). v0.2 carries these bytes
     opaquely and does not cryptographically interpret TPM quotes, provider
     signature formats, predicates, or other attestation content; deep validation
     is a v0.3 or stronger-profile concern. Contradicted and unknown remain honest
@@ -639,7 +737,7 @@ one input has several defects, section 2 selects the first verifier code.
 | `identity/reuse` | One receipt ID names nonidentical envelope bytes relative to prior evaluated state. |
 | `identity/coordinate-equivocation` | One issuer or epoch coordinate names different receipt IDs. |
 | `identity/issuer-sequence-rollback` | Issuer sequence decreases relative to a prior committed receipt in evaluated state. |
-| `identity/epoch-sequence-rollback` | Epoch sequence decreases or is reused within one owner/epoch. |
+| `identity/epoch-sequence-rollback` | Epoch sequence decreases within one owner/epoch (a reused coordinate naming a different ID is equivocation). |
 | `receipt/kind-body-mismatch` | Receipt `kind` does not select the supplied body production. |
 | `receipt/signer-role-mismatch` | Receipt kind, protected/payload role, or required credential key usage violates the closed signer matrix. |
 | `receipt/manifest-inconsistent` | Consumption, presentation, decision, or command manifest ordinals, counts, or cross-references disagree after direct byte/digest checks. |
@@ -669,7 +767,7 @@ one input has several defects, section 2 selects the first verifier code.
 | `credential/rotation-rollback` | Within one tenant and site, rotation continuity sequence or effective time is non-monotonic (D-80). |
 | `credential/role-key-reuse` | Agent, EP, or Authority Source resolve to the same signing kid. |
 | `replay/not-yet-valid` | Receipt freshness `issued_at` is after its committed time/evaluation window. |
-| `replay/expired` | Receipt committed/evaluated at or after `expires_at`. |
+| `replay/expired` | Receipt committed at or after `expires_at`. |
 | `replay/parent-binding` | `intended_parents` is not exactly the ordered parent-id list. |
 | `replay/invocation-mismatch` | Receipts in one action flow disagree on invocation ID or replay domain. |
 | `replay/one-time-reused` | A one-time replay-domain/invocation coordinate was previously used for different content. |

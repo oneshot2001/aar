@@ -1697,8 +1697,9 @@ verifiers before the audited rows are re-pinned.
    `graph/cross-epoch-unanchored`. pyref gains both rules; a wrong-number and
    a same-number-different-owner fixture pin them.
 8. **Bounded schema table (step 6).** In CDDL field order within each
-   production: every closed scalar enum (listed in 6.6), every `unix-time`
-   and `sequence` field for presence then type, and a receipt's `freshness`
+   production: every closed scalar enum (listed in 6.6), every `unix-time`,
+   `sequence`, and `epoch-id` field of every production (nested and array
+   members included) for presence then type, and a receipt's `freshness`
    and `binding` sub-maps for presence then type of each member. Three
    pinned precedences stand: credential `principal_type` before fixed-size
    ids; presentation `state` before ids; request coordinate fields judged at
@@ -1747,3 +1748,202 @@ ruling. Keep pyref's `self_asserted` initialisation: a successful verdict
 would claim a provenance class for a bundle with no inference. Re-pin the 40
 rows first and rule later: launders bugs as identity changes, which the
 audit forbids.
+
+**Amendments from the build review (2026-10-18).** The Codex finding pass and
+the reviewer agent probed the first build with signed bundles outside the
+corpus and found splits and crashes the ten parts left open. Pinned: (a) within
+a production the closed-map presence check precedes the field-ordered
+traversal, and the request-coordinate precedence applies to present fields;
+(b) the step-6 table covers every `unix-time`, `sequence`, and `epoch-id`
+field, nested and array members included — the first build had bounded it to
+top-level fields, which left a text `wall_time` conformant and a list-typed
+event `epoch_id` a pyref crash; (c) step 12 runs each listed check over every
+receipt, in artifact order, before the next check (the harness model; the
+second build sorted pyref's receipts by `epoch_seq`, which the root and
+cross-epoch checks, each with more than one code, made observable); (d) epoch duration is judged
+on the manifest pair and on the event pair, one code; (e) the chain traversal
+evaluates each carried delegation once (iterative, memoised), because a
+path-local cycle check alone let a 1,000-link chain exhaust pyref's recursion
+and shared ancestors cost exponential revisits; (f) the loose credential index
+of both verifiers takes any artifact entry whose element 0 decodes to a map
+(the harness model), so a malformed credential envelope is reported at its own
+position; (g) a present `null` nested envelope is a step-6 type failure in
+both; (h) step-6 sub-steps 1 to 5 are read literally: a protected bstr holding
+an empty map is `cose/alg-missing`, an undecodable protected bstr is
+`cose/protected-not-map`, and a 64-byte signature with `r` at or above the
+group order and low `s` reaches verification and is `sig/verify-failed`; (i)
+selector sets use the same pairwise comparison as artifact arrays; (j) a
+missing top-level bundle member is `schema/missing-field` at step 3; (k) every
+hand-written nested-map guard uses the text-keyed-map rule; (l) a used
+embedded delegation whose `scope` is not a map, or whose lists are not arrays,
+is `delegation/scope` at step 13 in both (its shape traversal stays deferred);
+(m) a `body.delegation` on a non-authorization receipt is ignored by both
+until the body closed-map traversal lands (BACKLOG); (n) the bare bundle-level
+productions step 6 never sees, a Merkle membership proof's `leaf` and the
+`entry` of every range-proof and boundary proof, have their `unix-time`,
+`sequence`, and `epoch-id` members checked for presence then type at step 3
+(the second build did this for the Merkle leaf and declared the range entries
+deferred; amendment b says every production); (o) the step-13 scope check
+reads the attempt's `legal.purpose_id` and the decision's `profile` through a
+guard: an absent or wrongly typed value is simply not contained, so the
+failure is `delegation/scope`, never a crash (the second build left pyref
+raising on a non-map `legal`); (p) the step-12 root-descriptor guard follows
+(k): a `root` that is not a text-keyed map is `graph/root-missing`, a map
+whose `kind` is absent or unlisted is `graph/root-forbidden`; (q) a reference
+whose identifier is not a byte string of its CDDL size (credential `path`
+members, rotation `predecessor_credential_id` and `successor_credential_id`,
+status `credential_id`, decision `status_snapshot_ids` members, close-event
+`manifest_id`, Merkle proof `batch_id`, range and anchor `manifest_id`,
+step-19 attestation and anchor ids) resolves to nothing, and the step's
+existing code for an unresolved or mismatched reference fires; likewise a
+receipt `issuer_role` that is not text matches no role, a close-event
+`item_count` that is not a uint matches no span, and an `observer` or
+`source_device` that is not a text-keyed map (`null` included) is treated as
+absent, so none of these is ever a crash (the third build's bare-read sweep
+found pyref raising on each while the harness already emitted the code); (r)
+the `receipt/manifest-inconsistent` row covers presentation `artifacts`
+ordinals: the harness, which never checked them, now does, and a presentation
+whose `artifacts` is not an array of text-keyed maps is the same code at step
+10 in both; (s) step 19 judges `independently_sensed` observer independence
+against the observations in the outcome receipt's ancestry (the harness
+model): pyref had compared against every carried observation, so an unrelated
+observation sharing the observer's failure domain flipped a conformant bundle
+nonconformant in pyref alone; (t) an anchor whose `manifest_id` does not
+resolve is `anchor/target-unplanned`, step 17's first listed check (the
+harness order; pyref had said `anchor/manifest-binding`). Fixtures pin each.
+
+**Second build review (2026-10-18, reviewer round 2 and a Codex probe pass
+whose final synthesis was filter-blocked; its probe log was recovered).** Both
+probed the fifth build with signed bundles and found the residual sentence
+wrong (the harness usually emits a verdict where pyref raises), two amendments
+contradicted by one verifier, a present-`null` class, and pre-existing
+semantic splits outside the ten parts. Pinned: (u) a present `null` is a
+present value of the wrong type for every optional member of every
+production, never an absent member (extending g; pyref's `is not None` tests
+had treated it as absent, so `root: null`, `cross_epoch: null`,
+`degraded: null`, `hazard_class: null`, a first event's
+`previous_event_digest: null`, a manifest's `predecessor_manifest_digest:
+null`, and an anchor's `consistency: null` split the verifiers); (v)
+`replay/expired` is judged on `committed_at` only: the freshness window
+bounds emission, and a receipt verified after its window has closed is
+evidence, not a replay (pyref had also rejected `evaluated_at >= expires_at`,
+which would have made every archived receipt unverifiable once its window
+closed; the reason-code row is reworded); (w) the carried manifests of one
+owner, in `opened_at` order, chain by `predecessor_manifest_digest`; a
+predecessor that names no carried manifest is not itself a defect in a
+`valid_subset` bundle (pyref's model; the harness had required resolution);
+(x) a consistency proof's `new_tree_size` and `new_root` MUST equal the
+record's own `anchor_tree_size` and `anchor_root` (the harness check; pyref
+had accepted any internally valid proof); (y) the record's head conflicts
+with the expected head when their sizes are equal and their roots differ, or
+when their sizes differ and their roots are equal (each verifier had one half);
+(z) an action flow for invocation-ID consistency is the set of receipts that
+share one `correlation_id`, and a receipt with no correlation binding is in
+no flow (the harness model; pyref's parent-edge rule would reject an inference
+derived from an observation sensed under an earlier invocation); (aa) step
+19's `externally_anchored` requires the anchor's manifest to resolve and its
+`epoch_owner_kid` to equal the receipt binding's, as the sentence already
+said (pyref aligns); (ab) the proof-bearing productions are checked for
+presence then type of every member where they are first seen: at step 6 for
+an anchor record's `inclusion`, `consistency`, and `head`, a Merkle batch's
+members, and every manifest index entry's members; at step 3 for a Merkle
+membership proof, a range or boundary `inclusion` proof, and the enclosing
+range proof (this closes the "residual" the fifth build declared, which the
+probes showed was mostly pyref raising where the harness emitted a code, and
+in one case, a missing anchor `head.root`, the harness emitting `conformant`);
+(ac) step 7 requires a referenced manifest payload's byte length to equal the
+declared `byte_length` (`hash/mismatch`; the harness had not checked), the
+commitments recomputed are those at their CDDL positions only (pyref had
+walked every nested map for digest-named members), and a presentation whose
+`presentation_id` does not recompute is `identity/artifact-id-mismatch` like
+every other artifact id; (ad) sequence span and count are judged at step 14
+(the open event's `first_epoch_seq` and the close's `last_epoch_seq` equal
+the manifest span; the close's `item_count`, the manifest's `item_count`,
+and the index's `leaf_count` equal the index length) and the step-15 span is
+the minimum and maximum `epoch_seq` over the entries (entries are ordered by
+`committed_at` first, so the first and last entries need not carry the
+extremes); (ae) step 2 reports `cbor/malformed` for an item that is both
+non-canonical and later malformed (well-formedness precedes re-encoding in
+the listed order), `cbor/float-forbidden` for any float in both verifiers,
+and `cbor/malformed` for an integer whose magnitude exceeds 2^53 − 1; (af)
+every lookup of a wire string in a table uses own-property semantics in the
+harness (`constructor` and `__proto__` as an `edge_type` or root `kind` had
+thrown), and every hand-written map guard in pyref is the text-keyed rule
+(an embedded delegation `scope` and a manifest `anchor_plan` with mixed keys
+had passed pyref); (ag) amendment (o) read literally: the attempt's
+`legal.purpose_id` and the decision's `profile` MUST be text and contained
+in the delegation lists; a non-text or absent value is `delegation/scope`
+even when the list carries the same malformed value or a `null`; (ah) the
+remaining pins from the probes: a reused epoch coordinate naming a different
+receipt id is `identity/coordinate-equivocation` and only a decreasing
+sequence is rollback; an evidence label on a kind that forbids it is that
+class's `evidence/*-class-unsatisfied` at step 10; an ordinal is a uint and a
+bool is never one (Python's `False == 0` had admitted a bool ordinal); a text
+label `"1"` in the unprotected map is `cose/unprotected-not-empty` (label 1 is
+the integer); every artifact array's CDDL occurrence bound that is not a
+section 1 limit is `schema/out-of-range` at step 3 in both; the section 1
+proof-object limits count each inclusion, consistency, or membership proof
+once and never the container that carries it (pyref had counted a range
+proof and its entries both); a trust-store `snapshot_id` of 32 zero bytes
+is the verdict's not-evaluated sentinel and is `schema/out-of-range` at step
+5 (pyref had refused to emit a verdict, the harness had emitted a conformant
+one carrying the sentinel); an exact replay supplied in the replay state with
+the same `content_digest` is a duplicate, as the step-11 text already said
+(pyref had compared the receipt id to the content digest); a credential
+`path` beyond its CDDL bound is `schema/out-of-range` at step 6 (the bound
+is also a section 1 limit, but the array is schema before it is a resource);
+step 18 verifies a present boundary's inclusion proof (the harness had not);
+(ai) within a range, step 18 resolves the manifest, matches the selector
+commitment, requires contiguous leaf indices, verifies every entry and
+boundary proof, and only then judges the temporal slice (pyref's order and the
+sentence's: "against the signed manifest index root" comes first; the harness
+had judged the slice before the proofs, so a range that both misses its slice
+and carries a bad proof split the verifiers); the sixth build also pinned a
+present `null` anchor `consistency` as `schema/bad-type` at step 6, since (ab)
+types it there and step 6 precedes 17.
+
+**Third review (2026-10-18, reviewer round 3, 54 new probes on the seventh
+build).** Pinned: (aj) under `complete`, a carried receipt not reachable from a
+selected receipt is judged by its objective index entry, and no entry at all
+is `bundle/artifact-out-of-scope` like an entry outside the selector (the
+harness had tolerated unindexed extras, pyref had judged them by their own
+fields with empty subject and correlation sets); (ak) the CDDL bounds on a
+Merkle membership proof (at most 20 siblings) and a batch `tree_size`
+(1..1,048,576) are `schema/out-of-range` at steps 3 and 6, and a sibling count
+impossible for the tree size is `merkle/path-length` at 16 in both (pyref had
+neither bound, the harness had both at 16); (al) the ranges of one manifest
+carry strictly increasing leaf indices in array order, judged at the
+contiguity position (the row says "overlap another range"; pyref had checked
+repeated coordinates inside its proof loop); (am) step 7 visits artifacts in
+the step-6 order (the harness had checked every id before any receipt
+commitment, pyref every receipt before any presentation); (an) an undecodable
+COSE item is `cbor/malformed` at step 6 (the `cose/bad-structure` row says
+"well-formed"; the harness had mapped every decode error to it); (ao) the
+bound in step 2 is literal: the thirty-third nested container exceeds it, the
+thirty-second does not (the top-level item is depth 0; the container at depth 33 exceeds, the one at depth 32 does not), at the top level and inside a COSE payload alike, and
+a float is recognised before its bytes are read as an integer (both scanners
+had reported a double as `cbor/malformed`; pyref's second-phase decoder had
+rejected depth 32); the anchor record's own scalars (`anchor_tree_size`,
+`anchor_leaf_index`, `anchor_root`, `manifest_digest`), a manifest index's
+`root` and `leaf_count`, and a plan's `independence.groups` members join the
+(ab) tables (a `null` in any of them had crashed one verifier while the other
+signed a verdict); (u) applies to a parent delegation's `invocation_id` in the
+chain link; the 6.6 closed-map-first sentence is scoped to enveloped
+productions, and the (ab) productions tolerate unknown members until the body
+traversal lands. The builder's structural sweep (every untyped member of every
+production mutated to null, list, int, text, and bool, both verifiers) is the
+eighth build's gate for this class. The fourth review (20 probes on the
+eighth build) added: (ap) a repeated `target_id` in `anchor_plan.targets` is
+`schema/duplicate-entry` at step 6 and a repeated `target_id` in
+`trust_inputs.expected_anchor_heads` is `schema/duplicate-entry` at step 3,
+the D-77 `root_kid` pattern (pyref had taken the last entry, the harness the
+first, so a duplicated target or head flipped a CDDL-valid bundle); (aq) a tag
+nested inside a COSE item is `cbor/tag-forbidden` at step 6, as the row says
+("outside the top level of a serialized COSE bstr"); `cose/tagged` is only the
+tag that wraps the COSE_Sign1 (both verifiers had mapped the nested case to
+`cose/tagged`).
+Fixtures pin each. The parity claim D-82 makes is: every corpus row and every
+fixture-pinned shape agree in both verifiers. Shapes no fixture pins are not
+claimed; whatever the sixth build's probes leave open is listed in
+`BACKLOG.md` with both verdicts, and the differential fuzz tool (Packet D)
+is the instrument for the rest.
