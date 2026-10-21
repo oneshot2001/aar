@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from . import hashes, verifier
-from .cbor import CBORError, dumps, loads
+from .cbor import CBORError, loads
 from .crypto import N, TEST_SCALARS, key_id, parse_p256_spki
 
 POLICY_DOMAIN = "AAR-RP-POLICY-v1"

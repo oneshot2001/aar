@@ -4,12 +4,12 @@
 // a ConfigurationError (the CLI maps it to exit 2, no verdict). The credential
 // checks reuse the verifier's own step-6 envelope validation over the chain.
 import { readFileSync } from "node:fs";
-import { CborValue, decodeCbor, encodeCbor, equalBytes, fromHex, toHex } from "./cbor";
+import { CborValue, decodeCbor, equalBytes, fromHex, toHex } from "./cbor";
 import { domainHash, hash, P256_ORDER } from "./crypto";
 import { keyFromScalar, TEST_KEYS } from "./testkeys";
 import { B1Failure, envelopePayload, EnvelopeContext, failure, object, Obj, Parsed, ParsedEnvelope, parseEnvelope, same, signingTime, verifyEnvelope } from "./verifier";
 
-export const POLICY_DOMAIN = "AAR-RP-POLICY-v1";
+const POLICY_DOMAIN = "AAR-RP-POLICY-v1";
 const KEY_USAGES = ["agent_signing", "ep_signing", "authority_signing", "approver_signing", "outcome_signing", "anchor_signing", "verifier_signing", "credential_issuing", "status_signing"];
 
 // D-83 part 9: the kids of the thirteen v0.2.5 fixture scalars, enumerated by
@@ -58,7 +58,7 @@ function hex(value: unknown, size: number | undefined, label: string): Uint8Arra
 }
 
 // Read the JSON mirror and return the relying-party-policy CBOR map.
-export function loadPolicy(path: string): Obj {
+function loadPolicy(path: string): Obj {
   let source: unknown;
   try { source = JSON.parse(readFileSync(path, "utf8")); } catch (error) { fail(`cannot read policy file ${path}: ${(error as Error).message}`); }
   const policy = closed(source, ["v", "artifact_roots", "verifier_root_kid", "verifier_credentials"], "policy");
