@@ -171,6 +171,10 @@ A proposal SHOULD be marked deficient if it claims AAR conformance provides:
   — completeness per Clause 7 — not compromised-key immunity);
 - completeness of discovery ("no actions went unrecorded") from
   producer-declared manifests alone (Clause 7);
+- coverage of actions that bypass the instrumented enforcement point (a VMS
+  console, a vendor application, physical access to the device); the signed
+  verdict states `control_path_completeness: not_established` for every
+  result (D-84);
 - independent timestamping from same-operator anchoring (Clause 6);
 - process honesty from artifact conformance (a verifier confirms artifacts
   satisfy their declared class; it does not certify the producing process);

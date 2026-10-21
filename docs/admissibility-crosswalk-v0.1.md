@@ -48,6 +48,7 @@ and a signed `scope` map. For this bundle they read:
 | `legal_admissibility` | limits | `not_established` | the only value the field can take |
 | `input_origin_ancestry` | limits | `not_declared` (this bundle predates D-78) | how completely the inputs in each dispatched action's ancestry declared their origin class; `declared_only` is the ceiling and means the producer labelled every slot, not that the labels are true, that capture was complete, or that any input caused the action (D-78) |
 | `ingress_completeness` | scope | `not_established` | v0.2 MUST emit only this (`:701`); no census exists |
+| `control_path_completeness` | limits | `not_established` (v0.3, D-84) | actions dispatched around the enforcement point (a VMS console, a vendor app, physical access) leave no receipt; nothing in the bundle establishes that none occurred |
 
 Two facts about the verifier itself matter for every rule below and are
 disclosed in `pyref/README.md:158-165`: the verdict is signed with the
@@ -414,7 +415,7 @@ prepared from this crosswalk may say:
 |---|---|---|---|
 | G-A | Certification by a qualified person; notice to adverse party | agency / counsel | 902(13), 902(14), 803(6) |
 | G-B | Field accuracy of emission (vs. verifier conformance) | operator deployment records | 901(b)(9), 702 |
-| G-C | Verifier identity: neither reference implementation supports external-key provisioning (D-58 permits implementation-defined support; an interoperable format is a v0.3 candidate), and constant build/config preimages do not prove deployed-code identity | spec, v0.3 candidate | 901(a), any "independent verification" testimony |
+| G-C | Verifier identity. First half closed by D-83 (v0.3.0): a relying party supplies its own root ceiling and signing key, the verdict binds the policy digest and is signed by the relying party's leaf; the examiner's package is bundle + policy + verdict. Second half open: constant build/config preimages do not prove deployed-code identity | spec (second half) | 901(a), any "independent verification" testimony |
 | G-D | Error rate — none measured for emission or observation | spec + a study | 702 |
 | G-E | General acceptance — no integrator workflow | adoption (BACKLOG strategy 9/27) | 702 |
 | G-F | Custody, export, access lineage receipts (R-35) | spec, planned | 901 custody, §3 discovery |

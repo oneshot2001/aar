@@ -1217,6 +1217,28 @@ trust-root = {
 }
 key-usages = [ 1*8 key-usage ]
 
+; Relying-party policy (D-83): a verifier configuration object supplied out of
+; band by the operator of a verifier who is not the producer.  Never carried in
+; a bundle; not an aar-wire-object.  artifact_roots is strictly sorted and unique
+; by root_kid (one tenant per root); verifier_credentials is strictly sorted and
+; unique by credential_id and is exactly the leaf plus the credentials its path
+; names.  Every verifier credential has all-zero tenant_id and site_id.
+; relying-party-policy digest = SHA-256(deterministic-CBOR([
+;   "AAR-RP-POLICY-v1", relying-party-policy
+; ])).
+relying-party-policy = {
+  v: 1,
+  artifact_roots: [ 1*64 relying-party-root ],
+  verifier_root_kid: kid,
+  verifier_credentials: [ 1*9 credential-envelope ],
+}
+relying-party-root = {
+  root_kid: kid,
+  tenant_id: id16,
+  allowed_sites: ids16,
+  allowed_key_usages: key-usages,
+}
+
 expected-anchor-heads = [ 1*32 expected-anchor-head ]
 expected-anchor-head = {
   target_id: id16,

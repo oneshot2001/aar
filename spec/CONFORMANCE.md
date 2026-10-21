@@ -88,6 +88,10 @@ normative as the step order itself (D-54).
    D-82 amendment ap). A trust-store `snapshot_id`
    of 32 zero bytes is the verdict's not-evaluated sentinel (section 5) and is
    `schema/out-of-range` at this step (D-82 amendment ah).
+   Under a relying-party policy (D-83, section 6), after the per-root
+   tenant/site checks and before the evaluation-time check, a root record
+   whose `root_kid` is a verifier kid (the policy's `verifier_root_kid` or any
+   `verifier_credentials[].subject_kid`) is `credential/root-not-accepted`.
    At the evaluation-time check, require the bundle's `evaluation_time` to
    equal the explicitly supplied verifier evaluation time; then require that
    time to be at least the trust-store snapshot's `created_at`. Either failure
@@ -277,7 +281,19 @@ normative as the step order itself (D-54).
    the protected kid of at least one envelope verified at step 6 (embedded
    delegations and nested presentation manifests included), its `key_usage`
    MUST also be in the record's `allowed_key_usages`. Either failure is
-   `credential/root-not-accepted`. Rotation binding (D-80) checks every
+   `credential/root-not-accepted`. Under a relying-party policy (D-83,
+   section 6) the per-credential root-acceptance check has three parts in
+   this order, each after role-key separation and path construction have
+   passed for that credential: separation — a carried credential whose
+   `subject_kid` is a verifier kid fails; producer acceptance as above; policy
+   acceptance — the terminal credential's `subject_kid` equals a policy
+   `root_kid` whose `tenant_id` equals the credential's and whose
+   `allowed_sites` contains the credential's `site_id`, and, for a credential
+   in the step-6 signer set, its `key_usage` is in that record's
+   `allowed_key_usages`. One record is checked against one credential; sites
+   and usages are never pooled across records. Every failure is
+   `credential/root-not-accepted`, or `countersign/credential-invalid` for a
+   mediator credential, with result `nonconformant`. Rotation binding (D-80) checks every
    rotation record, in artifact-array order and in this order per record:
    `predecessor_credential_id` and `successor_credential_id` each resolve to a
    carried credential whose `subject_kid` equals the record's `predecessor_kid`
@@ -602,13 +618,20 @@ normative as the step order itself (D-54).
     under section 5. The result is `conformant` only if every requested check
     succeeded. Missing external policy, key, expected head, or replay state yields
     `indeterminate`; a malformed or semantically invalid bundle yields
-    `nonconformant` with the first reason code. Per D-58 the verifier's own
-    signing key resolves from bundle credentials (plus explicit configuration,
-    none in v0.2): a bundle carrying no `verifier_signing` credential for the
-    verifier's kid yields a signed indeterminate `key/not-found` at this step.
-    Signing the verdict is a use of the verifier's key at the evaluation time:
-    a carried `revoked` or `compromised` snapshot that names the verifier's
-    credential is judged against that use at step 8 (D-81).
+    `nonconformant` with the first reason code. Without a relying-party
+    policy, per D-58 the verifier's own signing key resolves from bundle
+    credentials: a bundle carrying no `verifier_signing` credential for the
+    verifier's kid yields a signed indeterminate `key/not-found` at this step
+    (D-73 find-first). Under a relying-party policy (D-83, section 6) this
+    step consults no bundle credential: the signer is the configured leaf,
+    the protected kid is its `subject_kid`, and a carried `verifier_signing`
+    credential is an ordinary carried credential for steps 6 and 8. Signing
+    the verdict is a use of the signing key at the evaluation time — the
+    configured leaf's kid under a policy, the verifier's corpus kid otherwise:
+    a carried `revoked` or `compromised` snapshot that names that credential
+    is judged against that use at step 8 (D-81). The step-6 signer set is
+    captured before this use is added; it never makes a credential a signer
+    for the usage check.
 
 ### 2.1 Edge legality and roots
 
@@ -750,7 +773,7 @@ one input has several defects, section 2 selects the first verifier code.
 | `receipt/outcome-subject-mismatch` | Outcome subject is not its `observed_outcome` dispatch/attempt parent, or the outcome carries zero or several `observed_outcome` parents (D-82). |
 | `journal/unavailable` | Operational refusal reason: before an AAR-3 non-life-safety action-bearing send, neither the primary nor emergency journal can durably commit the `action_attempt`; the EP emits a `not_dispatched` attempt carrying this exact `refusal_reason`. This code never appears as a verifier verdict reason. |
 | `journal/uncommitted-dispatch` | On an AAR-3 profile, a dispatch's linked attempt lacks the prior journal commitment defined at step 13 and is not the marked life-safety exception. |
-| `credential/root-not-accepted` | Credential path ends at a root not accepted for the bound tenant/site, or a credential that signs a verified envelope has a key usage its root does not allow (D-77). |
+| `credential/root-not-accepted` | Credential path ends at a root not accepted for the bound tenant/site, or a credential that signs a verified envelope has a key usage its root does not allow (D-77); under a relying-party policy, also a root or credential that is a verifier kid, or a credential outside the policy's root, site or usage ceiling (D-83). |
 | `credential/path-invalid` | Path within its schema length is not a contiguous issuer/subject chain or contains a loop. |
 | `credential/kid-key-mismatch` | SHA-256 of the credential's carried DER SubjectPublicKeyInfo differs from `subject_kid`. |
 | `credential/usage-mismatch` | Credential key usage does not authorize the signed object/role, including an epoch event, epoch manifest, or Merkle batch not signed by its `epoch_owner_kid` with `ep_signing`, or a Merkle batch whose `signer_kid` differs from `epoch_owner_kid`, or an envelope whose protected kid differs from the signer its payload declares, or a signing credential whose tenant/site differs from the selector's (D-77). |
@@ -882,8 +905,9 @@ by D-76, are frozen). Promoting them into the signed verdict is a wire-version d
 
 The verdict is deterministic CBOR in an untagged detached COSE_Sign1 using the same
 ES256/P1363/low-S/RFC-6979 rules. Its protected map is exactly `{1:-7,
-3:"application/aar-verdict+cbor;v=0.2",4:kid}`. The verifier key MUST have
-`verifier_signing` usage. The verdict ID is computed like a receipt ID: SHA-256 of
+3:"application/aar-verdict+cbor;v=0.3",4:kid}`. The verifier key MUST have
+`verifier_signing` usage; `kid` is the corpus verifier's kid, or the
+configured leaf's under a relying-party policy (section 6). The verdict ID is computed like a receipt ID: SHA-256 of
 deterministic CBOR `['AAR-VERDICT-ID-v1', exact-protected-bstr,
 verdict-id-input]`.
 
@@ -902,7 +926,7 @@ verdict-cose-sign1 = [
 
 verdict-protected = {
   1: -7,
-  3: "application/aar-verdict+cbor;v=0.2",
+  3: "application/aar-verdict+cbor;v=0.3",
   4: bstr .size 32,
 }
 
@@ -914,7 +938,7 @@ verdict = {
 verdict-id-input = { verdict-fields }
 
 verdict-fields = (
-  v: 4,
+  v: 5,
   evaluated_at: uint .le 9007199254740991,
   result: "conformant" / "nonconformant" / "indeterminate",
   ? reason: tstr .size (1..128),
@@ -954,6 +978,7 @@ verdict-trust-policy = {
   anchor_heads_digest: bstr .size 32,
   replay_state_digest: bstr .size 32,
   prior_emissions_digest: bstr .size 32,
+  relying_party_policy_digest: bstr .size 32,
 }
 
 verdict-scope = {
@@ -987,6 +1012,7 @@ verdict-limits = {
   legal_admissibility: "not_established",
   input_origin_ancestry:
       "not_evaluated" / "not_declared" / "partially_declared" / "declared_only",
+  control_path_completeness: "not_established",
 }
 ```
 
@@ -1008,11 +1034,32 @@ A v0.2 verifier MUST emit only `not_established` for `ingress_completeness`.
 R-15/census feature and MUST NOT be emitted by a verifier that does not implement
 that feature.
 
+A v0.3 verifier MUST emit `control_path_completeness="not_established"` for
+every result (D-84). AAR covers only actions that traverse the instrumented
+enforcement point; an action dispatched around it (a VMS console, a vendor
+application, physical access to the device) produces no receipt, and no
+receipt, anchor, census or countersignature establishes that none occurred.
+`coverage: complete` and every `ingress_completeness` value describe actions
+that went through the enforcement point and say nothing about this field. A
+positive value requires a future normative decision defining control-path
+evidence and its validation.
+
 The v0.2.1 verdict used `v: 3` because its closed trust-policy map gained a
-required key (D-76). The v0.2.3 verdict uses `v: 4` because `verdict-limits`
-gained the required key `input_origin_ancestry` (D-78); the protected content
-type continues to name the v0.2 minor line. A v2 or v3 consumer must not
-silently accept this verdict.
+required key (D-76). The v0.2.3 verdict used `v: 4` because `verdict-limits`
+gained the required key `input_origin_ancestry` (D-78). The v0.3.0 verdict
+uses `v: 5` because `verdict-trust-policy` gained
+`relying_party_policy_digest` (D-83) and `verdict-limits` gained
+`control_path_completeness` (D-84); its protected content type names the
+v0.3 line because a policy-mode signer cannot be resolved from the bundle
+(section 6), while every bundle artifact keeps its v0.2 content type. A v2,
+v3 or v4 consumer must not silently accept this verdict.
+
+`relying_party_policy_digest` is the SHA-256 of deterministic CBOR
+`["AAR-RP-POLICY-v1", relying-party-policy]` whenever a relying-party policy
+was supplied, at every failing step including steps 1 to 3 (configuration is
+complete before the first bundle byte is read), and 32 zero bytes only when
+no policy was supplied. No supplied policy uses a zero digest (the D-51
+absence discipline).
 
 The verdict digest preimages are frozen as follows:
 
@@ -1066,6 +1113,8 @@ requested profile `AAR-1`.
 | `trust_policy.trust_store_digest`, `trust_store_snapshot_id`, `verifier_policy_digest`, `anchor_heads_digest` | The validated values once step 5 has succeeded as a whole; else the sentinel. |
 | `trust_policy.evaluation_time`, `evaluated_at` | Always the caller's explicitly supplied time. |
 | `trust_policy.replay_state_digest`, `prior_emissions_digest` | Always the digest of the supplied input (an empty supplied state binds the digest of an empty map); all-zero only when nothing was supplied. |
+| `trust_policy.relying_party_policy_digest`, the protected `kid` | Always the supplied policy's digest and the configured leaf's kid when a policy was supplied, at every step; the zero digest and the corpus verifier's kid only when none was (D-83). |
+| `limits.control_path_completeness` | `not_established` (D-84). |
 | `limits.evaluated_profile` | `below_AAR-1`. |
 | `limits.technical_integrity` | `not_evaluated` when the failing step is 1 to 5; `not_satisfied` from step 6 on. |
 | `limits.discovery_completeness` | `not_established`. |
@@ -1090,7 +1139,68 @@ and resource limits. Evidence class limits mean declared and structurally
 supported, with required opaque bytes committed; they do not claim deep
 cryptographic validation of attestation content. A conformant verdict is not a
 statement of sensor truth, inference correctness, lawfulness, complete discovery,
-custody, or admissibility.
+custody, admissibility, or control-path completeness.
+
+## 6. Relying-party policy (D-83)
+
+A relying party (the operator of a verifier who is not the producer) MAY
+supply one `relying-party-policy` (`aar-core.cddl`) and one signing key out
+of band. Neither is ever carried in a bundle, sourced from a platform trust
+store, or installed into one (D-58).
+
+**Configuration precedes the bundle.** Before any bundle byte is read, the
+verifier MUST validate: the policy's closed map, its strictly sorted and
+unique `artifact_roots` (by `root_kid`; one tenant per root) and
+`verifier_credentials` (by `credential_id`); the signer contract (the
+supplied key's SPKI hashes to exactly one `verifier_credentials[].subject_kid`;
+that credential is the leaf); and the leaf's chain at the supplied evaluation
+time: each member decodes as deterministic CBOR under the credential
+production with protected content type `application/aar-credential+cbor;v=0.2`,
+recomputes its `credential_id`, carries a P-256 SPKI hashing to its
+`subject_kid`, has all-zero `tenant_id` and `site_id`, and is valid at the
+evaluation time under the 6.7.7 boundary rule; the leaf has
+`key_usage = "verifier_signing"`, `principal_role = "verifier"` and a
+non-empty `path`; the path resolves entry by entry, each entry's
+`subject_kid` equalling the previous member's `issuer_kid`, each issuer's own
+`path` equalling the remaining suffix, no `credential_id` or `subject_kid`
+repeating, at most 8 entries; every member except the leaf has
+`key_usage = "credential_issuing"`; every member's protected kid equals its
+`issuer_kid` and its signature verifies under the issuer's carried SPKI; the
+terminal member is self-signed with `subject_kid`, `issuer_kid` and protected
+kid all equal to `verifier_root_kid`; and `verifier_credentials` is exactly
+the leaf plus the credentials its path names. The credential checks are the
+closed-map, type, enum and size checks of steps 3 and 6 applied to a
+configured credential; the release CDDL oracle is the authority for full
+membership. Any failure is a usage error with no verdict, never a signed
+result.
+
+**Key contract.** The signing key is one file holding 64 lowercase
+hexadecimal characters, the P-256 private scalar `d` with `1 <= d < n`. The
+verifier derives the SPKI and `kid = SHA-256(SPKI)`. Policy and key MUST be
+supplied together; either alone is a usage error. Signing follows the
+verdict rule above (deterministic RFC 6979 ES256, low-S, P1363).
+
+**Key hygiene.** A policy whose chain contains any kid of the published
+fixture keys (the frozen set in `pyref/crypto.py` and `harness/testkeys.ts`)
+is a usage error. The `rp-*` corpus signs with a separate published
+relying-party fixture key pair, which this exclusion does not cover. Neither
+set is an operational verifier identity; passing the exclusion establishes
+nothing about the operator's key.
+
+**Effect on evaluation.** Steps 5, 8 and 20 above state the separation,
+ceiling and signer rules; every other step is unchanged. Artifact acceptance
+is monotone (a bundle that fails a producer or artifact check without a
+policy fails it with one); identity is not: a bundle with no verifier
+credential, and a bundle whose carried corpus-verifier credential is revoked
+but signs nothing, can each be `conformant` under a policy (D-83 part 6).
+
+**Distinguishability (conformant verdicts only).** Without a policy the
+protected `kid` appears among the bundle's credential `subject_kid`s and
+`relying_party_policy_digest` is zero; with one, the `kid` is the policy
+leaf's, the digest is nonzero, and no carried credential has that kid. A
+consumer resolves a policy-mode signer from the policy, never from the
+bundle; the reader's package is bundle + policy + verdict. Early failures and
+separation failures carry no such guarantee.
 
 ## Appendix A. Informative RATS EAR/AR4SI verdict cross-map
 

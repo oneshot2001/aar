@@ -61,6 +61,7 @@ TypeScript harness: `bun run harness/verify.ts BUNDLE --at UNIX_SECONDS`.
 | The epoch's manifest, events, and anchor agree; a producer-declared epoch has not been truncated after the fact | That every action that happened was recorded (completeness is census-conditional, see D-72) |
 | Outcome claims carry their evidence grade; `verified` is barred without a named independent observer | That a `device_acknowledged` outcome was independently sensed (all live runs so far are device-acknowledged) |
 | The verdict bytes are reproducible by a second, clean-room implementation | Custody continuity or legal admissibility (D-71) |
+| A relying party can check a bundle under its own root list and sign the verdict with its own key; the verdict binds that policy (D-83, v0.3) | That anything happened outside the instrumented enforcement point: a VMS console, a vendor app, or hands on the device leave no receipt, and the verdict says so (`control_path_completeness: not_established`, D-84) |
 | A delegation names the enforcement point that attempted under it, a rotation is signed by the retiring key's issuer, and revocation is judged at each signature's own time: receipts signed before `revoked_at` keep verifying, nothing signed at or after it passes (D-79..D-81) | That the status authority's `revoked_at` instant is accurate (it is that authority's assertion) |
 
 "Evidence-grade" in this repo means exactly the left column: attribution,

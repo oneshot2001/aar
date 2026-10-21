@@ -561,7 +561,7 @@ exists.
 | RR-7 | Approver cognition; deception within faithful manifests; coercion | — | disclosed only | delivery ≠ understanding |
 | RR-8 | Manifest omission at self-asserted provenance; uninstrumented channels at proxy level | Agent control of pre-sign bytes | disclosed only (provenance label; D-78 origin declaration relayed as `input_origin_ancestry`) | injected/exculpatory content absent from record; undeclared origin reads as `not_declared`, never as trusted |
 | RR-9 | Sensor truth: replayed/staged/false scene faithfully receipted | C-device or C-scene | signed media where deployed (partial) | receipts preserve a false world honestly |
-| RR-10 | Out-of-band actions bypassing the EP | C-oob | deployment architecture only | AAR blind spot by construction |
+| RR-10 | Out-of-band actions bypassing the EP | C-oob | deployment architecture only; the verdict says so (`control_path_completeness: not_established`, D-84) | AAR blind spot by construction, now a signed non-claim rather than prose |
 | RR-11 | Issuer-root / status-service compromise | C-trust | root scoping limits blast radius (partial) | principal minting; status equivocation |
 | RR-12 | Anchor split-view at base tier | C-trust(anchor) | none (witness profile undefined) | forked histories to different audiences |
 | RR-13 | Clock falsification within asserted class | EP clock control | disclosed only | wrong times, consistently |

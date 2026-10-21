@@ -1947,3 +1947,203 @@ fixture-pinned shape agree in both verifiers. Shapes no fixture pins are not
 claimed; whatever the sixth build's probes leave open is listed in
 `BACKLOG.md` with both verdicts, and the differential fuzz tool (Packet D)
 is the instrument for the rest.
+
+## D-83 — A relying party supplies its own trust ceiling and verifier identity; the verdict binds the policy and is signed by the policy's leaf
+
+**Decision.** `docs/verifier-trust-provisioning-design-v0.1.md` is ratified
+with the corrections below. Release v0.3.0: the verdict becomes `v: 5` under
+the protected content type `application/aar-verdict+cbor;v=0.3`; every bundle
+artifact keeps its `v=0.2` content type and byte shape; receipt, bundle and
+credential bytes do not change. Without a policy, every evaluation outcome is
+unchanged and the no-policy verdict differs from v0.2.5 only by the decoded
+field delta in part 8.
+
+1. **The policy object.** `relying-party-policy` (`aar-core.cddl`; digest =
+   SHA-256 of deterministic CBOR `["AAR-RP-POLICY-v1", policy]`) carries
+   `artifact_roots` (1..64 records, strictly sorted, unique by `root_kid`),
+   `verifier_root_kid`, and `verifier_credentials` (the leaf plus exactly the
+   credentials its path names, 1..9). Q5 ruled: one tenant per `root_kid`,
+   mirroring the producer rule. The policy is a configuration object, not a
+   bundle artifact: it is never carried in a bundle and never sourced from a
+   platform trust store (D-58 policy clauses stand).
+2. **Configuration precedes the bundle.** A verifier loads and validates the
+   policy and the signing key before it reads a single bundle byte. Validation
+   is the policy's closed-map, sort and uniqueness rules; the signer contract
+   (exactly one `verifier_credentials` entry has `subject_kid` = SHA-256 of
+   the supplied key's SPKI; that entry is the leaf); and the chain algorithm
+   of design §3.3 items 1 to 11 at the supplied evaluation time (the leaf has
+   `key_usage = "verifier_signing"`, `principal_role = "verifier"`, a
+   non-empty path; every other member has `key_usage = "credential_issuing"`;
+   the terminal member is self-signed by `verifier_root_kid`; every member's
+   protected kid equals its `issuer_kid` and its signature verifies under the
+   issuer's carried SPKI; every `tenant_id` and `site_id` is all-zero; no
+   `credential_id` or `subject_kid` repeats). The credential checks are the
+   same closed-map, type, enum and size checks a verifier applies to a carried
+   credential at steps 3 and 6; the release CDDL oracle, not the verifier, is
+   the authority for full CDDL membership, and the `rp-*` policy sidecars are
+   in its corpus. Any configuration failure is a usage error with no verdict
+   (the `--trust-policy` class; exit 2 in pyref). Internal defects stay
+   unsigned crashes (D-61).
+3. **Key contract.** The signing key is supplied as one file holding 64
+   lowercase hexadecimal characters, the P-256 private scalar `d` with
+   `1 <= d < n`; the verifier derives the SPKI and `kid = SHA-256(SPKI)`.
+   Policy and key MUST be supplied together; either alone is a usage error. No
+   environment variable, no scalar on a command line. Signing is the existing
+   verdict rule: deterministic RFC 6979 ES256, low-S, P1363. (Codex: a
+   randomized signing provider would break byte parity; an env var leaks into
+   process listings.)
+4. **Ceiling, separation, order (steps 5 and 8).** Producer validation is
+   unchanged. At step 5, after the per-root tenant/site checks and before the
+   evaluation-time checks, a producer root whose `root_kid` is a verifier kid
+   (`verifier_root_kid` or any `verifier_credentials[].subject_kid`) is
+   `credential/root-not-accepted`. At step 8, inside the root-acceptance loop,
+   per carried credential, after role-key separation and path construction
+   have passed for it: (a) separation — a carried credential whose
+   `subject_kid` is a verifier kid fails; (b) producer acceptance as today;
+   (c) policy acceptance — its terminal credential's `subject_kid` equals a
+   policy `root_kid` whose `tenant_id` equals the credential's and whose
+   `allowed_sites` contains the credential's `site_id`; and, when the
+   credential's `subject_kid` is the protected kid of at least one envelope
+   verified at step 6 (the D-77 signer set), its `key_usage` is in that
+   record's `allowed_key_usages`. One record is checked against one
+   credential; sites and usages are never pooled. A failure is
+   `credential/root-not-accepted`, or `countersign/credential-invalid` for a
+   mediator credential; the result is `nonconformant` (design Q1). No new
+   reason code: the bound digest says a policy applied; the report layer says
+   which check rejected. A relying party narrows trust and never widens it.
+5. **Verifier identity (step 20).** Under a policy, step 20 does not consult
+   bundle credentials: the signer is the configured leaf, the protected kid is
+   its `subject_kid`, and a bundle-carried `verifier_signing` credential is an
+   ordinary carried credential for steps 6 and 8, the ceiling included. D-73's
+   find-first rule holds only when no policy is supplied. D-81's use of the
+   verifier's own key at the evaluation time is recorded for the configured
+   leaf's kid in policy mode and for the corpus verifier's kid otherwise; the
+   step-6 signer set is captured before that use is added, so the synthetic
+   use never makes a credential a signer for the usage check.
+6. **Two authorized policy-mode transitions (correcting design §3.2 and §6
+   "a failing bundle can never pass under a policy").** Artifact acceptance
+   is monotone: a bundle that fails a producer or artifact check without a
+   policy fails it with one. Identity is not: (i) a bundle carrying no
+   verifier credential, `key/not-found` at step 20 without a policy, can be
+   conformant under one; (ii) a carried corpus-verifier credential named by
+   a `revoked` or `compromised` snapshot effective at the evaluation time,
+   `credential/revoked` at step 8 without a policy because signing the verdict
+   was a use of that key, passes under a policy when that credential signs
+   nothing, because D-81 judges revocation at use time and the use moved to
+   the leaf. A snapshot that names no carried credential still fails closed
+   (D-81). Both transitions are pinned (`rp-*`); no no-policy row moves.
+7. **Verdict binding and distinguishability.** `verdict-trust-policy` gains
+   the required `relying_party_policy_digest: bstr .size 32`, the policy
+   digest whenever a policy was supplied, at every failing step including 1
+   to 3, and 32 zero bytes only when none was (the D-51/D-76 absence
+   discipline). The configured signer and the digest are unconditional; the
+   `--trust-policy` exact pin stays and coexists, and its post-evaluation
+   check is unchanged. For a `conformant` verdict only: without a policy the
+   protected kid appears among the bundle's credential `subject_kid`s and the
+   digest is zero; with one, the kid is the policy leaf, the digest is
+   nonzero, and no carried credential has that kid (part 4a). Early failures
+   and separation failures carry no such guarantee, which is why the
+   statement is scoped. A consumer resolves a policy-mode signer from the
+   policy, never from the bundle; the content-type bump names the changed
+   signer semantics. The reader's package is bundle + policy + verdict.
+8. **Allowed decoded-field delta for the re-pin.** Every corpus verdict is
+   re-pinned once, and the audit diffs decoded fields, not bytes: `v`,
+   `trust_policy.relying_party_policy_digest`,
+   `limits.control_path_completeness` (D-84), `verifier.version` and
+   `build_digest`, the protected content type, and the derived `verdict_id`
+   and signature. Result, reason and failing step are frozen on every
+   no-policy row.
+9. **Key hygiene is a named-key exclusion, not secrecy assurance.** A policy
+   whose chain contains any kid in the frozen fixture-key set (the published
+   Gate 4 scalars, `pyref/crypto.py` `TEST_SCALARS` / `harness/testkeys.ts`,
+   enumerated by kid in the configuration module) is a usage error. The
+   `rp-*` corpus signs with a separate published relying-party fixture key
+   pair (`rp_credential_issuing`, `rp_verifier_signing`), which the exclusion
+   does not cover so the corpus stays reproducible; `pyref/README.md` keeps
+   the operator-facing sentence, extended to both sets: neither is an
+   operational verifier identity and neither signature is third-party
+   assurance. No bypass flag exists. Passing the exclusion establishes
+   nothing about the operator's key.
+10. **Q2 ruled honestly: validity window only.** The relying-party chain is
+    valid at the asserted evaluation time; v0.3 provides no revocation and no
+    creation-time assurance for it. Because the evaluation time is
+    caller-selected (D-70), a short leaf `valid_until` narrows the window a
+    compromised key can assert, and nothing more. A status mechanism for the
+    relying-party chain is a v0.3.x candidate.
+11. **Fixtures.** `kats/relying-party/rp-*`: design §4 items 3 and 4, with
+    usage negatives over every D-77 signer category (EP, agent, authority,
+    approver, outcome observer, anchor, status issuer, rotation issuer,
+    embedded delegation signer, presentation signer, mediator), the two
+    part-6 transitions, a dangling snapshot naming an uncarried policy
+    credential, and separation fixtures built on the relying-party fixture
+    keys. Each row has one `*.inputs.json` sidecar naming policy, key, exact
+    pin, replay state, prior state and evaluation time, absent kept distinct
+    from empty; `pyref/kat.py`, `harness/crossimpl.test.ts`,
+    `harness/kat.test.ts` and `pyref/schema_kat.py` name the directory and
+    the sidecar suffixes explicitly. The cross-implementation gate passes the
+    same key file to both verifiers and each decodes the policy itself.
+
+**Why.** D-58 deferred an interoperable external-key format until a corpus
+could cover it; D-77 fixed the four chain defects a ceiling would have
+inherited; D-82 made the two verifiers agree on every corpus row. The design
+doc's Comparator analysis (the checking side owns the trust list; the list is
+a ceiling; it is bound into the result) carried through two Codex passes in
+October and a third on 2026-10-21 that found the monotonicity claim false
+(reproduced on `repair-d81-status-verifier-revoked`), the distinguishability
+statement overbroad, the harness lacking a configured-pin input the design's
+own KAT list needs, and the hygiene rule a named-key exclusion dressed as
+secrecy. Each is written down here as it is. Closes the BACKLOG freeze
+blocker "Verifier identity / trust provisioning for an unrelated verifier"
+and the first half of crosswalk gap G-C; the second half (proof of which
+code ran) stays open.
+
+**Alternatives considered.** Replacing or filtering the producer store
+(loosens artifact validation); exempting unused credentials from the ceiling
+(a self-signed root signs its own envelope; the exemption cannot deliver);
+checking the chain at step 20 as a signed `key/not-found` (a verifier that
+cannot vouch for its own key must sign nothing); keeping the corpus
+verifier's synthetic use in policy mode (a stranger's verdict would then
+depend on the producer's verifier credential); an optional verdict key
+(D-78 rejected it); new `policy/*` reason codes (no new code surface); a
+hygiene set that includes the relying-party fixture keys plus a test bypass
+(worse than the honest exclusion); PEM/PKCS#8 key files (a parser in both
+languages for no interoperability gain); a status snapshot in the policy now
+(Q2; deferred with the limit stated).
+
+## D-84 — The verdict states that control-path completeness is not established
+
+**Decision.** `verdict-limits` gains the required key
+`control_path_completeness: "not_established"`, emitted on every result,
+pass and failure, by every v0.3 verifier; no other value exists. It rides
+the D-83 version bump (`v: 5`) and the single re-pin. CONFORMANCE §5 carries
+the MUST; the README does-not-prove table, the admissibility crosswalk limits
+table and the RFP prohibited-claim list each gain one row; both CLIs print
+every signed limit (no-wire commit before the build).
+
+**Why.** The threat model (`docs/threat-model-v0.1.md`, "the
+instrumented-control boundary"; RR-10; T-S4) says actions dispatched around
+the EP (a VMS console, a vendor app, physical access) produce no receipts
+and are undetectable by AAR alone, and calls that boundary normative context
+for every completeness claim. No signed field carried it: `source_authenticity`,
+`custody_continuity` and `legal_admissibility` cover other residuals, and
+`ingress_completeness` / `discovery_completeness` describe actions that went
+through the EP. A conformant `coverage: complete` verdict therefore invited
+the reading "every camera move in the window is accounted for", which fails
+in the most common physical-security case. D-29's rationale (a limit a
+machine cannot check launders) applies exactly as it does to
+`source_authenticity`. The name states the property that is not established;
+`out_of_band_operation` would read as whether one occurred. Pre-ingress and
+post-ingress omission (RR-3, RR-4) and EP bypass (RR-10) are distinct
+residuals, so the field is not a reserved value of `ingress_completeness`: an
+ingress census does not enumerate other control paths. Origin: the Pipelock
+hard-limit-codes pattern (`L-CONTAINMENT-UNPROVEN`), 2026-10-18.
+
+**Alternatives considered.** A `non_claims` registry of stable IDs covering
+RR-1, RR-5/6, RR-10, RR-12, RR-13 and verifier drift (a larger surface with
+an ordering rule; a docs-only mapping of the existing signed fields to RR-n
+can follow); report layer only (D-29 rejected unsigned limits); a reserved
+positive value such as `census_supported` (no normative decision licenses
+one; add it when an evidence rule exists, the custody pattern); a separate
+v0.3.1 at a second full re-pin (a required closed-map key forces a version
+bump either way; one re-pin is cheaper and the plan's one-decision-per-release
+rule is amended explicitly for this release rather than hidden inside D-83).

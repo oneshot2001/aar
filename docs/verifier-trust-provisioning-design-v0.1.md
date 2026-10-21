@@ -1,10 +1,16 @@
 # Verifier trust provisioning: design proposal v0.1 (D-58 freeze blocker)
 
-**Status:** PROPOSAL, 2026-10-08. Revised after two Codex passes: a
-challenge pass (FIX-FIRST, 15 findings) and a re-grade (FIX-FIRST, three
-new items plus clarifications). All of them are applied below. Not normative. Changes no
-wire bytes, KATs, or verifier behavior. If ratified it becomes a DECISIONS
-entry, a v0.3 wire change (verdict `v: 4`), and a build packet.
+**Status:** RATIFIED as D-83, 2026-10-21 (v0.3.0, verdict `v: 5`), with
+corrections a third Codex pass found: the monotonicity claim in §3.2 and §6
+("a failing bundle can never pass under a policy") is false for identity
+(two policy-mode transitions are authorized, D-83 part 6); the
+distinguishability statement holds for conformant verdicts only; the key
+input is one hex scalar file, never an environment variable; the hygiene
+rule is a named-key exclusion over the published fixture keys, not secrecy
+assurance; Q2 is ruled "validity window only" with its limit stated. Where
+this document and D-83 differ, D-83 governs. The text below is the
+2026-10-08 proposal as revised after two Codex passes (a challenge pass,
+15 findings, and a re-grade, three new items), kept for its reasoning.
 **Closes, if ratified:** BACKLOG freeze blocker "Verifier identity / trust
 provisioning for an unrelated verifier (CONFORMANCE.md:322, D-58)" and the
 first half of crosswalk gap G-C (`docs/admissibility-crosswalk-v0.1.md:371`).
