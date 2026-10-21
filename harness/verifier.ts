@@ -3,6 +3,7 @@ import { CborScalar, CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from
 import { domainHash, hash, P256_HALF_ORDER, signatureScalars } from "./crypto";
 import { promotedRoot, rfc6962Leaf, verifyPromotedProof, verifyRfc6962Consistency, verifyRfc6962Inclusion } from "./merkle";
 import { TEST_KEYS } from "./testkeys";
+import { acceptRoots } from "./relying-party";
 import { emitFailureVerdict, emitVerdict } from "./verdict";
 
 export type B1ReasonCode =
@@ -101,11 +102,11 @@ const LIMITS = {
 
 export type Obj = Record<string, CborValue>;
 
-function failure(step: number, reason: B1ReasonCode, path?: string, indeterminate = false): B1Failure {
+export function failure(step: number, reason: B1ReasonCode, path?: string, indeterminate = false): B1Failure {
   return { ok: false, result: indeterminate ? "indeterminate" : "nonconformant", reason, step, ...(path === undefined ? {} : { path }) };
 }
 
-function object(value: CborValue | undefined): value is Obj {
+export function object(value: CborValue | undefined): value is Obj {
   return typeof value === "object" && value !== null && !Array.isArray(value) && !(value instanceof Uint8Array) && !(value instanceof Map);
 }
 
@@ -488,7 +489,7 @@ function validateResourceCounts(bundle: Obj): B1Failure | undefined {
   return undefined;
 }
 
-function envelopePayload(value: CborValue | undefined): CborValue | undefined {
+export function envelopePayload(value: CborValue | undefined): CborValue | undefined {
   if (!Array.isArray(value) || !(value[0] instanceof Uint8Array)) return undefined;
   try { return decodeCbor(value[0], { strict: true }); } catch { return undefined; }
 }
@@ -506,7 +507,7 @@ function envelopeKid(value: CborValue | undefined): Uint8Array | undefined {
 }
 
 type ArtifactKind = "credential" | "rotation" | "status" | "request" | "delegation" | "epoch_event" | "epoch_manifest" | "anchor" | "merkle_batch" | "mediator_countersignature" | "receipt" | "presentation";
-type ParsedEnvelope = {
+export type ParsedEnvelope = {
   kind: ArtifactKind;
   envelope: CborValue[];
   envelopeBytes: Uint8Array;
@@ -697,7 +698,7 @@ function signingTime(entry: ParsedEnvelope, evaluationTime: number): CborValue |
   return field === undefined ? evaluationTime : entry.payload[field];
 }
 
-function parseEnvelope(entry: CborValue, kind: ArtifactKind, path: string): ParsedEnvelope | B1Failure {
+export function parseEnvelope(entry: CborValue, kind: ArtifactKind, path: string): ParsedEnvelope | B1Failure {
   if (!Array.isArray(entry) || entry.length !== 2 || !(entry[0] instanceof Uint8Array) || !(entry[1] instanceof Uint8Array)) return failure(6, "schema/bad-type", path);
   const payloadBytes = entry[0];
   const coseBytes = entry[1];
@@ -1011,11 +1012,11 @@ function spkiPublicKey(spki: Uint8Array): Uint8Array | undefined {
   return key.length === 65 && key[0] === 4 ? key : undefined;
 }
 
-type EnvelopeContext = { credentialsByKid: Map<string, Obj>; credentials: ParsedEnvelope[]; selector: Obj; evaluationTime: number };
+export type EnvelopeContext = { credentialsByKid: Map<string, Obj>; credentials: ParsedEnvelope[]; selector: Obj; evaluationTime: number };
 
 // Step 6 sub-steps 7 to 9 for one parsed envelope. Codes are the raw section 3
 // codes; validateEnvelopes applies the countersignature classification.
-function verifyEnvelope(entry: ParsedEnvelope, context: EnvelopeContext): B1Failure | undefined {
+export function verifyEnvelope(entry: ParsedEnvelope, context: EnvelopeContext): B1Failure | undefined {
   const kind = entry.kind;
   const mediator = kind === "mediator_countersignature";
   const credential = context.credentialsByKid.get(toHex(entry.kid));
@@ -1224,18 +1225,8 @@ function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | u
       expectedIssuer = issuer.payload.issuer_kid as Uint8Array;
     }
   }
-  for (const entry of parsed.credential) {
-    const payload = entry.payload;
-    const mediatorCredential = mediatorKids.has(toHex(payload.subject_kid as Uint8Array));
-    const path = payload.path as CborValue[];
-    const last = path.length === 0 ? payload : credentials.get(toHex(path[path.length - 1] as Uint8Array))?.payload;
-    if (last === undefined || !roots.some((root) => same(root.root_kid, last.subject_kid)
-      && same(root.tenant_id, payload.tenant_id)
-      && Array.isArray(root.allowed_sites) && root.allowed_sites.some((site) => same(site, payload.site_id))
-      && (!usedKids.has(toHex(payload.subject_kid as Uint8Array)) || (Array.isArray(root.allowed_key_usages) && payload.key_usage !== undefined && root.allowed_key_usages.includes(payload.key_usage))))) {
-      return failure(8, mediatorCredential ? "countersign/credential-invalid" : "credential/root-not-accepted", "credential.path");
-    }
-  }
+  const acceptance = acceptRoots(undefined, parsed.credential, credentials, roots, usedKids, mediatorKids);
+  if (acceptance) return acceptance;
   // D-80: bind every record (ids/kids, predecessor's issuer signs, tenant and
   // site) in array order before any ordering check.
   for (const rotation of parsed.rotation) {

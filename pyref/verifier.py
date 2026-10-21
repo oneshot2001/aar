@@ -12,7 +12,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from . import hashes, verdict
+from . import hashes, relying_party, verdict
 from .cbor import CBORError, dumps, loads
 from .crypto import (
     N,
@@ -275,6 +275,7 @@ class State:
     prior_state: dict[str, Any] | None
     replay_state: dict[str, Any] | None
     configured_trust_policy: dict[str, Any] | None = None
+    configuration: relying_party.Configuration | None = None
     bundle: dict[str, Any] | None = None
     envelopes: dict[str, list[Envelope]] = field(default_factory=lambda: defaultdict(list))
     credentials_by_kid: dict[bytes, Envelope] = field(default_factory=dict)
@@ -1345,19 +1346,7 @@ def _credential_lifecycle(state: State) -> None:
             expected_issuer = parent.payload["issuer_kid"]
         terminals[credential["credential_id"]] = by_id[path[-1]].payload if path else credential
 
-    for envelope in credentials:
-        credential = envelope.payload
-        mediator_credential = credential["subject_kid"] in mediator_kids
-        terminal = terminals[credential["credential_id"]]
-        # The wire carries both a credential trust_anchor_id and a trust-store
-        # root_id, but the normative path rule says acceptance terminates by
-        # root key/tenant/site; it defines no equality between those two IDs.
-        root = roots.get(terminal["subject_kid"])
-        if root is None or root["tenant_id"] != credential["tenant_id"] \
-                or credential["site_id"] not in root["allowed_sites"] \
-                or (credential["subject_kid"] in used_kids
-                    and credential["key_usage"] not in root["allowed_key_usages"]):
-            _fail("countersign/credential-invalid" if mediator_credential else "credential/root-not-accepted", 8)
+    relying_party.accept_roots(state.configuration, credentials, terminals, roots, used_kids, mediator_kids)
 
     # D-80: bind every record (ids/kids, predecessor's issuer signs, tenant and
     # site) in array order before any ordering check.

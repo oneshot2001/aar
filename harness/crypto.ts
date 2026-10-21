@@ -57,7 +57,7 @@ export interface SignedEnvelope {
   contentType: string;
 }
 
-function compactSignature(digest: Uint8Array, key: TestKey): Uint8Array {
+function compactSignature(digest: Uint8Array, key: Pick<TestKey, "privateKey">): Uint8Array {
   return p256.sign(digest, key.privateKey, { prehash: false, lowS: true, format: "compact", extraEntropy: false });
 }
 
@@ -67,7 +67,17 @@ export function signDetached(
   signer: TestKeyName,
   extraProtected: readonly (readonly [number, CborValue])[] = [],
 ): SignedEnvelope {
-  const key = TEST_KEYS[signer];
+  return { ...signDetachedWithKey(payload, contentType, TEST_KEYS[signer], extraProtected), signer };
+}
+
+// The scalar-taking sibling (D-83 part 3): the same deterministic RFC 6979,
+// low-S, P1363 path under any P-256 private key and its kid.
+export function signDetachedWithKey(
+  payload: CborValue,
+  contentType: string,
+  key: Pick<TestKey, "privateKey" | "kid">,
+  extraProtected: readonly (readonly [number, CborValue])[] = [],
+): Omit<SignedEnvelope, "signer"> {
   const protectedMap = new Map<number, CborValue>([
     [1, -7],
     [3, contentType],
@@ -89,7 +99,6 @@ export function signDetached(
     protectedBytes,
     coseBytes,
     signature,
-    signer,
     contentType,
   };
 }

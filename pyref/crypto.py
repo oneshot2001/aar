@@ -14,6 +14,9 @@ GX = 0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296
 GY = 0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5
 G = (GX, GY)
 
+# TEST KEYS ONLY: published scalars for reproducible KATs, never operational
+# identities. The rp_* pair signs the kats/relying-party corpus (D-83 part 9)
+# and is outside the relying_party.LEGACY_FIXTURE_KIDS exclusion.
 TEST_SCALARS = {
     "agent_signing": 1,
     "ep_signing": 2,
@@ -28,6 +31,8 @@ TEST_SCALARS = {
     "mediator_outcome_signing": 11,
     "d77_outsider": 12,
     "d77_leaf": 13,
+    "rp_credential_issuing": 14,
+    "rp_verifier_signing": 15,
 }
 
 

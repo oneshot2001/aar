@@ -16,7 +16,7 @@ function* sourceFiles(dir: string): Generator<string> {
     const path = join(dir, entry.name);
     const file = relative(root, path);
     if (entry.isDirectory()) {
-      if (entry.name === "node_modules" || entry.name === "kats" || GENERATED.includes(file)) continue;
+      if (entry.name === "node_modules" || entry.name === "kats" || entry.name.startsWith(".") || GENERATED.includes(file)) continue;
       yield* sourceFiles(path);
     } else if (/\.(ts|py)$/u.test(entry.name) && !entry.name.endsWith(".d.ts") && !entry.name.includes(".generated.")) {
       yield file;
