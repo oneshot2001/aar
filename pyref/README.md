@@ -87,12 +87,14 @@ its `tenant_id` and `site_id`, and a credential that signs an envelope needs
 its `key_usage` in that record's `allowed_key_usages`.
 
 `RP-POLICY.json` is the JSON mirror of `relying-party-policy`
-(`spec/aar-core.cddl`): every byte string is lowercase hex and each
-`verifier_credentials` entry is the hex of the exact credential-envelope CBOR
-bytes. `artifact_roots` is strictly sorted and unique by `root_kid`;
-`verifier_credentials` is strictly sorted by `credential_id` and is exactly the
-leaf plus the credentials its path names, all with all-zero `tenant_id` and
-`site_id`.
+(`spec/aar-core.cddl`): every byte string is hex (either case is accepted)
+and each `verifier_credentials` entry is the hex of the exact
+credential-envelope CBOR bytes. `artifact_roots` is strictly sorted and unique
+by `root_kid`, and each record's `allowed_sites` and `allowed_key_usages` are
+strictly sorted and unique in deterministic-CBOR order (the step-3 `trust-root`
+rule); `verifier_credentials` is strictly sorted by `credential_id` and is
+exactly the leaf plus the credentials its path names, all with all-zero
+`tenant_id` and `site_id`.
 
 ```json
 {
@@ -111,8 +113,9 @@ leaf plus the credentials its path names, all with all-zero `tenant_id` and
 ```
 
 `KEY` is one file holding the verifier's P-256 private scalar `d` as exactly 64
-lowercase hexadecimal characters (`1 <= d < n`; a trailing newline is
-tolerated). The verifier derives the SPKI and `kid = SHA-256(SPKI)`; exactly
+lowercase hexadecimal characters (`1 <= d < n`), "optionally followed by one LF
+or CRLF and nothing else (no other whitespace, no byte-order mark)"
+(CONFORMANCE section 6). The verifier derives the SPKI and `kid = SHA-256(SPKI)`; exactly
 one `verifier_credentials` entry must have that `subject_kid`, and that entry
 is the leaf. No environment variable and no scalar on the command line.
 

@@ -9,14 +9,14 @@
         "e1071febe64adbd6af516ebeecb30a4c"
       ],
       "allowed_key_usages": [
-        "agent_signing",
         "ep_signing",
-        "authority_signing",
-        "approver_signing",
-        "outcome_signing",
+        "agent_signing",
         "anchor_signing",
-        "credential_issuing",
-        "status_signing"
+        "status_signing",
+        "outcome_signing",
+        "approver_signing",
+        "authority_signing",
+        "credential_issuing"
       ]
     }
   ],

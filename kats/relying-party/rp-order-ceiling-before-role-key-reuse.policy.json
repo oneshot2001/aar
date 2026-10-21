@@ -9,12 +9,12 @@
       ],
       "allowed_key_usages": [
         "agent_signing",
-        "authority_signing",
-        "approver_signing",
-        "outcome_signing",
         "anchor_signing",
-        "credential_issuing",
-        "status_signing"
+        "status_signing",
+        "outcome_signing",
+        "approver_signing",
+        "authority_signing",
+        "credential_issuing"
       ]
     }
   ],

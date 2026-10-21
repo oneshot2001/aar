@@ -12,7 +12,7 @@ for (const entry of await readdir(outputDirectory)) if (/\.(cbor|json|key)$/u.te
 const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
 const rows = buildRelyingPartyFixtures();
 for (const row of rows) {
-  await writeFile(join(outputDirectory, `${row.name}.cbor`), row.bytes);
+  if (row.inputs.bundle === undefined) await writeFile(join(outputDirectory, `${row.name}.cbor`), row.bytes);
   await writeFile(join(outputDirectory, `${row.name}.json`), json(row.descriptor));
   await writeFile(join(outputDirectory, `${row.name}.inputs.json`), json(row.inputs));
   await writeFile(join(outputDirectory, `${row.name}.policy.json`), json(row.policy));

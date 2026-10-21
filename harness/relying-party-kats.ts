@@ -1,20 +1,16 @@
 // kats/relying-party rows (D-83 part 11): each row is a bundle, a descriptor,
 // an inputs sidecar naming policy / key / exact pin / prior / replay / time
 // (null = not supplied), and its policy JSON. One shared key file signs every row.
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { CborValue, decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
 import { deterministicId, domainHash, hash, id16, signDetachedWithKey } from "./crypto";
 import { buildFixtures } from "./fixtures";
 import { buildD77PositiveFixtures, buildNegativeFixtures } from "./negative-fixtures";
-import { loadConfiguration } from "./relying-party";
 import { AT, PolicyJson, PolicyRoot, rootRecord, rpChain, rpPolicy } from "./relying-party-fixtures";
-import { parseStatefulPrior } from "./stateful-fixtures";
 import { TEST_KEYS, TestKey } from "./testkeys";
-import { VerifyB1Options, Obj } from "./verifier";
+import { Obj } from "./verifier";
 
 type Key = Pick<TestKey, "privateKey" | "spki" | "kid">;
-export interface RpInputs { policy: string; signing_key: string; trust_policy: string | null; prior_state: string | null; replay_state: string | null; at: number }
+import { RpInputs } from "./relying-party-inputs";
 export interface RpRow {
   name: string;
   bytes: Uint8Array;
@@ -112,29 +108,6 @@ function pinJson(bundle: Obj): Record<string, unknown> {
   };
 }
 
-// The exact-pin JSON (pyref --trust-policy format) as the harness configuredTrustPolicy value.
-export function parsePin(pin: Record<string, any>): Obj {
-  return {
-    trust_store: { digest: fromHex(pin.trust_store.digest), snapshot_id: fromHex(pin.trust_store.snapshot_id), created_at: pin.trust_store.created_at,
-      roots: pin.trust_store.roots.map((root: Record<string, any>) => ({ root_id: fromHex(root.root_id), root_kid: fromHex(root.root_kid), tenant_id: fromHex(root.tenant_id), allowed_sites: root.allowed_sites.map(fromHex), allowed_key_usages: root.allowed_key_usages })) },
-    expected_anchor_heads: pin.expected_anchor_heads.map((head: Record<string, any>) => ({ target_id: fromHex(head.target_id), observed_at: head.observed_at, tree_size: head.tree_size, root: fromHex(head.root) })),
-    verifier_policy_digest: fromHex(pin.verifier_policy_digest),
-  };
-}
-
-// verifyBundle options for one row from its inputs sidecar (the harness decodes the policy itself).
-export function rpOptions(directory: string, inputs: RpInputs): VerifyB1Options {
-  const file = (name: string | null): string | undefined => name === null ? undefined : join(directory, name);
-  const json = (name: string): Record<string, any> => JSON.parse(readFileSync(join(directory, name), "utf8"));
-  return {
-    evaluationTime: inputs.at,
-    configuration: loadConfiguration(file(inputs.policy), file(inputs.signing_key), inputs.at),
-    configuredTrustPolicy: inputs.trust_policy === null ? undefined : parsePin(json(inputs.trust_policy)),
-    priorEmissions: inputs.prior_state === null ? undefined : parseStatefulPrior(json(inputs.prior_state)),
-    replayState: inputs.replay_state === null ? undefined : (json(inputs.replay_state).entries ?? []).map((entry: Record<string, string>) => ({ replayDomain: fromHex(entry.replay_domain!), invocationId: fromHex(entry.invocation_id!), contentDigest: fromHex(entry.content_digest!) })),
-  };
-}
-
 export function buildRelyingPartyFixtures(): RpRow[] {
   const producer = (usages = ALL_USAGES, sites = [SITE]): PolicyRoot => rootRecord(TEST_KEYS.credential_issuing.kid, TENANT, sites, usages);
   const outsider = (usages = ALL_USAGES): PolicyRoot => rootRecord(TEST_KEYS.d77_outsider.kid, TENANT, [SITE], usages);
@@ -185,7 +158,7 @@ export function buildRelyingPartyFixtures(): RpRow[] {
   row("flip-site-removed", base(), "credential/root-not-accepted", 8, "Flip pair: the same bundle, the bundle's site removed from the policy record; the result flips and the policy digest differs.", [producer(ALL_USAGES, [OTHER_SITE])]);
   const pin = pinJson(base());
   const early: [string, string, string, number][] = [["step2", "cbor-malformed", "cbor/malformed", 2], ["step3", "schema-missing-field", "schema/missing-field", 3]];
-  row("early-step1-alone", negative("resource-bundle-too-large"), "resource/bundle-too-large", 1, "Oversized input under a policy: the step-1 verdict carries the policy digest and the leaf kid.");
+  row("early-step1-alone", negative("resource-bundle-too-large"), "resource/bundle-too-large", 1, "Oversized input under a policy: the step-1 verdict carries the policy digest and the leaf kid. The 16 MiB bytes are the negative corpus file, named by the sidecar's bundle field.", undefined, { bundle: "../negative/resource-bundle-too-large.cbor" });
   for (const [label, filename, code, step] of early) {
     row(`early-${label}-alone`, negative(filename), code, step, `Step-${step} failure under a policy: the verdict carries the policy digest and the leaf kid.`);
     row(`early-${label}-pin`, negative(filename), code, step, `Step-${step} failure under a policy with the exact trust-policy pin: the configured trust values replace their sentinels.`, undefined, { trust_policy: `rp-early-${label}-pin.trust-policy.json` }, { [`rp-early-${label}-pin.trust-policy.json`]: pin });

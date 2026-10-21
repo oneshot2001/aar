@@ -17,7 +17,8 @@ const OUTSIDER = keyFromScalar(fromHex("0000000000000000000000000000000000000000
 
 export interface PolicyRoot { root_kid: string; tenant_id: string; allowed_sites: string[]; allowed_key_usages: string[] }
 export interface PolicyJson { v: 1; artifact_roots: PolicyRoot[]; verifier_root_kid: string; verifier_credentials: string[] }
-export interface PolicyCase { name: string; policy: PolicyJson | string | undefined; key: string | undefined }
+// keyText = the exact key-file text (default: key + LF); valid = both loaders must accept.
+export interface PolicyCase { name: string; policy: PolicyJson | string | undefined; key: string | undefined; keyText?: string; valid?: true }
 
 export function rpCredential(subject: Key, issuer: Key, path: Uint8Array[], extra: Obj = {}, contentType = CREDENTIAL): { id: Uint8Array; envelope: CborValue[]; fields: Obj } {
   const fields: Obj = {
@@ -40,8 +41,11 @@ export function policyJson(roots: PolicyRoot[], credentials: CborValue[][], veri
   };
 }
 
+// Deterministic-CBOR text order (length first, then bytes), the step-3 trust-root rule.
+export const canonicalText = (a: string, b: string): number => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0);
+
 export function rootRecord(rootKid: Uint8Array, tenant: Uint8Array, sites: Uint8Array[], usages: string[]): PolicyRoot {
-  return { root_kid: toHex(rootKid), tenant_id: toHex(tenant), allowed_sites: sites.map(toHex), allowed_key_usages: usages };
+  return { root_kid: toHex(rootKid), tenant_id: toHex(tenant), allowed_sites: sites.map(toHex).sort(), allowed_key_usages: [...usages].sort(canonicalText) };
 }
 
 // The corpus relying-party chain: rp_verifier_signing leaf under the
@@ -71,7 +75,43 @@ export function policyCases(): PolicyCase[] {
     const middle = intermediate(middleKey, extra);
     return policy([root.envelope, middle.envelope, rpCredential(rpLeaf, middleKey, [middle.id, root.id]).envelope]);
   };
+  const root0 = SAMPLE_ROOTS[0]!;
+  const withRoot = (name: string, patch: Partial<PolicyRoot>): PolicyCase => withKey(name, { ...two, artifact_roots: [{ ...root0, ...patch }] });
+  const keyText = (name: string, text: string, valid?: true): PolicyCase => ({ name, policy: two, key: RP_KEY_HEX, keyText: text, ...(valid ? { valid } : {}) });
+  const pathCase = (name: string, path: CborValue[]): PolicyCase => withKey(name, policy([root.envelope, leaf({ path }).envelope]));
+  const siteA = toHex(id16("site:rp-a")); const siteB = toHex(id16("site:rp-b")); const [lo, hi] = [siteA, siteB].sort();
   return [
+    { name: "valid-two-sites-two-usages", policy: policy([root.envelope, leaf().envelope], rpRoot.kid, [rootRecord(OUTSIDER.kid, id16("tenant:acme-security"), [id16("site:rp-a"), id16("site:rp-b")], ["credential_issuing", "ep_signing"])]), key: RP_KEY_HEX, valid: true },
+    keyText("key-bare-lf", `${RP_KEY_HEX}\n`, true),
+    keyText("key-crlf", `${RP_KEY_HEX}\r\n`, true),
+    keyText("key-no-newline", RP_KEY_HEX, true),
+    keyText("key-two-lf", `${RP_KEY_HEX}\n\n`),
+    keyText("key-trailing-space", `${RP_KEY_HEX} \n`),
+    keyText("key-trailing-nel", `${RP_KEY_HEX}\u0085`),
+    keyText("key-trailing-bom", `${RP_KEY_HEX}\uFEFF`),
+    keyText("key-trailing-us", `${RP_KEY_HEX}\u001F`),
+    keyText("key-leading-bom", `\uFEFF${RP_KEY_HEX}\n`),
+    keyText("key-63-chars", `${RP_KEY_HEX.slice(1)}\n`),
+    keyText("key-65-chars", `${RP_KEY_HEX}0\n`),
+    withKey("v-true", { ...two, v: true as unknown as 1 }),
+    withKey("v-false", { ...two, v: false as unknown as 1 }),
+    withKey("v-null", { ...two, v: null as unknown as 1 }),
+    withKey("v-string", { ...two, v: "1" as unknown as 1 }),
+    withKey("v-float", JSON.stringify(two).replace('"v":1,', '"v":1.0,')),
+    pathCase("path-element-int-array", [[1, 2]]),
+    pathCase("path-element-null", [null]),
+    pathCase("path-element-map", [{}]),
+    pathCase("path-element-31-bytes", [new Uint8Array(31)]),
+    pathCase("path-element-33-bytes", [new Uint8Array(33)]),
+    pathCase("path-element-text", ["x"]),
+    withRoot("usage-entry-map", { allowed_key_usages: [{}] as unknown as string[] }),
+    withRoot("usage-entry-array", { allowed_key_usages: [[]] as unknown as string[] }),
+    withRoot("usage-entry-int", { allowed_key_usages: [1] as unknown as string[] }),
+    withRoot("usage-entry-null", { allowed_key_usages: [null] as unknown as string[] }),
+    withRoot("duplicate-site", { allowed_sites: [lo!, lo!] }),
+    withRoot("unsorted-sites", { allowed_sites: [hi!, lo!] }),
+    withRoot("duplicate-usage", { allowed_key_usages: ["ep_signing", "ep_signing"] }),
+    withRoot("unsorted-usages", { allowed_key_usages: ["agent_signing", "ep_signing"] }),
     withKey("policy-not-json", "{"),
     withKey("malformed-policy", { ...two, artifact_roots: undefined as unknown as PolicyRoot[] }),
     withKey("unsorted-artifact-roots", { ...two, artifact_roots: [...SAMPLE_ROOTS, rootRecord(rpRoot.kid, id16("t"), [id16("s")], ["ep_signing"])].sort((a, b) => b.root_kid.localeCompare(a.root_kid)) }),

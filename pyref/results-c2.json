@@ -6851,7 +6851,7 @@
       "produced_code": "credential/revoked",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "45d4d5d83ce03d040943d0a5839fa78108a5302b44baed31f1777cf83dbefd78"
+      "verdict_sha256": "f21cca3c916debc451a7bd333e2f359f17bcf6fe0e929acdd9f4b619507f9264"
     },
     {
       "deterministic": true,
@@ -6865,7 +6865,7 @@
       "produced_code": "resource/bundle-too-large",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "97a3b76da2a1d29e08c879aa42ff6fe6d8e65f6bc436424cd2328b286eef687a"
+      "verdict_sha256": "a2c7c52e23a223e1033c9fb2b255a96819e54badab666e844421a6fd57b56009"
     },
     {
       "deterministic": true,
@@ -6879,7 +6879,7 @@
       "produced_code": "cbor/malformed",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4d2a72d245eb1b89d8454463195717d0ade0ee514420f5f861e59d305e9b47dc"
+      "verdict_sha256": "bc478472c21a510c3cabf7d1e3668c7ad8d4de76291ebc536fa47744aee9aa1a"
     },
     {
       "deterministic": true,
@@ -6893,7 +6893,7 @@
       "produced_code": "cbor/malformed",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "4a07814258ba66061c037b12e2912438b64e58df901ca51a867a5d77b8818a4e"
+      "verdict_sha256": "3c6ce21c1e90f0ba61a344bbf8e8d647ae1093bccf180d767a3e2333cab4cdc9"
     },
     {
       "deterministic": true,
@@ -6907,7 +6907,7 @@
       "produced_code": "cbor/malformed",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "075c9a31a93453cef598892fff958ba3127b28a7b71c0f51fc415d16425f7ad8"
+      "verdict_sha256": "e655a9b49565984959896fba092aa0ebae84744241068dcda42522fbe5579193"
     },
     {
       "deterministic": true,
@@ -6921,7 +6921,7 @@
       "produced_code": "schema/missing-field",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "c77e9828cadd581b3bc5a8bc0e0070bc2aaa60298297b15b0aa8889a6f4f13ac"
+      "verdict_sha256": "3e08a841b2667e881aee566f9324a766a14e6ff5df81f7b7857dfdfefdeb51e0"
     },
     {
       "deterministic": true,
@@ -6935,7 +6935,7 @@
       "produced_code": "schema/missing-field",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "643916fdb858cd4ea7a1ca9f7fc02448ca0697179cf41962af0426870bdb0894"
+      "verdict_sha256": "d271378cf65580498f67602c8f0ad38f3660ef5b2cdf94a0807cf29b8afdd8dd"
     },
     {
       "deterministic": true,
@@ -6949,7 +6949,7 @@
       "produced_code": "schema/missing-field",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "b9dff2ff6389c4ab46d297f573437a59b38faf01dfaeee18d9292afa96b8b30f"
+      "verdict_sha256": "05978a2e0110eb5bb7a30c6e938b32fdba6b3f3f73115af2ce2642a298884eae"
     },
     {
       "deterministic": true,
@@ -6963,7 +6963,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "221d4d799c7c7aa968f810b5adf5677ae6391f0661e7f17778ae5477c873a80b"
+      "verdict_sha256": "046f992fee54753193a7cd888226f02c11cfcd0422b626b4c4bd195f93f8c472"
     },
     {
       "deterministic": true,
@@ -6977,7 +6977,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "8a5468677e347873aa5e60170864fd5e12511bd63daf0dcc0510192b82e93bf5"
+      "verdict_sha256": "a384c2328d2fad3f74ea408cc9e34bdb1916e0e6ec10857a72d891c40b17af9a"
     },
     {
       "deterministic": true,
@@ -6991,7 +6991,7 @@
       "produced_code": "countersign/credential-invalid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5ec8c3061cb45b13c1a4aaa84389b354515cf83a9c39f292464c7a94c2fdcfb8"
+      "verdict_sha256": "baf4799812e0da7b9082bc009da9fb28c190a33ecf461a42bc2f1711baf57ba7"
     },
     {
       "deterministic": true,
@@ -7005,7 +7005,7 @@
       "produced_code": "sig/verify-failed",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "006c27f8cdbdbc94b4310f747ea1b09417b65d42c5d4e415fdab4a49cb08f95a"
+      "verdict_sha256": "7802eaa35c87c3f36cf01ed24fbd05af295c79fa00923730e352eb58afcf56e5"
     },
     {
       "deterministic": true,
@@ -7019,7 +7019,7 @@
       "produced_code": "credential/path-invalid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "1e65ce4b711eac8f5da22aa77fec6ab55caf8781ba1bde3046422097196366fc"
+      "verdict_sha256": "c333917434f88b3075f1a2f06ee38a8549f9e67c61fbb72e447272e9ed6aa349"
     },
     {
       "deterministic": true,
@@ -7033,7 +7033,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "f29730622a65f6d9d047094e1bc3c00f5aba210754301d4a93d0e3a08b1ac343"
+      "verdict_sha256": "d2f844b3e9b97076385a82c80a58a25ae636cbaccf196ae5b91f6399921ebadd"
     },
     {
       "deterministic": true,
@@ -7047,7 +7047,7 @@
       "produced_code": "credential/role-key-reuse",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "b24154622f98948eb2e3f6a402d105861d4025d09b6f00682e0253e9cd43dd0e"
+      "verdict_sha256": "78c531a9429b1e82ed9a25e7621a8710230204f8be57c702687567cc94054308"
     },
     {
       "deterministic": true,
@@ -7061,7 +7061,7 @@
       "produced_code": "hash/mismatch",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "d890b74cd6398a6f36593402e3fa3c6ddf25600c98bf62aaf092a8df3f0cc517"
+      "verdict_sha256": "ddac77c813b2142be5877136b63874546af7be668290471ed97608f03b1a122e"
     },
     {
       "deterministic": true,
@@ -7075,7 +7075,7 @@
       "produced_code": "credential/path-invalid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "bf587243c2695463bd92c5a4b678a9bfc5259ac500988db122346db63a5f6ac7"
+      "verdict_sha256": "ecd31145483a59c3fd7cc06c2d7814e0647cf88f33109dfdb8b0559babe7d763"
     },
     {
       "deterministic": true,
@@ -7089,7 +7089,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "dd12124055353ab5f375199ffed6aa2df64282f3e52b49a5bd2e4e22be76d915"
+      "verdict_sha256": "5209a80fd8febdcfb2e5b7c7db4249017368089a4dca26ddb769c56684deb0b9"
     },
     {
       "deterministic": true,
@@ -7103,7 +7103,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "f482288b9cc2f2e40015c72e1096f87b03e18cb84ff1b20844c5f936ccbb572b"
+      "verdict_sha256": "f77fb6d2de2ee12ab0d38c914329a820101dd0bf4f41388701785576104a79f5"
     },
     {
       "deterministic": true,
@@ -7117,7 +7117,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "5ca92f0e9b30fdf4263a40b157f01d2154e133d09cd568e259f3be5fd28d1e64"
+      "verdict_sha256": "16ebb4031435b95866895117de7872ebf291649d680aadd88b25da1fa9919c47"
     },
     {
       "deterministic": true,
@@ -7131,7 +7131,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "a3baa751e362a3ef1b8db4faab09aa143e0d6f7e836f8a55c9806d21e07c0679"
+      "verdict_sha256": "0918e8880ba58f21a2803f644c4feac8ca48720bdc3d76459d10c4e61f7e5f02"
     },
     {
       "deterministic": true,
@@ -7145,7 +7145,7 @@
       "produced_code": "countersign/credential-invalid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "7edad971419d3d9e1ab6ee59c8d895956065e561c173343a0c79d5cbad7d42b3"
+      "verdict_sha256": "d067d8799792cae6932c1d629573c9a78eaf254fb484d5a494c9ae0eee943ac6"
     },
     {
       "deterministic": true,
@@ -7159,7 +7159,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "a60cefb73351916e6e646410d79b32da8718d2ce6c44b8f63c6d73c927a6e48f"
+      "verdict_sha256": "da52fa59bb1dbfd65772118820f17b6bcf74cd34c6f803771866c6c09e5c4c24"
     },
     {
       "deterministic": true,
@@ -7173,7 +7173,7 @@
       "produced_code": null,
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "558940732726564e245a56598240f7ede7b240d559fa4caa756725f48838a82e"
+      "verdict_sha256": "eea47c7a6083a16d44f103054cdb34a307c01d11fe7c69020681d40941dc2a9a"
     },
     {
       "deterministic": true,
@@ -7187,7 +7187,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "cc351e8060d75bdc593335e3d9f832fb0a1d04b0b18c63e235dd9695497d2b37"
+      "verdict_sha256": "92740a218a2dfe0411099cb3af3abeaf5e6ad526b195e2867bfdda66f5d7094d"
     },
     {
       "deterministic": true,
@@ -7201,7 +7201,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "3a3d2a782feeabd3e8fdb64a21b1652674970823f00bf89b64b488d9df2fc7ec"
+      "verdict_sha256": "3eb830dd76fce5a5c2ef7ac5ee5c131c507cd0104828cc92c8cdb2c49719ce2c"
     },
     {
       "deterministic": true,
@@ -7215,7 +7215,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "bc5bbe1a163e7b904ef4440b2459bfbee57120e2e848378f1ae5c42768c6309a"
+      "verdict_sha256": "021e2081a30c02be2870056c79e211bc1b45a254538821adf66f3cafa1cc5ab6"
     },
     {
       "deterministic": true,
@@ -7229,7 +7229,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "0783c8a6babe9462d15acc01d8d7d6b132d43c1fcd52bd279bd9a4793ba486d2"
+      "verdict_sha256": "f410e7875ae6b55d82943e1a8375b0ed63368ff1176bee1870804c2d4760b66e"
     },
     {
       "deterministic": true,
@@ -7243,7 +7243,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "666cd94a463f897c67bf1394fa8e99fa910fe5d5a3751c6f0edc710c1833b937"
+      "verdict_sha256": "8571b707e87c7c56700d4fa3c54ed402087ddc715cdf80bb6cbd21602c051472"
     },
     {
       "deterministic": true,
@@ -7257,7 +7257,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "ae9a4c022dc478b473baf3642873ef6553dd40c9dc969945e034036a3345d102"
+      "verdict_sha256": "d1c0afb947ca4067d7492c09f01634c6e69428e05e1de724d751cb71913b5c44"
     },
     {
       "deterministic": true,
@@ -7271,7 +7271,7 @@
       "produced_code": "countersign/credential-invalid",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "cd97556abc1f7302f562ed9f1bcd57a38bf5091527e9dcef3bab547ce2eca173"
+      "verdict_sha256": "af97581dfd10fdb90456c8425711a18ff0417de8b11f28b2def5f53e86ee73d7"
     },
     {
       "deterministic": true,
@@ -7285,7 +7285,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "9b0cb000923c24eedae83ffedd07f43557fa25b3b7219a4b122bb998996c0118"
+      "verdict_sha256": "f700430180c32bcf241899f6f7df595024370de0419a18a123cc948d637b7d11"
     },
     {
       "deterministic": true,
@@ -7299,7 +7299,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "cb9f37d14850c20587b5bebc78b07b77825b3de681733dfdf56afbfad989829d"
+      "verdict_sha256": "f3e4e2d664741426a48acae2219049cb29e88f5c3eb808b90282611b5ff49a48"
     },
     {
       "deterministic": true,
@@ -7313,7 +7313,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "cbac802ea25699737f476904424dce0cb44b9a6a9d8e98e32e3de7cd74403e53"
+      "verdict_sha256": "53e6bb41a28b350354b53644fc88c594613724e6a92cd143610681662f60e961"
     },
     {
       "deterministic": true,
@@ -7327,7 +7327,7 @@
       "produced_code": "credential/root-not-accepted",
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
-      "verdict_sha256": "cdda7c20b9f94775a885b1169a6c7f0c6f331bdce7c23e510ae121476b24df22"
+      "verdict_sha256": "39113770fe0621d0e303641179a35fdc7c4cdd4e6ebe4a273e5ceb2abe0bc7b2"
     },
     {
       "deterministic": true,

@@ -24,7 +24,12 @@ try { configuration = loadConfiguration(flags.get("--policy"), flags.get("--sign
   console.error(`harness/verify.ts: error: ${error.message}`);
   process.exit(2);
 }
-const result = verifyBundle(readFileSync(filename!), { evaluationTime, configuration });
+let input: Uint8Array;
+try { input = readFileSync(filename!); } catch (error) {
+  console.error(`harness/verify.ts: error: cannot read bundle file ${filename}: ${(error as NodeJS.ErrnoException).code ?? (error as Error).message}`);
+  process.exit(2);
+}
+const result = verifyBundle(input, { evaluationTime, configuration });
 console.log(`Result: ${result.result}`);
 console.log(`Verifier identity: ${configuration === undefined ? "corpus test key" : `relying-party policy (digest ${toHex(configuration.policyDigest)})`}`);
 if (!result.ok) console.log(`First failure: step ${result.step} (${result.reason})`);

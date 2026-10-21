@@ -7,6 +7,6 @@
   "harness/fixtures.ts": 41766,
   "harness/negative-fixtures.ts": 229383,
   "harness/verifier.ts": 161478,
-  "pyref/kat.py": 43548,
+  "pyref/kat.py": 41936,
   "pyref/verifier.py": 144969
 }

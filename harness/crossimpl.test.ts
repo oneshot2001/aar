@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
 import { buildD78ItemVariants, buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildD82PositiveFixtures, buildEvidenceCommitFixtures, buildNegativeFixtures, buildPresentationEnumVariants } from "./negative-fixtures";
 import { verifyBundle } from "./verifier";
-import { rpOptions } from "./relying-party-kats";
+import { rpOptions } from "./relying-party-inputs";
 import { parseStatefulPrior } from "./stateful-fixtures";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -90,13 +90,13 @@ describe("cross-implementation verdict bytes (harness vs pyref)", () => {
 const PYREF_CORPUS = `
 import json
 from pyref.kat import (ROOT, KAT_EVALUATION_TIME, _c2_fixture_paths, _sidecar_path,
-                       _prior_path, _context_for_standalone, _expected_result, _inputs_path, _rp_inputs)
+                       _prior_path, _context_for_standalone, _expected_result, _inputs_path, _rp_inputs, _bundle_path)
 from pyref.verifier import evaluate
 base = (ROOT / "kats/positive/bundle-valid-subset.cbor").read_bytes()
 rows = []
 for path in _c2_fixture_paths():
     sidecar = json.loads(_sidecar_path(path).read_text())
-    raw = path.read_bytes()
+    raw = _bundle_path(path).read_bytes()
     context = _context_for_standalone(raw, sidecar, base) if sidecar.get("object_type") not in (None, "bundle") else None
     prior_path = _prior_path(path)
     prior = json.loads(prior_path.read_text()) if prior_path else None
@@ -104,7 +104,7 @@ for path in _c2_fixture_paths():
     arguments = _rp_inputs(path) or {"evaluated_at": KAT_EVALUATION_TIME, "prior_state": prior, "replay_state": {"entries": []}}
     r = evaluate(context or raw, **arguments)
     i = r.verdict["verifier"]
-    rows.append({"path": str(path), "context": context.hex() if context else None, "prior": prior, "inputs": str(inputs) if inputs else None,
+    rows.append({"path": str(path), "bundle": str(_bundle_path(path)), "context": context.hex() if context else None, "prior": prior, "inputs": str(inputs) if inputs else None,
       "expected_code": sidecar.get("expected_code"), "expected_result": sidecar.get("expected_result", _expected_result(sidecar.get("expected_code"))),
       "expected_step": sidecar.get("expected_step"),
       "result": r.result, "reason": r.reason, "step": r.report["first_failure_step"], "hex": r.verdict_bytes.hex(),
@@ -124,7 +124,7 @@ test("every corpus fixture has identical result, reason, step, and signed verdic
   for (const row of rows) {
     // D-83 part 11: an rp-* row's inputs sidecar names policy, key, pin and state; the harness decodes the policy itself.
     const inputs = row.inputs ? rpOptions(dirname(row.inputs), JSON.parse(readFileSync(row.inputs, "utf8"))) : { evaluationTime: AT, replayState: [], priorEmissions: row.prior ? parseStatefulPrior(row.prior) : undefined };
-    const ts = verifyBundle(row.context ? fromHex(row.context) : readFileSync(row.path), {
+    const ts = verifyBundle(row.context ? fromHex(row.context) : readFileSync(row.bundle), {
       ...inputs, product: row.product, version: row.version, buildDigest: fromHex(row.build), configDigest: fromHex(row.config),
     });
     expect(row.result, row.path).toBe(row.expected_result);

@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { CborValue, decodeCbor, equalBytes, fromHex, toHex } from "./cbor";
 import { domainHash, hash, P256_ORDER } from "./crypto";
 import { keyFromScalar, TEST_KEYS } from "./testkeys";
-import { B1Failure, envelopePayload, EnvelopeContext, failure, object, Obj, Parsed, ParsedEnvelope, parseEnvelope, same, signingTime, verifyEnvelope } from "./verifier";
+import { B1Failure, bytes, compareEncoded, envelopePayload, EnvelopeContext, failure, object, Obj, Parsed, ParsedEnvelope, parseEnvelope, same, signingTime, verifyEnvelope } from "./verifier";
 
 const POLICY_DOMAIN = "AAR-RP-POLICY-v1";
 const KEY_USAGES = ["agent_signing", "ep_signing", "authority_signing", "approver_signing", "outcome_signing", "anchor_signing", "verifier_signing", "credential_issuing", "status_signing"];
@@ -59,10 +59,11 @@ function hex(value: unknown, size: number | undefined, label: string): Uint8Arra
 
 // Read the JSON mirror and return the relying-party-policy CBOR map.
 function loadPolicy(path: string): Obj {
-  let source: unknown;
-  try { source = JSON.parse(readFileSync(path, "utf8")); } catch (error) { fail(`cannot read policy file ${path}: ${(error as Error).message}`); }
+  let source: unknown; let vSource: string | undefined;
+  // The reviver's source text tells the integer 1 apart from 1.0 (JSON numbers are doubles once parsed).
+  try { source = JSON.parse(readFileSync(path, "utf8"), function (key, value, context?: { source?: string }) { if (key === "v" && Object.hasOwn(this, "artifact_roots")) vSource = context?.source; return value; }); } catch (error) { fail(`cannot read policy file ${path}: ${(error as Error).message}`); }
   const policy = closed(source, ["v", "artifact_roots", "verifier_root_kid", "verifier_credentials"], "policy");
-  if (policy.v !== 1) fail("policy.v must be 1");
+  if (policy.v !== 1 || vSource !== "1") fail("policy.v must be the integer 1");
   const rootsSource = policy.artifact_roots;
   if (!Array.isArray(rootsSource) || rootsSource.length < 1 || rootsSource.length > 64) fail("policy.artifact_roots must contain 1 to 64 entries");
   const roots = (rootsSource as unknown[]).map((item, index) => {
@@ -70,11 +71,16 @@ function loadPolicy(path: string): Obj {
     const root = closed(item, ["root_kid", "tenant_id", "allowed_sites", "allowed_key_usages"], label);
     const sites = root.allowed_sites; const usages = root.allowed_key_usages;
     if (!Array.isArray(sites) || sites.length < 1 || sites.length > 256) fail(`${label}.allowed_sites must contain 1 to 256 entries`);
-    if (!Array.isArray(usages) || usages.length < 1 || usages.length > 8 || new Set(usages).size !== usages.length || usages.some((usage) => !KEY_USAGES.includes(usage as string))) fail(`${label}.allowed_key_usages must be 1 to 8 distinct key usages`);
-    return {
+    if (!Array.isArray(usages) || usages.length < 1 || usages.length > 8 || usages.some((usage) => typeof usage !== "string" || !KEY_USAGES.includes(usage))) fail(`${label}.allowed_key_usages must be 1 to 8 key usages`);
+    const record = {
       root_kid: hex(root.root_kid, 32, `${label}.root_kid`), tenant_id: hex(root.tenant_id, 16, `${label}.tenant_id`),
       allowed_sites: (sites as unknown[]).map((site, i) => hex(site, 16, `${label}.allowed_sites[${i}]`)), allowed_key_usages: usages as string[],
     };
+    // D-83 amendment a: the step-3 trust-root rule (deterministic-encoding order).
+    for (const name of ["allowed_sites", "allowed_key_usages"] as const) {
+      if (record[name].some((value: CborValue, i: number) => i > 0 && compareEncoded(record[name][i - 1]!, value) >= 0)) fail(`${label}.${name} must be strictly sorted and unique`);
+    }
+    return record;
   });
   const kids = roots.map((root) => toHex(root.root_kid));
   if (kids.some((kid, index) => index > 0 && kids[index - 1]! >= kid)) fail("policy.artifact_roots must be strictly sorted and unique by root_kid");
@@ -87,13 +93,16 @@ function loadPolicy(path: string): Obj {
   return { v: 1, artifact_roots: roots, verifier_root_kid: hex(policy.verifier_root_kid, 32, "policy.verifier_root_kid"), verifier_credentials: credentials };
 }
 
+// D-83 amendment b: the exact file text, 64 lowercase hex characters then at most one LF or CRLF.
+const KEY_FILE = /^[0-9a-f]{64}(\r?\n)?$/u;
+
 function scalar(path: string): Uint8Array {
   let text = "";
-  try { text = readFileSync(path, "utf8").trimEnd(); } catch (error) { fail(`cannot read signing key file ${path}: ${(error as Error).message}`); }
-  if (!/^[0-9a-f]{64}$/u.test(text)) fail("signing key file must hold exactly 64 lowercase hexadecimal characters");
-  const d = BigInt(`0x${text}`);
+  try { text = readFileSync(path, "utf8"); } catch (error) { fail(`cannot read signing key file ${path}: ${(error as Error).message}`); }
+  if (!KEY_FILE.test(text)) fail("signing key file must hold exactly 64 lowercase hexadecimal characters, then at most one LF or CRLF");
+  const d = BigInt(`0x${text.slice(0, 64)}`);
   if (d < 1n || d >= P256_ORDER) fail("signing key scalar must satisfy 1 <= d < n");
-  return fromHex(text);
+  return fromHex(text.slice(0, 64));
 }
 
 // CONFORMANCE section 6 chain algorithm; returns leaf-first members.
@@ -121,6 +130,7 @@ function chain(policy: Obj, kid: Uint8Array, evaluationTime: number): Obj[] {
     if (!same(hash(member.public_key as Uint8Array), member.subject_kid)) fail("policy.verifier_credentials: public_key does not hash to subject_kid");
     if (!same(member.tenant_id, new Uint8Array(16)) || !same(member.site_id, new Uint8Array(16))) fail("policy.verifier_credentials: tenant_id and site_id must be all-zero");
     if (!((member.valid_from as number) <= evaluationTime && evaluationTime < (member.valid_until as number))) fail("policy.verifier_credentials: a member is not valid at the evaluation time");
+    if (!(member.path as CborValue[]).every((item) => bytes(item, 32))) fail("policy.verifier_credentials: every path element must be a 32-byte byte string"); // typed before any lookup
   }
   const leaf = leaves[0]!;
   const path = leaf.path as CborValue[];

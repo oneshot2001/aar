@@ -13,6 +13,7 @@ from typing import Any, Iterator
 from . import hashes
 from .cbor import CBORError, dumps, loads
 from .crypto import TEST_KEYS_BY_KID, TEST_SCALARS, key_id, sign_es256
+from .kat_inputs import RELYING_PARTY_DIRECTORY, _bundle_path, _inputs_path, _prior_path, _rp_fixture_paths, _rp_inputs, _sidecar_path
 from .kat_report import _divergence, _divergence_hypothesis, _write_c2_divergences, _write_divergences
 from .verifier import Evaluation, evaluate
 
@@ -25,7 +26,6 @@ KAT_DIRECTORIES = (
     ROOT / "kats" / "evidence-commit",
     ROOT / "kats" / "countersign",
 )
-RELYING_PARTY_DIRECTORY = ROOT / "kats" / "relying-party"  # D-83 part 11; rows carry an *.inputs.json sidecar
 RESULTS_PATH = Path(__file__).resolve().parent / "results-c1.json"
 C2_RESULTS_PATH = Path(__file__).resolve().parent / "results-c2.json"
 
@@ -609,44 +609,8 @@ def _c2_fixture_paths() -> list[Path]:
     paths.extend((ROOT / "kats" / "countersign").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "negative").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "negative" / "stateful").glob("*.bundle.cbor"))
-    paths.extend(RELYING_PARTY_DIRECTORY.glob("*.cbor"))
+    paths.extend(_rp_fixture_paths())
     return sorted(paths)
-
-
-def _inputs_path(path: Path) -> Path | None:
-    candidate = path.with_name(path.name.removesuffix(".cbor") + ".inputs.json")
-    return candidate if candidate.exists() else None
-
-
-def _rp_inputs(path: Path) -> dict[str, Any] | None:
-    """The evaluate() keyword arguments named by a row's inputs sidecar; null = not supplied."""
-    inputs_path = _inputs_path(path)
-    if inputs_path is None:
-        return None
-    from .cli import _trust_policy
-    from .relying_party import load_configuration
-    inputs = json.loads(inputs_path.read_text(encoding="utf-8"))
-    sibling = lambda name: None if name is None else path.with_name(name)  # noqa: E731
-    state = lambda name: None if name is None else json.loads(sibling(name).read_text(encoding="utf-8"))  # noqa: E731
-    return {
-        "evaluated_at": inputs["at"],
-        "configuration": load_configuration(sibling(inputs["policy"]), sibling(inputs["signing_key"]), inputs["at"]),
-        "configured_trust_policy": None if inputs["trust_policy"] is None else _trust_policy(sibling(inputs["trust_policy"])),
-        "prior_state": state(inputs["prior_state"]), "replay_state": state(inputs["replay_state"]),
-    }
-
-
-def _sidecar_path(path: Path) -> Path:
-    if path.name.endswith(".bundle.cbor"):
-        return path.with_name(path.name.removesuffix(".bundle.cbor") + ".json")
-    return path.with_suffix(".json")
-
-
-def _prior_path(path: Path) -> Path | None:
-    if not path.name.endswith(".bundle.cbor"):
-        return None
-    candidate = path.with_name(path.name.removesuffix(".bundle.cbor") + ".prior.json")
-    return candidate if candidate.exists() else None
 
 
 def _context_for_standalone(raw: bytes, sidecar: dict[str, Any], base_raw: bytes) -> bytes | None:
@@ -786,7 +750,7 @@ def run_c2() -> dict[str, Any]:
     divergences: list[dict[str, Any]] = []
     for path in _c2_fixture_paths():
         sidecar = json.loads(_sidecar_path(path).read_text(encoding="utf-8"))
-        raw = path.read_bytes()
+        raw = _bundle_path(path).read_bytes()
         prior_path = _prior_path(path)
         prior = json.loads(prior_path.read_text(encoding="utf-8")) if prior_path else None
         context = None

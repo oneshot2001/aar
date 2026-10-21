@@ -4,7 +4,8 @@ import { verifySigned } from "./crypto";
 import { buildFixtures } from "./fixtures";
 import { buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildD82PositiveFixtures, buildClassBoundaryFixtures, buildEvidenceCommitFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
 import { buildCountersignFixtures } from "./countersign-fixtures";
-import { buildRelyingPartyFixtures, rpOptions } from "./relying-party-kats";
+import { rpBundlePath, rpOptions } from "./relying-party-inputs";
+import { buildRelyingPartyFixtures } from "./relying-party-kats";
 import { TEST_KEYS } from "./testkeys";
 import { verifyBundle } from "./verifier";
 import { readFileSync } from "node:fs";
@@ -226,7 +227,7 @@ describe("positive KAT harness", () => {
     expect(first.length).toBeGreaterThan(30);
     for (const [index, row] of first.entries()) {
       expect(equalBytes(row.bytes, second[index]!.bytes), row.name).toBe(true);
-      expect(equalBytes(row.bytes, readFileSync(join(directory, `${row.name}.cbor`))), row.name).toBe(true);
+      expect(equalBytes(row.bytes, readFileSync(rpBundlePath(directory, row.name, row.inputs))), row.name).toBe(true);
       expect(JSON.parse(readFileSync(join(directory, `${row.name}.json`), "utf8")), row.name).toEqual(row.descriptor);
       expect(JSON.parse(readFileSync(join(directory, `${row.name}.inputs.json`), "utf8")), row.name).toEqual(row.inputs);
       expect(JSON.parse(readFileSync(join(directory, `${row.name}.policy.json`), "utf8")), row.name).toEqual(row.policy);

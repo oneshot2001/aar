@@ -17,7 +17,7 @@ const directory = mkdtempSync(join(tmpdir(), "aar-rp-cli-"));
 function files(item: PolicyCase): string[] {
   const args: string[] = [];
   if (item.policy !== undefined) { const path = join(directory, `${item.name}.policy.json`); writeFileSync(path, typeof item.policy === "string" ? item.policy : JSON.stringify(item.policy)); args.push("--policy", path); }
-  if (item.key !== undefined) { const path = join(directory, `${item.name}.key`); writeFileSync(path, `${item.key}\n`); args.push("--signing-key", path); }
+  if (item.key !== undefined) { const path = join(directory, `${item.name}.key`); writeFileSync(path, item.keyText ?? `${item.key}\n`); args.push("--signing-key", path); }
   return args;
 }
 
@@ -32,6 +32,7 @@ describe("relying-party CLI flags", () => {
       const args = files(item);
       for (const [name, run] of Object.entries(clis)) {
         const proc = run(args);
+        if (item.valid) { expect(proc.exitCode, `${name} ${item.name}: ${proc.stderr.toString()}`).not.toBe(2); continue; }
         expect(proc.exitCode, `${name} ${item.name}: ${proc.stderr.toString()}`).toBe(2);
         expect(proc.stdout.toString(), `${name} ${item.name}`).not.toContain("CBOR hex");
         expect(proc.stderr.toString(), `${name} ${item.name}`).toContain("error");

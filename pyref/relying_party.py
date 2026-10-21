@@ -77,8 +77,8 @@ def load_policy(path: Path) -> dict[str, Any]:
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise UsageError(f"cannot read policy file {path}: {exc}") from exc
     _closed(source, {"v", "artifact_roots", "verifier_root_kid", "verifier_credentials"}, "policy")
-    if source["v"] != 1:
-        raise UsageError("policy.v must be 1")
+    if type(source["v"]) is not int or source["v"] != 1:  # a boolean (or float) is not the integer 1
+        raise UsageError("policy.v must be the integer 1")
     roots_source = source["artifact_roots"]
     if not isinstance(roots_source, list) or not 1 <= len(roots_source) <= 64:
         raise UsageError("policy.artifact_roots must contain 1 to 64 entries")
@@ -90,15 +90,20 @@ def load_policy(path: Path) -> dict[str, Any]:
         if not isinstance(sites, list) or not 1 <= len(sites) <= 256:
             raise UsageError(f"{label}.allowed_sites must contain 1 to 256 entries")
         usages = item["allowed_key_usages"]
-        if not isinstance(usages, list) or not 1 <= len(usages) <= 8 or len(set(usages)) != len(usages) \
-                or any(usage not in verifier.KEY_USAGES for usage in usages):
-            raise UsageError(f"{label}.allowed_key_usages must be 1 to 8 distinct key usages")
-        roots.append({
+        if not isinstance(usages, list) or not 1 <= len(usages) <= 8 \
+                or any(not isinstance(usage, str) or usage not in verifier.KEY_USAGES for usage in usages):
+            raise UsageError(f"{label}.allowed_key_usages must be 1 to 8 key usages")
+        root = {
             "root_kid": _hex(item["root_kid"], 32, f"{label}.root_kid"),
             "tenant_id": _hex(item["tenant_id"], 16, f"{label}.tenant_id"),
             "allowed_sites": [_hex(site, 16, f"{label}.allowed_sites[{i}]") for i, site in enumerate(sites)],
             "allowed_key_usages": usages,
-        })
+        }
+        # D-83 amendment a: the step-3 trust-root rule (deterministic-encoding order).
+        for name in ("allowed_sites", "allowed_key_usages"):
+            if any(verifier._compare_encoded(a, b) >= 0 for a, b in zip(root[name], root[name][1:])):
+                raise UsageError(f"{label}.{name} must be strictly sorted and unique")
+        roots.append(root)
     kids = [root["root_kid"] for root in roots]
     if kids != sorted(set(kids)):
         raise UsageError("policy.artifact_roots must be strictly sorted and unique by root_kid")
@@ -120,14 +125,18 @@ def load_policy(path: Path) -> dict[str, Any]:
     }
 
 
+# D-83 amendment b: the exact file text, 64 lowercase hex characters then at most one LF or CRLF.
+KEY_FILE = re.compile(r"[0-9a-f]{64}(\r?\n)?")
+
+
 def _scalar(path: Path) -> int:
     try:
-        text = path.read_text(encoding="utf-8").rstrip()
+        text = path.read_bytes().decode("utf-8")
     except (OSError, UnicodeError) as exc:
         raise UsageError(f"cannot read signing key file {path}: {exc}") from exc
-    if not re.fullmatch(r"[0-9a-f]{64}", text):
-        raise UsageError("signing key file must hold exactly 64 lowercase hexadecimal characters")
-    scalar = int(text, 16)
+    if not KEY_FILE.fullmatch(text):
+        raise UsageError("signing key file must hold exactly 64 lowercase hexadecimal characters, then at most one LF or CRLF")
+    scalar = int(text[:64], 16)
     if not 1 <= scalar < N:
         raise UsageError("signing key scalar must satisfy 1 <= d < n")
     return scalar
@@ -164,6 +173,8 @@ def _chain(policy: dict[str, Any], kid: bytes, evaluated_at: int) -> list[dict[s
             raise UsageError("policy.verifier_credentials: tenant_id and site_id must be all-zero")
         if not member["valid_from"] <= evaluated_at < member["valid_until"]:
             raise UsageError("policy.verifier_credentials: a member is not valid at the evaluation time")
+        if not all(verifier._bstr(item, 32) for item in member["path"]):  # typed before any lookup
+            raise UsageError("policy.verifier_credentials: every path element must be a 32-byte byte string")
     leaf = leaves[0]
     if leaf["key_usage"] != "verifier_signing" or leaf["principal_role"] != "verifier" or not leaf["path"]:
         raise UsageError("the leaf must have key_usage verifier_signing, principal_role verifier and a non-empty path")

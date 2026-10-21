@@ -9,16 +9,17 @@ import { AT, policyCases, PolicyCase, RP_KEY_HEX, rpPolicy, SAMPLE_ROOTS } from 
 import { TEST_KEYS, TestKeyName } from "./testkeys";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+// One pyref process over the whole manifest: a line per case, "usage" or "ok <kid> <digest>".
 const PYREF = `
-import sys
+import json, sys
 from pathlib import Path
 from pyref.relying_party import UsageError, load_configuration
-policy, key, at = sys.argv[1:]
-try:
-    c = load_configuration(Path(policy) if policy else None, Path(key) if key else None, int(at))
-except UsageError as exc:
-    print(f"usage: {exc}"); sys.exit(2)
-print("ok" if c is None else f"ok {c.kid.hex()} {c.policy_digest.hex()}")
+for name, policy, key in json.load(open(sys.argv[1])):
+    try:
+        c = load_configuration(Path(policy) if policy else None, Path(key) if key else None, int(sys.argv[2]))
+        print(name, "ok" if c is None else f"ok {c.kid.hex()} {c.policy_digest.hex()}")
+    except UsageError as exc:
+        print(name, "usage", str(exc))
 `;
 
 // Write one case to disk and return the two paths (undefined = not supplied).
@@ -26,13 +27,15 @@ function materialise(directory: string, item: PolicyCase): [string | undefined, 
   const policyPath = item.policy === undefined ? undefined : join(directory, `${item.name}.policy.json`);
   const keyPath = item.key === undefined ? undefined : join(directory, `${item.name}.key`);
   if (policyPath) writeFileSync(policyPath, typeof item.policy === "string" ? item.policy : JSON.stringify(item.policy));
-  if (keyPath) writeFileSync(keyPath, `${item.key}\n`);
+  if (keyPath) writeFileSync(keyPath, item.keyText ?? `${item.key}\n`);
   return [policyPath, keyPath];
 }
 
-function pyref(policyPath: string | undefined, keyPath: string | undefined): { code: number; out: string } {
-  const proc = Bun.spawnSync(["python3", "-B", "-c", PYREF, policyPath ?? "", keyPath ?? "", String(AT)], { cwd: root });
-  return { code: proc.exitCode, out: proc.stdout.toString() + proc.stderr.toString() };
+function pyref(directory: string, manifest: [string, string | undefined, string | undefined][]): Map<string, string> {
+  const path = join(directory, "manifest.json"); writeFileSync(path, JSON.stringify(manifest));
+  const proc = Bun.spawnSync(["python3", "-B", "-c", PYREF, path, String(AT)], { cwd: root });
+  expect(proc.exitCode, proc.stderr.toString()).toBe(0);
+  return new Map(proc.stdout.toString().trim().split("\n").map((line) => { const [name, ...rest] = line.split(" "); return [name!, rest.join(" ")]; }));
 }
 
 describe("relying-party configuration (D-83, CONFORMANCE section 6)", () => {
@@ -44,21 +47,30 @@ describe("relying-party configuration (D-83, CONFORMANCE section 6)", () => {
     expect(toHex(configuration.kid)).toBe(toHex(TEST_KEYS.rp_verifier_signing.kid));
     expect(configuration.verifierKids.has(toHex(TEST_KEYS.rp_credential_issuing.kid))).toBe(true);
     expect(toHex(configuration.policyDigest)).not.toBe("00".repeat(32));
-    const py = pyref(policyPath, keyPath);
-    expect(py.code, py.out).toBe(0);
-    expect(py.out.trim()).toBe(`ok ${toHex(configuration.kid)} ${toHex(configuration.policyDigest)}`);
+    const py = pyref(directory, [["valid", policyPath, keyPath], ["none", undefined, undefined]]);
+    expect(py.get("valid")).toBe(`ok ${toHex(configuration.kid)} ${toHex(configuration.policyDigest)}`);
     expect(loadConfiguration(undefined, undefined, AT)).toBeUndefined();
-    expect(pyref(undefined, undefined).out.trim()).toBe("ok");
+    expect(py.get("none")).toBe("ok");
   });
 
-  test("every section 6 failure is a usage error on both sides", () => {
-    for (const item of policyCases()) {
+  test("the shared table drives both loaders: every failure case is a usage error, every valid case loads identically", () => {
+    const cases = policyCases();
+    const manifest: [string, string | undefined, string | undefined][] = [];
+    const ts = new Map<string, string>();
+    for (const item of cases) {
       const [policyPath, keyPath] = materialise(directory, item);
-      expect(() => loadConfiguration(policyPath, keyPath, AT), item.name).toThrow(ConfigurationError);
-      const py = pyref(policyPath, keyPath);
-      expect(py.code, `${item.name}: ${py.out}`).toBe(2);
-      expect(py.out.startsWith("usage: "), `${item.name}: ${py.out}`).toBe(true);
+      manifest.push([item.name, policyPath, keyPath]);
+      try { const c = loadConfiguration(policyPath, keyPath, AT)!; ts.set(item.name, `ok ${toHex(c.kid)} ${toHex(c.policyDigest)}`); } catch (error) {
+        expect(error, item.name).toBeInstanceOf(ConfigurationError); ts.set(item.name, "usage");
+      }
     }
+    const py = pyref(directory, manifest);
+    expect(py.size, "pyref saw the same number of cases").toBe(cases.length);
+    for (const item of cases) {
+      if (item.valid) { expect(ts.get(item.name), item.name).toMatch(/^ok /u); expect(py.get(item.name), item.name).toBe(ts.get(item.name)); }
+      else { expect(ts.get(item.name), item.name).toBe("usage"); expect(py.get(item.name)?.startsWith("usage "), `${item.name}: ${py.get(item.name)}`).toBe(true); }
+    }
+    console.log(`shared configuration table: ${cases.length} cases (${cases.filter((item) => item.valid).length} valid), identical outcome on both loaders`);
   });
 
   test("the legacy exclusion is exactly the thirteen v0.2.5 fixture kids, never the rp pair", () => {
