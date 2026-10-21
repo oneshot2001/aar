@@ -1,0 +1,7 @@
+{
+  "name": "rp-usage-rotation-issuer",
+  "expected_code": "credential/root-not-accepted",
+  "expected_result": "nonconformant",
+  "expected_step": 8,
+  "mutation_description": "The policy record for the producer root omits credential_issuing; the rotation-issuer credential signs an envelope verified at step 6, so its usage must be allowed."
+}

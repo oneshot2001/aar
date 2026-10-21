@@ -1,0 +1,7 @@
+{
+  "name": "rp-order-ceiling-before-bad-signature",
+  "expected_code": "sig/verify-failed",
+  "expected_result": "nonconformant",
+  "expected_step": 6,
+  "mutation_description": "Ceiling rejection (ep_signing omitted) combined with a corrupted credential signature; step 6 wins."
+}

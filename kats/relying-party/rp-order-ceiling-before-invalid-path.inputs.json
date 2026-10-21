@@ -1,0 +1,8 @@
+{
+  "policy": "rp-order-ceiling-before-invalid-path.policy.json",
+  "signing_key": "rp-verifier.key",
+  "trust_policy": null,
+  "prior_state": null,
+  "replay_state": null,
+  "at": 1735689800
+}

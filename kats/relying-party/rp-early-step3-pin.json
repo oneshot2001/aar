@@ -1,0 +1,7 @@
+{
+  "name": "rp-early-step3-pin",
+  "expected_code": "schema/missing-field",
+  "expected_result": "nonconformant",
+  "expected_step": 3,
+  "mutation_description": "Step-3 failure under a policy with the exact trust-policy pin: the configured trust values replace their sentinels."
+}

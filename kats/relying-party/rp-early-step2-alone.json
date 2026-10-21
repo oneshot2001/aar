@@ -1,0 +1,7 @@
+{
+  "name": "rp-early-step2-alone",
+  "expected_code": "cbor/malformed",
+  "expected_result": "nonconformant",
+  "expected_step": 2,
+  "mutation_description": "Step-2 failure under a policy: the verdict carries the policy digest and the leaf kid."
+}

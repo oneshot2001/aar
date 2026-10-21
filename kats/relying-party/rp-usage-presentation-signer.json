@@ -1,0 +1,7 @@
+{
+  "name": "rp-usage-presentation-signer",
+  "expected_code": "credential/root-not-accepted",
+  "expected_result": "nonconformant",
+  "expected_step": 8,
+  "mutation_description": "The nested presentation is EP-session signed; the policy record omits ep_signing."
+}

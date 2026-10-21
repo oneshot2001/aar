@@ -1,0 +1,7 @@
+{
+  "name": "rp-root-not-accepted",
+  "expected_code": "credential/root-not-accepted",
+  "expected_result": "nonconformant",
+  "expected_step": 8,
+  "mutation_description": "The policy lists a root no carried credential chains to; the producer root is unlisted, so policy acceptance rejects the first carried credential."
+}

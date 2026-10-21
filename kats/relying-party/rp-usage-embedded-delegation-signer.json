@@ -1,0 +1,7 @@
+{
+  "name": "rp-usage-embedded-delegation-signer",
+  "expected_code": "credential/root-not-accepted",
+  "expected_result": "nonconformant",
+  "expected_step": 8,
+  "mutation_description": "No top-level delegation is carried, so authority_signing is used only by embedded delegations; the policy record omits it."
+}

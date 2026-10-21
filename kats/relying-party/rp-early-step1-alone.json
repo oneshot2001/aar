@@ -1,0 +1,7 @@
+{
+  "name": "rp-early-step1-alone",
+  "expected_code": "resource/bundle-too-large",
+  "expected_result": "nonconformant",
+  "expected_step": 1,
+  "mutation_description": "Oversized input under a policy: the step-1 verdict carries the policy digest and the leaf kid."
+}

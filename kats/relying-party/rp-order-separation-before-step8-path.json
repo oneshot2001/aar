@@ -1,0 +1,7 @@
+{
+  "name": "rp-order-separation-before-step8-path",
+  "expected_code": "credential/path-invalid",
+  "expected_result": "nonconformant",
+  "expected_step": 8,
+  "mutation_description": "Separation rejection (a carried credential is the leaf kid) combined with a path naming no carried credential; path construction precedes separation at step 8."
+}

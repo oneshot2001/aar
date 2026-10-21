@@ -1,0 +1,7 @@
+{
+  "name": "rp-flip-site-listed",
+  "expected_code": null,
+  "expected_result": "conformant",
+  "expected_step": null,
+  "mutation_description": "Flip pair: the policy record lists the bundle's site and a second one; conformant."
+}

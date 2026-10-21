@@ -1,0 +1,7 @@
+{
+  "name": "rp-mediator-root-not-accepted",
+  "expected_code": "countersign/credential-invalid",
+  "expected_result": "nonconformant",
+  "expected_step": 8,
+  "mutation_description": "The mediator credential chains to a second producer root the policy does not list (its credential sorts first); the mediator mapping applies."
+}

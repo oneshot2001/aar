@@ -1,0 +1,7 @@
+{
+  "name": "rp-usage-approver",
+  "expected_code": "credential/root-not-accepted",
+  "expected_result": "nonconformant",
+  "expected_step": 8,
+  "mutation_description": "The policy record for the producer root omits approver_signing; the approver credential signs an envelope verified at step 6, so its usage must be allowed."
+}

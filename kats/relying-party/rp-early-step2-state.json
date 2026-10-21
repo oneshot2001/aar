@@ -1,0 +1,7 @@
+{
+  "name": "rp-early-step2-state",
+  "expected_code": "cbor/malformed",
+  "expected_result": "nonconformant",
+  "expected_step": 2,
+  "mutation_description": "Step-2 failure under a policy with empty supplied prior and replay state: both digests bind the empty map."
+}

@@ -1,0 +1,7 @@
+{
+  "name": "rp-early-step3-alone",
+  "expected_code": "schema/missing-field",
+  "expected_result": "nonconformant",
+  "expected_step": 3,
+  "mutation_description": "Step-3 failure under a policy: the verdict carries the policy digest and the leaf kid."
+}

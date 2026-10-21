@@ -1,0 +1,7 @@
+{
+  "name": "rp-early-step2-pin",
+  "expected_code": "cbor/malformed",
+  "expected_result": "nonconformant",
+  "expected_step": 2,
+  "mutation_description": "Step-2 failure under a policy with the exact trust-policy pin: the configured trust values replace their sentinels."
+}

@@ -1,0 +1,7 @@
+{
+  "name": "rp-order-ceiling-before-invalid-path",
+  "expected_code": "credential/path-invalid",
+  "expected_result": "nonconformant",
+  "expected_step": 8,
+  "mutation_description": "Ceiling rejection (ep_signing omitted) combined with a credential path naming no carried credential; path construction precedes root acceptance."
+}

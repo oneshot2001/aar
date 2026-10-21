@@ -1,0 +1,7 @@
+{
+  "name": "rp-positive-strict-subset",
+  "expected_code": null,
+  "expected_result": "conformant",
+  "expected_step": null,
+  "mutation_description": "The bundle carries two producer roots; the policy lists only the one every carried credential chains to (a strict subset). Conformant, signed by the policy leaf."
+}

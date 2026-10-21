@@ -46,9 +46,13 @@ export function rootRecord(rootKid: Uint8Array, tenant: Uint8Array, sites: Uint8
 
 // The corpus relying-party chain: rp_verifier_signing leaf under the
 // self-signed rp_credential_issuing root, all-zero tenant and site.
-export function rpPolicy(roots: PolicyRoot[], leafExtra: Obj = {}): PolicyJson {
+export function rpChain(): { root: ReturnType<typeof rpCredential>; leaf: ReturnType<typeof rpCredential> } {
   const root = rpCredential(TEST_KEYS.rp_credential_issuing, TEST_KEYS.rp_credential_issuing, []);
-  const leaf = rpCredential(TEST_KEYS.rp_verifier_signing, TEST_KEYS.rp_credential_issuing, [root.id], leafExtra);
+  return { root, leaf: rpCredential(TEST_KEYS.rp_verifier_signing, TEST_KEYS.rp_credential_issuing, [root.id]) };
+}
+
+export function rpPolicy(roots: PolicyRoot[]): PolicyJson {
+  const { root, leaf } = rpChain();
   return policyJson(roots, [root.envelope, leaf.envelope], TEST_KEYS.rp_credential_issuing.kid);
 }
 

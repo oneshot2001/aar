@@ -1,0 +1,7 @@
+{
+  "name": "rp-flip-site-removed",
+  "expected_code": "credential/root-not-accepted",
+  "expected_result": "nonconformant",
+  "expected_step": 8,
+  "mutation_description": "Flip pair: the same bundle, the bundle's site removed from the policy record; the result flips and the policy digest differs."
+}

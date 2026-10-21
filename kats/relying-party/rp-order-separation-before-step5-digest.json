@@ -1,0 +1,7 @@
+{
+  "name": "rp-order-separation-before-step5-digest",
+  "expected_code": "hash/mismatch",
+  "expected_result": "nonconformant",
+  "expected_step": 5,
+  "mutation_description": "Separation rejection (a producer root is a verifier kid) combined with a wrong trust-store digest; the digest check precedes separation at step 5."
+}

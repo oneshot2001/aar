@@ -1,0 +1,7 @@
+{
+  "name": "rp-order-ceiling-before-role-key-reuse",
+  "expected_code": "credential/role-key-reuse",
+  "expected_result": "nonconformant",
+  "expected_step": 8,
+  "mutation_description": "Ceiling rejection (ep_signing omitted) combined with one kid carried under two roles; role-key separation precedes root acceptance."
+}

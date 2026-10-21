@@ -4,6 +4,7 @@ import { verifySigned } from "./crypto";
 import { buildFixtures } from "./fixtures";
 import { buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildD82PositiveFixtures, buildClassBoundaryFixtures, buildEvidenceCommitFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
 import { buildCountersignFixtures } from "./countersign-fixtures";
+import { buildRelyingPartyFixtures, rpOptions } from "./relying-party-kats";
 import { TEST_KEYS } from "./testkeys";
 import { verifyBundle } from "./verifier";
 import { readFileSync } from "node:fs";
@@ -216,6 +217,27 @@ describe("positive KAT harness", () => {
           expect(result.observations.includes(observation), `${fixture.filename}:${observation}`).toBe(true);
         }
       }
+    }
+  }, 180_000);
+
+  test("D-83 relying-party rows are deterministic, match files, and verify to their descriptors under their inputs", () => {
+    const first = buildRelyingPartyFixtures(); const second = buildRelyingPartyFixtures();
+    const directory = join(root, "kats", "relying-party");
+    expect(first.length).toBeGreaterThan(30);
+    for (const [index, row] of first.entries()) {
+      expect(equalBytes(row.bytes, second[index]!.bytes), row.name).toBe(true);
+      expect(equalBytes(row.bytes, readFileSync(join(directory, `${row.name}.cbor`))), row.name).toBe(true);
+      expect(JSON.parse(readFileSync(join(directory, `${row.name}.json`), "utf8")), row.name).toEqual(row.descriptor);
+      expect(JSON.parse(readFileSync(join(directory, `${row.name}.inputs.json`), "utf8")), row.name).toEqual(row.inputs);
+      expect(JSON.parse(readFileSync(join(directory, `${row.name}.policy.json`), "utf8")), row.name).toEqual(row.policy);
+      const options = rpOptions(directory, row.inputs);
+      const result = verifyBundle(row.bytes, options);
+      expect(result.result, row.name).toBe(row.descriptor.expected_result);
+      expect(result.ok ? null : result.reason, row.name).toBe(row.descriptor.expected_code);
+      expect(result.ok ? null : result.step, row.name).toBe(row.descriptor.expected_step);
+      const protectedMap = decodeCbor((decodeCbor((decodeCbor(result.verdictEnvelope!, { strict: true }) as Uint8Array[])[1]!, { strict: true }) as Uint8Array[])[0]!, { strict: true }) as Map<number, Uint8Array>;
+      expect(toHex(protectedMap.get(4)!), row.name).toBe(toHex(options.configuration!.kid));
+      expect(toHex((result.verdict!.trust_policy as Record<string, Uint8Array>).relying_party_policy_digest!), row.name).toBe(toHex(options.configuration!.policyDigest));
     }
   }, 180_000);
 

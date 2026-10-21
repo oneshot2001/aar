@@ -1,0 +1,7 @@
+{
+  "name": "rp-early-step3-state",
+  "expected_code": "schema/missing-field",
+  "expected_result": "nonconformant",
+  "expected_step": 3,
+  "mutation_description": "Step-3 failure under a policy with empty supplied prior and replay state: both digests bind the empty map."
+}

@@ -20,7 +20,8 @@ import tempfile
 from pathlib import Path
 
 from .cbor import dumps, loads
-from .kat import KAT_DIRECTORIES, ROOT
+from .kat import KAT_DIRECTORIES, RELYING_PARTY_DIRECTORY, ROOT, _rp_inputs
+from .relying_party import load_policy
 from .verifier import evaluate
 
 ENGINE_VERSION = "0.12.14"  # Ruby `cddl` gem (Bormann reference implementation)
@@ -106,6 +107,16 @@ def corpus() -> list[tuple[str, str, str, bytes]]:
             sys.exit("engine unsupported: bun not found (demo bundles come from `bun run demo/ep/golden.ts`)")
         items += [(f"demo golden {p.stem}", CORE, "aar-wire-object", p.read_bytes()) for p in sorted(Path(tmp).glob("*.cbor"))]
     items += [(f"{label} verdict", VERDICT, "verdict-envelope", verdict(blob)) for label, _, root, blob in list(items) if root == "aar-wire-object" and loads(blob).__class__ is dict]
+    # D-83 part 11: conformant rp-* bundles and their policy-mode verdicts; every policy sidecar in CBOR form.
+    for path in sorted(RELYING_PARTY_DIRECTORY.glob("rp-*.json")):
+        if path.name.endswith((".inputs.json", ".policy.json", ".trust-policy.json", ".prior.json", ".replay.json")):
+            continue
+        if json.loads(path.read_text())["expected_result"] != "conformant":
+            continue
+        label = str(path.relative_to(ROOT)); blob = path.with_suffix(".cbor").read_bytes()
+        items.append((label, CORE, "aar-wire-object", blob))
+        items.append((f"{label} policy verdict", VERDICT, "verdict-envelope", evaluate(blob, **_rp_inputs(path.with_suffix(".cbor"))).verdict_bytes))
+    items += [(str(path.relative_to(ROOT)), CORE, "relying-party-policy", dumps(load_policy(path))) for path in sorted(RELYING_PARTY_DIRECTORY.glob("*.policy.json"))]
     return items
 
 

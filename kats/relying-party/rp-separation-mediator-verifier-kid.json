@@ -1,0 +1,7 @@
+{
+  "name": "rp-separation-mediator-verifier-kid",
+  "expected_code": "countersign/credential-invalid",
+  "expected_result": "nonconformant",
+  "expected_step": 8,
+  "mutation_description": "The mediator credential's subject_kid is the policy leaf's kid and it signs the countersignature; step 8 separation with the mediator mapping."
+}

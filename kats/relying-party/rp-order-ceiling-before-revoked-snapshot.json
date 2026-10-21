@@ -1,0 +1,7 @@
+{
+  "name": "rp-order-ceiling-before-revoked-snapshot",
+  "expected_code": "credential/root-not-accepted",
+  "expected_result": "nonconformant",
+  "expected_step": 8,
+  "mutation_description": "Ceiling rejection (ep_signing omitted) combined with a snapshot revoking the EP credential before its uses; root acceptance precedes status snapshots inside step 8."
+}

@@ -1,0 +1,8 @@
+{
+  "policy": "rp-early-step1-alone.policy.json",
+  "signing_key": "rp-verifier.key",
+  "trust_policy": null,
+  "prior_state": null,
+  "replay_state": null,
+  "at": 1735689800
+}

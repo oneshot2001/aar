@@ -1,0 +1,7 @@
+{
+  "name": "rp-separation-producer-root-verifier-kid",
+  "expected_code": "credential/root-not-accepted",
+  "expected_result": "nonconformant",
+  "expected_step": 5,
+  "mutation_description": "A producer root record carries the policy's verifier_root_kid; step 5 separation, after the per-root tenant/site checks."
+}

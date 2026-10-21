@@ -1,0 +1,7 @@
+{
+  "name": "rp-usage-mediator",
+  "expected_code": "countersign/credential-invalid",
+  "expected_result": "nonconformant",
+  "expected_step": 8,
+  "mutation_description": "The mediator credential chains to a second producer root whose policy record omits outcome_signing; the corpus outcome observer stays accepted under the first root."
+}
