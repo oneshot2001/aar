@@ -6,7 +6,7 @@
   "demo/run-scenario.ts": 22087,
   "harness/fixtures.ts": 41766,
   "harness/negative-fixtures.ts": 229383,
-  "harness/verifier.ts": 161543,
+  "harness/verifier.ts": 161478,
   "pyref/kat.py": 50026,
-  "pyref/verifier.py": 145890
+  "pyref/verifier.py": 144969
 }

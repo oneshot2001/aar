@@ -6,8 +6,8 @@
 import { readFileSync } from "node:fs";
 import { CborValue, decodeCbor, encodeCbor, equalBytes, fromHex, toHex } from "./cbor";
 import { domainHash, hash, P256_ORDER } from "./crypto";
-import { keyFromScalar } from "./testkeys";
-import { B1Failure, envelopePayload, EnvelopeContext, failure, object, Obj, ParsedEnvelope, parseEnvelope, same, verifyEnvelope } from "./verifier";
+import { keyFromScalar, TEST_KEYS } from "./testkeys";
+import { B1Failure, envelopePayload, EnvelopeContext, failure, object, Obj, Parsed, ParsedEnvelope, parseEnvelope, same, signingTime, verifyEnvelope } from "./verifier";
 
 export const POLICY_DOMAIN = "AAR-RP-POLICY-v1";
 const KEY_USAGES = ["agent_signing", "ep_signing", "authority_signing", "approver_signing", "outcome_signing", "anchor_signing", "verifier_signing", "credential_issuing", "status_signing"];
@@ -153,6 +153,36 @@ export function loadConfiguration(policyPath: string | undefined, keyPath: strin
     privateKey: key.privateKey, kid: key.kid, policyDigest: domainHash(POLICY_DOMAIN, policy), verifierKids,
     roots: new Map((policy.artifact_roots as Obj[]).map((root) => [toHex(root.root_kid as Uint8Array), root])),
   };
+}
+
+// The verdict signing key: the configured leaf under a policy, else the corpus verifier (D-83 part 5).
+export function signerKey(configuration: Configuration | undefined): Pick<Configuration, "privateKey" | "kid"> {
+  return configuration ?? TEST_KEYS.verifier_signing;
+}
+
+// D-81: every step-6 envelope uses its signer's key at its signing time; the
+// step-6 signer set is captured before the verifier's own evaluation-time use
+// (step 20) is added under the signing kid (D-83 part 5).
+export function signerUses(parsed: Parsed, evaluation: number, configuration: Configuration | undefined): { uses: Map<string, number[]>; usedKids: Set<string> } {
+  const uses = new Map<string, number[]>();
+  for (const item of Object.values(parsed).flat()) {
+    const entry = "delegation" in item ? item.delegation : item;
+    const kid = toHex(entry.kid);
+    uses.set(kid, [...(uses.get(kid) ?? []), signingTime(entry, evaluation) as number]);
+  }
+  const usedKids = new Set(uses.keys());
+  const verifierKid = toHex(signerKey(configuration).kid);
+  uses.set(verifierKid, [...(uses.get(verifierKid) ?? []), evaluation]);
+  return { uses, usedKids };
+}
+
+// Step 20: without a policy the corpus verifier key resolves from bundle
+// credentials (D-58, D-73 find-first); under a policy no bundle credential is
+// consulted (D-83 part 5).
+export function verifierIdentity(parsed: Parsed, configuration: Configuration | undefined): B1Failure | undefined {
+  if (configuration !== undefined) return undefined;
+  const credential = parsed.credential.find((entry) => equalBytes(entry.payload.subject_kid as Uint8Array, TEST_KEYS.verifier_signing.kid));
+  return credential === undefined || credential.payload.key_usage !== "verifier_signing" ? failure(20, "key/not-found", "verifier_signing", true) : undefined;
 }
 
 function accepts(root: Obj | undefined, credential: Obj, used: boolean): boolean {

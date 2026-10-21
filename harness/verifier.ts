@@ -2,8 +2,7 @@ import { p256 } from "@noble/curves/nist.js";
 import { CborScalar, CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
 import { domainHash, hash, P256_HALF_ORDER, signatureScalars } from "./crypto";
 import { promotedRoot, rfc6962Leaf, verifyPromotedProof, verifyRfc6962Consistency, verifyRfc6962Inclusion } from "./merkle";
-import { TEST_KEYS } from "./testkeys";
-import { acceptRoots } from "./relying-party";
+import { acceptRoots, Configuration, signerUses, verifierIdentity } from "./relying-party";
 import { emitFailureVerdict, emitVerdict } from "./verdict";
 
 export type B1ReasonCode =
@@ -63,6 +62,10 @@ export interface VerifyB1Options {
    * must equal this value; every verdict records this caller-supplied time.
    */
   evaluationTime: number;
+  // D-83: the relying-party configuration (policy + signing key), validated before the bundle.
+  configuration?: Configuration;
+  // An explicitly configured trust value replaces only its sentinel on an early failure (section 5).
+  configuredTrustPolicy?: Obj;
   product?: string;
   version?: string;
   buildDigest?: Uint8Array;
@@ -691,7 +694,7 @@ const SIGNING_TIME_FIELDS: Partial<Record<ArtifactKind, string>> = {
   presentation: "delivered_at", status: "produced_at", mediator_countersignature: "mediator_observed_at",
 };
 
-function signingTime(entry: ParsedEnvelope, evaluationTime: number): CborValue | undefined {
+export function signingTime(entry: ParsedEnvelope, evaluationTime: number): CborValue | undefined {
   if (entry.kind === "receipt") return (entry.payload.emission as Obj).committed_at;
   if (entry.kind === "request") return object(entry.payload.freshness) ? entry.payload.freshness.issued_at : undefined;
   const field = SIGNING_TIME_FIELDS[entry.kind];
@@ -988,7 +991,7 @@ function validateEnvelopes(bundle: Obj): Parsed | B1Failure {
   return parsed;
 }
 
-function validateTrustInputs(bundle: Obj, evaluationTime: number): B1Failure | undefined {
+function validateTrustInputs(bundle: Obj, evaluationTime: number, configuration: Configuration | undefined): B1Failure | undefined {
   const selector = bundle.selector as Obj;
   const trust = bundle.trust_inputs as Obj;
   const store = trust.trust_store as Obj;
@@ -1000,6 +1003,8 @@ function validateTrustInputs(bundle: Obj, evaluationTime: number): B1Failure | u
     if (!object(rootValue)) return failure(5, "schema/bad-type", "bundle.trust_inputs.trust_store.roots");
     if (!same(rootValue.tenant_id, selector.tenant_id) || !Array.isArray(rootValue.allowed_sites) || !(rootValue.allowed_sites as CborValue[]).some((site) => same(site, selector.site_id))) return failure(5, "credential/root-not-accepted", "bundle.trust_inputs.trust_store.roots");
   }
+  // D-83 part 4: separation; a producer root that is a verifier kid.
+  if (configuration !== undefined && rootKids.some((kid) => configuration.verifierKids.has(kid))) return failure(5, "credential/root-not-accepted", "bundle.trust_inputs.trust_store.roots");
   if (trust.evaluation_time !== evaluationTime) return failure(5, "schema/out-of-range", "bundle.trust_inputs.evaluation_time");
   if ((trust.evaluation_time as number) < (store.created_at as number)) return failure(5, "schema/out-of-range", "bundle.trust_inputs.evaluation_time");
   return undefined;
@@ -1184,21 +1189,11 @@ function receiptHashes(payload: Obj): B1Failure | undefined {
   return undefined;
 }
 
-function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | undefined {
+function validateCredentialLifecycle(bundle: Obj, parsed: Parsed, configuration: Configuration | undefined): B1Failure | undefined {
   const credentials = new Map(parsed.credential.map((entry) => [toHex(entry.payload.credential_id as Uint8Array), entry]));
   const mediatorKids = new Set(parsed.mediator_countersignature.map((entry) => toHex(entry.kid)));
   const evaluation = (bundle.trust_inputs as Obj).evaluation_time as number;
-  // D-81: every step-6 envelope uses its signer's key at its signing time;
-  // the verifier's own key is used at the evaluation time (step 20).
-  const uses = new Map<string, number[]>();
-  for (const item of Object.values(parsed).flat()) {
-    const entry = "delegation" in item ? item.delegation : item;
-    const kid = toHex(entry.kid);
-    uses.set(kid, [...(uses.get(kid) ?? []), signingTime(entry, evaluation) as number]);
-  }
-  const usedKids = new Set(uses.keys());
-  const verifierKid = toHex(TEST_KEYS.verifier_signing.kid);
-  uses.set(verifierKid, [...(uses.get(verifierKid) ?? []), evaluation]);
+  const { uses, usedKids } = signerUses(parsed, evaluation, configuration);
   const roots = ((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[];
   const roleKids = new Map<string, string>();
   for (const entry of parsed.credential) {
@@ -1225,7 +1220,7 @@ function validateCredentialLifecycle(bundle: Obj, parsed: Parsed): B1Failure | u
       expectedIssuer = issuer.payload.issuer_kid as Uint8Array;
     }
   }
-  const acceptance = acceptRoots(undefined, parsed.credential, credentials, roots, usedKids, mediatorKids);
+  const acceptance = acceptRoots(configuration, parsed.credential, credentials, roots, usedKids, mediatorKids);
   if (acceptance) return acceptance;
   // D-80: bind every record (ids/kids, predecessor's issuer signs, tenant and
   // site) in array order before any ordering check.
@@ -2105,13 +2100,13 @@ function validateBundle(input: Uint8Array, options: VerifyB1Options): B1Verifica
   const fail = (issue: B1Failure): B1Failure => emitFailureVerdict(input, issue, options, bundle);
   const resourceIssue = validateResourceCounts(bundle);
   if (resourceIssue) return fail(resourceIssue);
-  const trustIssue = validateTrustInputs(bundle, options.evaluationTime);
+  const trustIssue = validateTrustInputs(bundle, options.evaluationTime, options.configuration);
   if (trustIssue) return fail(trustIssue);
   const parsed = validateEnvelopes(bundle);
   if (isFailure(parsed)) return fail(parsed);
   const contentIssue = validateContent(bundle, parsed);
   if (contentIssue) return fail(contentIssue);
-  const lifecycleIssue = validateCredentialLifecycle(bundle, parsed);
+  const lifecycleIssue = validateCredentialLifecycle(bundle, parsed, options.configuration);
   if (lifecycleIssue) return fail(lifecycleIssue);
   const observations: string[] = [];
   const emissionIssue = validateEmission(parsed, options.priorEmissions ?? [], observations);
@@ -2139,8 +2134,8 @@ function validateBundle(input: Uint8Array, options: VerifyB1Options): B1Verifica
   if (rangeIssue) return fail(rangeIssue);
   const evidence = validateEvidence(bundle, parsed);
   if (isFailure(evidence)) return fail(evidence);
-  const verifierCredential = parsed.credential.find((entry) => equalBytes(entry.payload.subject_kid as Uint8Array, TEST_KEYS.verifier_signing.kid));
-  if (verifierCredential === undefined || verifierCredential.payload.key_usage !== "verifier_signing") return fail(failure(20, "key/not-found", "verifier_signing", true));
+  const identityIssue = verifierIdentity(parsed, options.configuration);
+  if (identityIssue) return fail(identityIssue);
   return emitVerdict(input, bundle, parsed, options, observations, evidence, inputOrigins);
 }
 

@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import json
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from . import hashes, verifier
 from .cbor import CBORError, dumps, loads
-from .crypto import N, key_id, parse_p256_spki
+from .crypto import N, TEST_SCALARS, key_id, parse_p256_spki
 
 POLICY_DOMAIN = "AAR-RP-POLICY-v1"
 ZERO16 = bytes(16)
@@ -202,6 +203,41 @@ def load_configuration(policy_path: Path | None, key_path: Path | None, evaluate
         scalar, kid, hashes.domain_hash(POLICY_DOMAIN, policy), verifier_kids,
         {root["root_kid"]: root for root in policy["artifact_roots"]},
     )
+
+
+def signer(configuration: Configuration | None) -> tuple[int, bytes]:
+    """The verdict signing key: the configured leaf under a policy, else the corpus verifier (D-83 part 5)."""
+    if configuration is None:
+        return TEST_SCALARS["verifier_signing"], key_id(TEST_SCALARS["verifier_signing"])
+    return configuration.scalar, configuration.kid
+
+
+def signer_uses(state: verifier.State) -> tuple[dict[bytes, list[int]], set[bytes]]:
+    """D-81: every step-6 envelope uses its signer's key at its signing time; the
+    step-6 signer set is captured before the verifier's own evaluation-time use
+    (step 20) is added under the signing kid (D-83 part 5)."""
+    uses: dict[bytes, list[int]] = defaultdict(list)
+    for category in verifier.ARTIFACT_ORDER + ("presentations",):
+        for envelope in state.envelopes[category]:
+            uses[envelope.protected[4]].append(verifier._signing_time(category, envelope.payload, state.evaluated_at))
+    for envelope in state.embedded_delegations.values():
+        uses[envelope.protected[4]].append(state.evaluated_at)
+    used_kids = set(uses)
+    uses[signer(state.configuration)[1]].append(state.evaluated_at)
+    return uses, used_kids
+
+
+def verifier_identity(state: verifier.State) -> None:
+    """Step 20: without a policy the corpus verifier key resolves from bundle
+    credentials (D-58, D-73 find-first); under a policy no bundle credential is
+    consulted (D-83 part 5)."""
+    if state.configuration is not None:
+        return
+    verifier_kid = signer(None)[1]
+    credential = next((env for env in state.envelopes["credentials"]
+                       if env.payload.get("subject_kid") == verifier_kid), None)
+    if credential is None or credential.payload.get("key_usage") != "verifier_signing":
+        verifier._fail("key/not-found", 20, indeterminate=True)
 
 
 def _accepts(root: dict[str, Any] | None, credential: dict[str, Any], used: bool) -> bool:

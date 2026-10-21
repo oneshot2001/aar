@@ -863,7 +863,7 @@ def _prior_digest_checks() -> None:
             result = evaluate(raw, evaluated_at=KAT_EVALUATION_TIME,
                               prior_state=prior, replay_state=replay)
             assert result.reason == ("identity/issuer-sequence-rollback" if label == "rollback" else None)
-            assert result.verdict["v"] == 4
+            assert result.verdict["v"] == 5
             digest = result.verdict["trust_policy"]["prior_emissions_digest"]
             digests.append(digest)
             verdicts.append(result.verdict_bytes)

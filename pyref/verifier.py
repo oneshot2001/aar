@@ -14,14 +14,7 @@ from typing import Any, Iterable
 
 from . import hashes, relying_party, verdict
 from .cbor import CBORError, dumps, loads
-from .crypto import (
-    N,
-    TEST_SCALARS,
-    is_der_ecdsa_signature,
-    key_id,
-    parse_p256_spki,
-    verify_es256,
-)
+from .crypto import N, is_der_ecdsa_signature, parse_p256_spki, verify_es256
 
 
 MAX_U53 = 9_007_199_254_740_991
@@ -536,6 +529,9 @@ def _trust_policy_checks(state: State) -> None:
     for root in store["roots"]:
         if root["tenant_id"] != selector["tenant_id"] or selector["site_id"] not in root["allowed_sites"]:
             _fail("credential/root-not-accepted", 5)
+    # D-83 part 4: separation; a producer root that is a verifier kid.
+    if state.configuration is not None and any(root["root_kid"] in state.configuration.verifier_kids for root in store["roots"]):
+        _fail("credential/root-not-accepted", 5)
     if trust["evaluation_time"] != state.evaluated_at:
         _fail("schema/out-of-range", 5)
     if state.evaluated_at < store["created_at"]:
@@ -1304,16 +1300,7 @@ def _credential_lifecycle(state: State) -> None:
     store = state.bundle["trust_inputs"]["trust_store"]
     roots = {root["root_kid"]: root for root in store["roots"]}
     by_id = {envelope.payload["credential_id"]: envelope for envelope in credentials}
-    # D-81: every step-6 envelope uses its signer's key at its signing time;
-    # the verifier's own key is used at the evaluation time (step 20).
-    uses: dict[bytes, list[int]] = defaultdict(list)
-    for category in ARTIFACT_ORDER + ("presentations",):
-        for envelope in state.envelopes[category]:
-            uses[envelope.protected[4]].append(_signing_time(category, envelope.payload, state.evaluated_at))
-    for envelope in state.embedded_delegations.values():
-        uses[envelope.protected[4]].append(state.evaluated_at)
-    used_kids = set(uses)
-    uses[key_id(TEST_SCALARS["verifier_signing"])].append(state.evaluated_at)
+    uses, used_kids = relying_party.signer_uses(state)
     mediator_kids = {envelope.protected[4] for envelope in state.envelopes["mediator_countersignatures"]}
 
     role_kids: dict[str, set[bytes]] = defaultdict(set)
@@ -2634,6 +2621,7 @@ def evaluate(
     replay_state: dict[str, Any] | None = None,
     context_bundle_raw: bytes | None = None,
     configured_trust_policy: dict[str, Any] | None = None,
+    configuration: relying_party.Configuration | None = None,
 ) -> Evaluation:
     """Evaluate exact input bytes and return one deterministic signed verdict.
 
@@ -2652,6 +2640,7 @@ def evaluate(
         prior_state=prior_state,
         replay_state=replay_state,
         configured_trust_policy=configured_trust_policy,
+        configuration=configuration,
     )
     result = "conformant"
     reason: str | None = None
@@ -2693,21 +2682,13 @@ def evaluate(
         _anchor_checks(state)
         _bundle_ranges(state)
         _evidence_classes(state)
-        # D-58 (step 20 for the verifier credential), enforced under D-73:
-        # the verifier's signing key resolves from bundle credentials; an
-        # unresolvable verifier kid is a signed indeterminate key/not-found.
-        # The harness always did this; pyref signed regardless.
-        verifier_kid = key_id(TEST_SCALARS["verifier_signing"])
-        verifier_credential = next((env for env in state.envelopes["credentials"]
-                                    if env.payload.get("subject_kid") == verifier_kid), None)
-        if verifier_credential is None or verifier_credential.payload.get("key_usage") != "verifier_signing":
-            _fail("key/not-found", 20, indeterminate=True)
+        relying_party.verifier_identity(state)
     except ValidationError as exc:
         result = "indeterminate" if exc.indeterminate else "nonconformant"
         reason = exc.code
         step = exc.step
     fields = verdict._verdict_fields(state, result, reason, step)
-    signed, verdict_bytes = verdict._sign_verdict(fields)
+    signed, verdict_bytes = verdict._sign_verdict(fields, state.configuration)
     report_observations = list(signed["observations"])
     if result == "conformant" and state.selector_matching_receipts == 0:
         report_observations.append("empty_scope")

@@ -25,7 +25,7 @@ describe("B2 reference verifier", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.result).toBe("conformant");
-      expect(result.verdict.v).toBe(4);
+      expect(result.verdict.v).toBe(5);
       expect((result.verdict.limits as Record<string, string>).input_origin_ancestry).toBe("not_declared");
       expect(result.completedThrough).toBe(20);
       const decoded = decodeCbor(result.verdictEnvelope, { strict: true });
@@ -266,7 +266,7 @@ print(json.dumps({"result": r.result, "reason": r.reason, "hex": r.verdict_bytes
         const result = verifyBundle(input, { evaluationTime: AT, replayState: [], priorEmissions: parseStatefulPrior(JSON.parse(readFileSync(path, "utf8"))) });
         expect(result.ok, label).toBe(label !== "rollback");
         if (!result.ok) expect(result.reason).toBe("identity/issuer-sequence-rollback");
-        expect(result.verdict!.v).toBe(4);
+        expect(result.verdict!.v).toBe(5);
         const digest = toHex((result.verdict!.trust_policy as Record<string, CborValue>).prior_emissions_digest as Uint8Array);
         const proc = Bun.spawnSync(["python3", "-B", "-c", `
 import sys
