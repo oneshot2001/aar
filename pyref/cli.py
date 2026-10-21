@@ -305,8 +305,15 @@ def _print_evaluation(bundle_path: Path, at: int, evaluation: Evaluation, policy
     print(f"    bundle_digest: {verdict['bundle_digest'].hex()}")
     print(f"    requested_profile: {limits['requested_profile']}")
     print(f"    evaluated_profile: {limits['evaluated_profile']}")
+    for name in ("maximum_time_class", "maximum_provenance_class", "maximum_outcome_level", "technical_integrity",
+                 "source_authenticity", "custody_continuity", "discovery_completeness", "legal_admissibility",
+                 "input_origin_ancestry"):
+        print(f"    {name}: {limits[name]}")
+    print(f"    ingress_completeness: {scope['ingress_completeness']}")
+    for name, value in verdict["trust_policy"].items():
+        if isinstance(value, bytes):
+            print(f"    {name}: {value.hex()}")
     print(f"    coverage: {scope['coverage']}")
-    print(f"    input_origin_ancestry: {limits['input_origin_ancestry']}")
     signed_observations = verdict["observations"]
     print(f"    signed_observations: {', '.join(signed_observations) if signed_observations else '(none)'}")
 
