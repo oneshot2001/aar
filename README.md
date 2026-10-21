@@ -9,7 +9,7 @@
 <p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/code-Apache--2.0-blue.svg" alt="Code: Apache-2.0"></a>
   <a href="LICENSE-SPEC"><img src="https://img.shields.io/badge/spec-CC%20BY%204.0-blue.svg" alt="Spec: CC BY 4.0"></a>
-  <a href="spec/aar-core.cddl"><img src="https://img.shields.io/badge/wire-v0.2.5-3ec9a7.svg" alt="Wire: v0.2.5"></a>
+  <a href="spec/aar-core.cddl"><img src="https://img.shields.io/badge/release-v0.3.0-3ec9a7.svg" alt="Release: v0.3.0 (bundle wire v0.2, verdict v0.3)"></a>
   <a href="pyref/"><img src="https://img.shields.io/badge/verifier-offline%20%C2%B7%20stdlib--only-3ec9a7.svg" alt="Verifier: offline, stdlib-only"></a>
   <a href="kats/"><img src="https://img.shields.io/badge/KATs-byte--pinned-1d3648.svg" alt="KATs: byte-pinned"></a>
   <a href="#status"><img src="https://img.shields.io/badge/status-stable%20experimental%20spec-d98e3b.svg" alt="Status: stable experimental spec"></a>
@@ -35,7 +35,7 @@ authorized to do, what it attempted, whether the command was dispatched, and
 what an observer saw happen. Anyone holding that bundle can check it offline,
 with no vendor service, account, or network, and get a signed verdict. AAR is
 the wire format, the conformance rules, and a free verifier for that record.
-It is a **stable experimental spec** (`v0.2.5`), implemented twice by one
+It is a **stable experimental spec** (`v0.3.0`: bundle wire v0.2 unchanged, verdict v0.3), implemented twice by one
 operator, run against real cameras, and not yet adopted by anyone else.
 
 ## Verify a receipt bundle in 60 seconds
@@ -83,9 +83,9 @@ choice, stated so nobody has to discover it.
 
 | Artifact | State |
 |---|---|
-| Wire | **v0.2.5** — normative CDDL at `spec/aar-core.cddl`; five rc gates closed, exit bar re-run live against real cameras; delta since rc7 in `spec/AUDIT-rc7-to-v0.2.0.md` |
+| Wire | **v0.3.0** — bundle wire v0.2 (unchanged since v0.2.5; normative CDDL at `spec/aar-core.cddl`), verdict v0.3 (`v: 5`: a relying party's own root ceiling and signing key, D-83; the control-path non-claim, D-84); five rc gates closed, exit bar re-run live against real cameras; delta since rc7 in `spec/AUDIT-rc7-to-v0.2.0.md` |
 | Offline verifier | **pyref** — clean-room, Python stdlib only, no network, no wall clock |
-| Second implementation | TypeScript harness (`harness/`) — generates the KAT corpus; byte-identical verdicts with pyref on the cross-implementation gate: every corpus row (478 after the round-9 build) and every fixture-pinned shape agree in both verifiers; shapes no fixture pins are not claimed (the full-corpus test in `harness/crossimpl.test.ts` runs un-skipped since D-82). The round-8 structural sweep (every member the kit can construct — 74 of 82 map productions, 2,184 effective shapes; the 51 skipped and the 3 kit-rewritten members are listed in the sweep table — mutated to null, list, int, text and bool) agreed in both; the two shapes verified by probe only (test-infrastructure gaps) and the members both verifiers tolerate are listed in the `BACKLOG.md` step-6 design item. History: [parity audit](docs/verifier-parity-audit-2026-10-08.md) |
+| Second implementation | TypeScript harness (`harness/`) — generates the KAT corpus; byte-identical verdicts with pyref on the cross-implementation gate: every corpus row (513 after Packet C: 478 plus 35 relying-party rows) and every fixture-pinned shape agree in both verifiers; shapes no fixture pins are not claimed (the full-corpus test in `harness/crossimpl.test.ts` runs un-skipped since D-82). The round-8 structural sweep (every member the kit can construct — 74 of 82 map productions, 2,184 effective shapes; the 51 skipped and the 3 kit-rewritten members are listed in the sweep table — mutated to null, list, int, text and bool) agreed in both; the two shapes verified by probe only (test-infrastructure gaps) and the members both verifiers tolerate are listed in the `BACKLOG.md` step-6 design item. History: [parity audit](docs/verifier-parity-audit-2026-10-08.md) |
 | Conformance KATs | byte-pinned positive / negative / class-boundary / terminal-state fixtures in `kats/` |
 | Threat model | **v0.1** — `docs/threat-model-v0.1.md` (30-finding adversarially challenged, gated) |
 | Adapters | VAPIX live leg + one VMS control leg exercised at gate 5 (`adapters/`) |

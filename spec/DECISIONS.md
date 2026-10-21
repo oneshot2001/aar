@@ -1962,7 +1962,11 @@ field delta in part 8.
    SHA-256 of deterministic CBOR `["AAR-RP-POLICY-v1", policy]`) carries
    `artifact_roots` (1..64 records, strictly sorted, unique by `root_kid`),
    `verifier_root_kid`, and `verifier_credentials` (the leaf plus exactly the
-   credentials its path names, 1..9). Q5 ruled: one tenant per `root_kid`,
+   credentials its path names, 1..9). Each record's `allowed_sites` and
+   `allowed_key_usages` are strictly sorted and unique, the bundle's
+   `trust-root` rule at step 3 (amendment a, 2026-10-21: the ratified text
+   had named only the two array-level uniqueness rules; the build's loaders
+   had rejected duplicate usages but not unsorted sites). Q5 ruled: one tenant per `root_kid`,
    mirroring the producer rule. The policy is a configuration object, not a
    bundle artifact: it is never carried in a bundle and never sourced from a
    platform trust store (D-58 policy clauses stand).
@@ -1986,7 +1990,10 @@ field delta in part 8.
    unsigned crashes (D-61).
 3. **Key contract.** The signing key is supplied as one file holding 64
    lowercase hexadecimal characters, the P-256 private scalar `d` with
-   `1 <= d < n`; the verifier derives the SPKI and `kid = SHA-256(SPKI)`.
+   `1 <= d < n`, optionally followed by one LF or CRLF and nothing else
+   (amendment b, 2026-10-21: the build had used each runtime's whitespace
+   definition, and a U+0085 or U+FEFF suffix split the two verifiers); the
+   verifier derives the SPKI and `kid = SHA-256(SPKI)`.
    Policy and key MUST be supplied together; either alone is a usage error. No
    environment variable, no scalar on a command line. Signing is the existing
    verdict rule: deterministic RFC 6979 ES256, low-S, P1363. (Codex: a

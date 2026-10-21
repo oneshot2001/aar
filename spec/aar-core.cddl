@@ -1222,7 +1222,9 @@ key-usages = [ 1*8 key-usage ]
 ; a bundle; not an aar-wire-object.  artifact_roots is strictly sorted and unique
 ; by root_kid (one tenant per root); verifier_credentials is strictly sorted and
 ; unique by credential_id and is exactly the leaf plus the credentials its path
-; names.  Every verifier credential has all-zero tenant_id and site_id.
+; names.  Each root's allowed_sites and allowed_key_usages are strictly sorted
+; and unique, as the bundle's trust-root arrays are at step 3.  Every verifier
+; credential has all-zero tenant_id and site_id.
 ; relying-party-policy digest = SHA-256(deterministic-CBOR([
 ;   "AAR-RP-POLICY-v1", relying-party-policy
 ; ])).

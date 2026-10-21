@@ -1149,9 +1149,13 @@ of band. Neither is ever carried in a bundle, sourced from a platform trust
 store, or installed into one (D-58).
 
 **Configuration precedes the bundle.** Before any bundle byte is read, the
-verifier MUST validate: the policy's closed map, its strictly sorted and
-unique `artifact_roots` (by `root_kid`; one tenant per root) and
-`verifier_credentials` (by `credential_id`); the signer contract (the
+verifier MUST validate: the policy's closed map (`v` is the integer 1; a
+boolean is not an integer), its strictly sorted and
+unique `artifact_roots` (by `root_kid`; one tenant per root) whose every
+record has strictly sorted and unique `allowed_sites` and `allowed_key_usages`
+of the step-3 `trust-root` shape, and `verifier_credentials` (by
+`credential_id`); every `path` element of every configured credential is a
+32-byte byte string before it is looked up; the signer contract (the
 supplied key's SPKI hashes to exactly one `verifier_credentials[].subject_kid`;
 that credential is the leaf); and the leaf's chain at the supplied evaluation
 time: each member decodes as deterministic CBOR under the credential
@@ -1175,7 +1179,9 @@ membership. Any failure is a usage error with no verdict, never a signed
 result.
 
 **Key contract.** The signing key is one file holding 64 lowercase
-hexadecimal characters, the P-256 private scalar `d` with `1 <= d < n`. The
+hexadecimal characters, the P-256 private scalar `d` with `1 <= d < n`,
+optionally followed by one LF or CRLF and nothing else (no other whitespace,
+no byte-order mark). The
 verifier derives the SPKI and `kid = SHA-256(SPKI)`. Policy and key MUST be
 supplied together; either alone is a usage error. Signing follows the
 verdict rule above (deterministic RFC 6979 ES256, low-S, P1363).
