@@ -1,15 +1,32 @@
 import { readFileSync } from "node:fs";
 import { CborValue, toHex } from "./cbor";
+import { ConfigurationError, loadConfiguration } from "./relying-party";
 import { verifyBundle } from "./verifier";
 
-const [filename, flag, at, ...extra] = process.argv.slice(2);
-const evaluationTime = Number(at);
-if (!filename || flag !== "--at" || !at || !/^\d+$/.test(at) || !Number.isSafeInteger(evaluationTime) || extra.length) {
-  console.error("Usage: bun run harness/verify.ts BUNDLE --at UNIX_SECONDS");
+function usage(): never {
+  console.error("Usage: bun run harness/verify.ts BUNDLE --at UNIX_SECONDS [--policy FILE --signing-key FILE]");
   process.exit(2);
 }
-const result = verifyBundle(readFileSync(filename), { evaluationTime });
+const [filename, ...rest] = process.argv.slice(2);
+const flags = new Map<string, string>();
+for (let index = 0; index < rest.length; index += 2) {
+  const flag = rest[index]!; const value = rest[index + 1];
+  if (!["--at", "--policy", "--signing-key"].includes(flag) || value === undefined || flags.has(flag)) usage();
+  flags.set(flag, value);
+}
+const at = flags.get("--at");
+const evaluationTime = Number(at);
+if (!filename || at === undefined || !/^\d+$/.test(at) || !Number.isSafeInteger(evaluationTime)) usage();
+// D-83 part 2: configuration is complete before the first bundle byte is read.
+let configuration;
+try { configuration = loadConfiguration(flags.get("--policy"), flags.get("--signing-key"), evaluationTime); } catch (error) {
+  if (!(error instanceof ConfigurationError)) throw error;
+  console.error(`harness/verify.ts: error: ${error.message}`);
+  process.exit(2);
+}
+const result = verifyBundle(readFileSync(filename!), { evaluationTime, configuration });
 console.log(`Result: ${result.result}`);
+console.log(`Verifier identity: ${configuration === undefined ? "corpus test key" : `relying-party policy (digest ${toHex(configuration.policyDigest)})`}`);
 if (!result.ok) console.log(`First failure: step ${result.step} (${result.reason})`);
 console.log("Observations:");
 for (const observation of result.verdict!.observations as string[]) console.log(`  - ${observation} [signed]`);
@@ -31,7 +48,7 @@ console.log(`Signed verdict CBOR hex: ${toHex(result.verdictEnvelope!)}`);
 console.log(`  v: ${verdict.v}`);
 const limits = verdict.limits as Record<string, string>;
 for (const name of ["maximum_time_class", "maximum_provenance_class", "maximum_outcome_level", "technical_integrity",
-  "source_authenticity", "custody_continuity", "discovery_completeness", "legal_admissibility", "input_origin_ancestry"]) {
+  "source_authenticity", "custody_continuity", "discovery_completeness", "legal_admissibility", "input_origin_ancestry", "control_path_completeness"]) {
   console.log(`  ${name}: ${limits[name]}`);
 }
 console.log(`  ingress_completeness: ${(verdict.scope as Record<string, string>).ingress_completeness}`);

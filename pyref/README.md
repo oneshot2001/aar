@@ -12,6 +12,8 @@ network client, never contacts a service, and never reads the wall clock.
 python -m pyref verify BUNDLE.cbor --at UNIX_SECONDS
 python -m pyref verify BUNDLE.cbor --at UNIX_SECONDS \
   --trust-policy POLICY.json --prior-state PRIOR.json
+python -m pyref verify BUNDLE.cbor --at UNIX_SECONDS \
+  --policy RP-POLICY.json --signing-key KEY
 ```
 
 `--at` is required and is an unsigned decimal Unix timestamp no greater than
@@ -69,6 +71,60 @@ tenant/site/key-usage scopes, expected heads, policy digest shape, and the
 explicit evaluation time. A policy file is a pin, not a way to rewrite the
 bundle or its signed-verdict preimage.
 
+## Relying-party policy and signing key (D-83)
+
+A relying party (the operator of a verifier who is not the producer) supplies
+`--policy` and `--signing-key` together; either alone is a usage error. Both
+are validated in the CONFORMANCE section 6 order before a single bundle byte
+is read, and any failure exits `2` with no verdict. Under a policy the
+verdict's protected `kid` is the policy leaf's `subject_kid`,
+`relying_party_policy_digest` is `SHA-256(deterministic-CBOR(["AAR-RP-POLICY-v1",
+policy]))`, and step 20 consults no bundle credential; without one the digest is
+32 zero bytes and the corpus verifier key signs. The reader's package is
+bundle + policy + verdict. A policy narrows trust and never widens it: a
+carried credential must also chain to a listed `root_kid` whose record names
+its `tenant_id` and `site_id`, and a credential that signs an envelope needs
+its `key_usage` in that record's `allowed_key_usages`.
+
+`RP-POLICY.json` is the JSON mirror of `relying-party-policy`
+(`spec/aar-core.cddl`): every byte string is lowercase hex and each
+`verifier_credentials` entry is the hex of the exact credential-envelope CBOR
+bytes. `artifact_roots` is strictly sorted and unique by `root_kid`;
+`verifier_credentials` is strictly sorted by `credential_id` and is exactly the
+leaf plus the credentials its path names, all with all-zero `tenant_id` and
+`site_id`.
+
+```json
+{
+  "v": 1,
+  "artifact_roots": [
+    {
+      "root_kid": "32-byte hex",
+      "tenant_id": "16-byte hex",
+      "allowed_sites": ["16-byte hex"],
+      "allowed_key_usages": ["credential_issuing", "ep_signing"]
+    }
+  ],
+  "verifier_root_kid": "32-byte hex",
+  "verifier_credentials": ["hex of a credential-envelope", "hex of a credential-envelope"]
+}
+```
+
+`KEY` is one file holding the verifier's P-256 private scalar `d` as exactly 64
+lowercase hexadecimal characters (`1 <= d < n`; a trailing newline is
+tolerated). The verifier derives the SPKI and `kid = SHA-256(SPKI)`; exactly
+one `verifier_credentials` entry must have that `subject_kid`, and that entry
+is the leaf. No environment variable and no scalar on the command line.
+
+The `kats/relying-party/` corpus signs with the published relying-party
+fixture key pair `rp_credential_issuing` / `rp_verifier_signing` (scalars 14
+and 15, `kats/relying-party/rp-verifier.key`). A policy whose chain contains
+any kid of the thirteen Gate 4 fixture keys is a usage error; the
+relying-party fixture pair is outside that exclusion so the corpus stays
+reproducible. Neither set is an operational verifier identity, neither
+signature is third-party assurance, and passing the exclusion establishes
+nothing about an operator's key.
+
 ## Prior-state JSON
 
 The closed top-level keys are `prior_emissions` and `entries`; either may be
@@ -111,8 +167,9 @@ with the seven entry fields above and hex strings decoded to byte strings.
 bytes and the report includes `stateful_not_evaluated`: those cross-evaluation
 properties were not evaluated and did not pass. Supplying even an empty file
 binds the canonical empty entries map under each digest's separate domain;
-omitted arrays also mean empty arrays. Verdicts use `v: 4`, with the protected
-content type still `application/aar-verdict+cbor;v=0.2`.
+omitted arrays also mean empty arrays. Verdicts use `v: 5` under the protected
+content type `application/aar-verdict+cbor;v=0.3` (D-83, D-84); every bundle
+artifact keeps its `v=0.2` content type.
 
 ## Schema oracle (release test, D-74)
 
@@ -137,7 +194,7 @@ coverage, and declared evidence-class checks under the exact inputs and fixed
 limits named by that verdict.
 
 It does **not** prove sensor truth, inference correctness, lawfulness, custody,
-legal admissibility, or complete discovery. In particular:
+legal admissibility, complete discovery, or control-path completeness. In particular:
 
 - `complete` is only producer-declared completeness relative to signed manifest
   indexes; ingress completeness remains `not_established` without an independent
@@ -150,20 +207,26 @@ legal admissibility, or complete discovery. In particular:
   verdict asserts nothing about any receipt.
 - `stateful_not_evaluated` means no prior state was supplied, so sequence
   rollback and cross-evaluation one-time reuse were not evaluated.
+- `control_path_completeness: not_established` (D-84) is signed on every
+  result: an action dispatched around the enforcement point (a VMS console, a
+  vendor application, physical access) produces no receipt, and nothing in a
+  bundle shows that none occurred.
 
 The last two are REPORT-LAYER observations. They are shown in the report but
 are intentionally absent from the signed verdict bytes; D-51 preimages, extended
 by D-76, remain frozen. Other section 4 observations are signed when applicable.
 
-The reference verdict is signed with the published Gate 4 KAT
-`verifier_signing` key so its bytes remain independently reproducible. That
-public test key is not an operational verifier identity and its signature must
-not be treated as third-party assurance or used as a deployment credential.
+Without a relying-party policy the reference verdict is signed with the
+published Gate 4 KAT `verifier_signing` key so its bytes remain independently
+reproducible; the `rp-*` corpus is signed with the published relying-party
+fixture key. Neither public test key is an operational verifier identity and
+neither signature must be treated as third-party assurance or used as a
+deployment credential.
 
 The implementation-defined verifier identity preimages are stable constants:
-`pyref-aar-v0.2.5-d82-parity-build-v1` for `build_digest` and
+`pyref-aar-v0.3.0-d83-relying-party-build-v1` for `build_digest` and
 `pyref-aar-v0.2-gate4-c2-fixed-conformance-config-v1` for `config_digest`.
 
-Both verifiers report version `v0.2.5`. The harness build digest is SHA-256 of
-UTF-8 `harness-aar-v0.2.5-d82-parity-build-v1`; its config digest keeps
+Both verifiers report version `v0.3.0`. The harness build digest is SHA-256 of
+UTF-8 `harness-aar-v0.3.0-d83-relying-party-build-v1`; its config digest keeps
 the preimage `AAR-KAT-OPAQUE-ID:verifier-config:aar-reference-verifier@0.2.0-default`.

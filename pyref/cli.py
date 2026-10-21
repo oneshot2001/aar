@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .cbor import CBORError, dumps, loads
+from .relying_party import Configuration, UsageError, load_configuration
 from .verifier import KEY_USAGES, LIMITS, MAX_U53, Evaluation, _prior_emissions_map, evaluate
 
 
@@ -17,10 +18,6 @@ EXIT_NONCONFORMANT = 1
 EXIT_USAGE = 2
 EXIT_INDETERMINATE = 3
 EXIT_INTERNAL = 70
-
-
-class UsageError(ValueError):
-    """A local CLI input is missing or malformed."""
 
 
 def _timestamp(value: str) -> int:
@@ -246,12 +243,15 @@ def _check_policy_pin(raw: bytes, policy: dict[str, Any]) -> None:
         )
 
 
-def _print_evaluation(bundle_path: Path, at: int, evaluation: Evaluation, policy_pinned: bool) -> None:
+def _print_evaluation(bundle_path: Path, at: int, evaluation: Evaluation, policy_pinned: bool,
+                      configuration: Configuration | None) -> None:
     print("AAR offline verification report")
     print(f"Bundle: {bundle_path}")
     print(f"Evaluation time: {at}")
     print("Network: not used (all inputs are local)")
     print(f"Trust policy: {'externally pinned' if policy_pinned else 'producer-declared only'}")
+    print("Verifier identity: " + ("corpus test key" if configuration is None
+                                   else f"relying-party policy (digest {configuration.policy_digest.hex()})"))
     print(f"Result: {evaluation.result}")
     print("Steps:")
     for item in evaluation.report["steps"]:
@@ -307,7 +307,7 @@ def _print_evaluation(bundle_path: Path, at: int, evaluation: Evaluation, policy
     print(f"    evaluated_profile: {limits['evaluated_profile']}")
     for name in ("maximum_time_class", "maximum_provenance_class", "maximum_outcome_level", "technical_integrity",
                  "source_authenticity", "custody_continuity", "discovery_completeness", "legal_admissibility",
-                 "input_origin_ancestry"):
+                 "input_origin_ancestry", "control_path_completeness"):
         print(f"    {name}: {limits[name]}")
     print(f"    ingress_completeness: {scope['ingress_completeness']}")
     for name, value in verdict["trust_policy"].items():
@@ -319,6 +319,8 @@ def _print_evaluation(bundle_path: Path, at: int, evaluation: Evaluation, policy
 
 
 def _verify(args: argparse.Namespace) -> int:
+    # D-83 part 2: configuration is complete before the first bundle byte is read.
+    configuration = load_configuration(args.policy, args.signing_key, args.at)
     try:
         raw = args.bundle.read_bytes()
     except OSError as exc:
@@ -336,10 +338,11 @@ def _verify(args: argparse.Namespace) -> int:
         prior_state=prior,
         replay_state=replay,
         configured_trust_policy=policy,
+        configuration=configuration,
     )
     if policy is not None and (evaluation.result == "conformant" or evaluation.step > 5):
         _check_policy_pin(raw, policy)
-    _print_evaluation(args.bundle, args.at, evaluation, policy is not None)
+    _print_evaluation(args.bundle, args.at, evaluation, policy is not None, configuration)
     return {
         "conformant": EXIT_CONFORMANT,
         "nonconformant": EXIT_NONCONFORMANT,
@@ -366,7 +369,10 @@ def build_parser() -> argparse.ArgumentParser:
             "  PRIOR.json = {prior_emissions:[{issuer_kid,issuer_seq,epoch_owner_kid,\n"
             "    epoch_id,epoch_seq,receipt_id,envelope_digest}], entries:[\n"
             "    {replay_domain,invocation_id,content_digest}]}\n"
-            "evaluation_time is never read from either file; it comes only from --at.\n"
+            "  RP-POLICY.json = {v:1, artifact_roots:[{root_kid,tenant_id,allowed_sites,\n"
+            "    allowed_key_usages}], verifier_root_kid, verifier_credentials:[hex of each\n"
+            "    credential-envelope CBOR]}; KEY = 64 lowercase hex chars (P-256 scalar d)\n"
+            "evaluation_time is never read from any file; it comes only from --at.\n"
             "See pyref/README.md for byte sizes and semantics."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -379,6 +385,14 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument(
         "--prior-state", type=Path, metavar="FILE",
         help="JSON prior emissions and one-time replay state",
+    )
+    verify.add_argument(
+        "--policy", type=Path, metavar="FILE",
+        help="relying-party policy JSON (D-83); requires --signing-key; the policy leaf signs the verdict",
+    )
+    verify.add_argument(
+        "--signing-key", type=Path, metavar="FILE",
+        help="file holding the verifier's P-256 private scalar as 64 lowercase hex chars; requires --policy",
     )
     verify.add_argument(
         "--at", required=True, type=_timestamp, metavar="TIMESTAMP",
