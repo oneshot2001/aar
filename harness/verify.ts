@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { toHex } from "./cbor";
+import { CborValue, toHex } from "./cbor";
 import { verifyBundle } from "./verifier";
 
 const [filename, flag, at, ...extra] = process.argv.slice(2);
@@ -29,6 +29,14 @@ if (result.ok) {
 const verdict = result.verdict!;
 console.log(`Signed verdict CBOR hex: ${toHex(result.verdictEnvelope!)}`);
 console.log(`  v: ${verdict.v}`);
-console.log(`  input_origin_ancestry: ${(verdict.limits as Record<string, string>).input_origin_ancestry}`);
+const limits = verdict.limits as Record<string, string>;
+for (const name of ["maximum_time_class", "maximum_provenance_class", "maximum_outcome_level", "technical_integrity",
+  "source_authenticity", "custody_continuity", "discovery_completeness", "legal_admissibility", "input_origin_ancestry"]) {
+  console.log(`  ${name}: ${limits[name]}`);
+}
+console.log(`  ingress_completeness: ${(verdict.scope as Record<string, string>).ingress_completeness}`);
+for (const [name, value] of Object.entries(verdict.trust_policy as Record<string, CborValue>)) {
+  if (value instanceof Uint8Array) console.log(`  ${name}: ${toHex(value)}`);
+}
 console.log(`  signed_observations: ${(verdict.observations as string[]).join(", ") || "(none)"}`);
 process.exit(result.ok ? 0 : 1);

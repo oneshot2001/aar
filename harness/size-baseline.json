@@ -1,0 +1,12 @@
+{
+  "adapters/vapix/adapter.ts": 20315,
+  "adapters/vapix/live/run.ts": 21557,
+  "adapters/vms/adapter.ts": 25982,
+  "demo/ep/wire-builder.ts": 37622,
+  "demo/run-scenario.ts": 22087,
+  "harness/fixtures.ts": 41766,
+  "harness/negative-fixtures.ts": 229383,
+  "harness/verifier.ts": 162229,
+  "pyref/kat.py": 50026,
+  "pyref/verifier.py": 146594
+}
