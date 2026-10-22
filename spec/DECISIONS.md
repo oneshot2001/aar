@@ -2154,3 +2154,39 @@ one; add it when an evidence rule exists, the custody pattern); a separate
 v0.3.1 at a second full re-pin (a required closed-map key forces a version
 bump either way; one re-pin is cheaper and the plan's one-decision-per-release
 rule is amended explicitly for this release rather than hidden inside D-83).
+
+## D-85 — What a differential fuzz run means
+
+**Decision (non-normative).** A run of `harness/difffuzz.ts` compares the
+TypeScript harness and pyref on mutants of the corpus rows and reports one
+line, the accept line in `BACKLOG.md`, with every number on it. The line
+states what was executed; nothing is claimed for a shape the run did not
+execute. Two implementations can share a bug, so agreement is not
+correctness: the CDDL oracle (D-74) checks that the objects a run touches
+are valid instances of the schema, and the leg oracle checks that each
+evidence leg a positive row carries is load-bearing against the spec's
+allowed-outcome set (corruption of a retained leg rejects; removal of
+optional evidence may leave the verdict unchanged; a weakened claim moves
+the field that governs it). Rejection-site saturation is a budget rule for
+how much of pyref's `_fail` / `CBORError` inventory a run reached; it is not
+premise coverage and says nothing about a clause being driven both ways.
+A finding is a split between the two verifiers (`bytes`, `classification`,
+`crash`) or a leg-oracle class (`corruption-accepted`,
+`claim-weakening-unmoved`); findings are promoted to fixtures by hand, never
+auto-promoted to `_fail`. A run that cannot reproduce every pinned corpus row
+or fire every control reports nothing else.
+
+**Why.** The corpus gate proves only the rows it carries (D-82's parity
+claim is narrowed to "every corpus row and every fixture-pinned shape"). A
+fuzz run widens the executed set but inherits the same limit, and the
+Packet D challenge (2026-10-21) showed every way a run could overclaim:
+a repair erasing the mutation, a masked earlier failure read as coverage, a
+dead comparator, a stale import, an absent limit read as a bug. The accept
+line is the only form a run result takes so that none of those readings
+survives.
+
+**Alternatives considered.** A coverage percentage on the accept line
+(renamed: line events do not evaluate premises); an expected verdict per
+mutant (fabricated; replaced by reachability and the leg table); a sixth
+"leg not load-bearing" channel (split into masked / pass / the two finding
+classes, because §5 does not give every leg a limit).

@@ -13,3 +13,18 @@ Module shape between the TypeScript harness and the Python reference is reviewed
 ## Regenerating fixtures
 
 Order matters: `bun run harness/generate.ts` (clears `kats/positive/`), then `bun run harness/generate-negative.ts` (writes the negative set and the D-77/80/82 repair positives back), then `bun run harness/generate-relying-party.ts`; then `python3 -B -m pyref.kat --slice all` to re-pin. Running `generate-negative.ts` before `generate.ts` loses 20 positive rows.
+
+## Differential fuzz
+
+`bun run harness/difffuzz.ts --seed N --mutants N --out DIR [--chunk 250] [--premises] [--legs] [--cli-lane N]`
+runs every corpus row through both verifiers first (the baseline must reproduce `pyref/results-c2.json` and the
+harness must agree byte for byte), fires eight controls, then mutates seeds with the step-targeted operators in
+`harness/difffuzz-operators*.ts`. `--legs` runs the leg oracle over every positive row; `--premises` records which
+pyref rejection sites fired (`pyref/batch.py --premises`, inventory from `pyref/premises.py`) and writes
+`saturation.json`; `--cli-lane N` sends N sampled mutants plus the relying-party rows through both CLIs.
+Findings land under `DIR/<id>/` (`bundle.cbor`, `inputs.json`, `both.json`); `DIR/report.json` carries the accept line
+(`BACKLOG.md` fuzz item). `harness/difffuzz-out/` is git-ignored; nothing under `kats/` is written by the tool.
+
+Promotion: a finding becomes a fixture by hand — a `bundleFixture` row in `harness/generate-negative.ts`'s
+builders (`negative-fixtures.ts`), then the regeneration order above, then `python3 -B -m pyref.kat --slice all`
+to re-pin. A re-pin is a version bump; a run result is only ever reported as its accept line.
