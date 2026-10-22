@@ -17,7 +17,7 @@ const PYREF_CLASS: Record<number, string> = { 0: "conformant", 1: "nonconformant
 const HARNESS_CLASS: Record<number, string> = { 0: "conformant", 1: "nonconformant-or-indeterminate", 2: "usage" };
 const agree = (pyref: number, harness: number): boolean => (pyref === 0 && harness === 0) || ((pyref === 1 || pyref === 3) && harness === 1) || (pyref === 2 && harness === 2);
 
-export interface CliRow { id: string; kind: "mutant" | "rp-seed"; pyref_exit: number; harness_exit: number; pyref_class: string; harness_class: string; exit_class_agree: boolean; hex_equal: boolean | null; payload_equal_modulo_identity: boolean | null }
+export interface CliRow { id: string; kind: "mutant" | "rp-seed"; pyref_exit: number; harness_exit: number; pyref_class: string; harness_class: string; exit_class_agree: boolean; hex_equal: boolean | null; payload_equal_modulo_identity: boolean | null; disagreement: boolean }
 export interface CliLane { sampled_mutants: number; rp_seeds: number; rows: CliRow[]; disagreements: string[] }
 
 const stripIdentity = (hex: string): string => { const envelope = decodeCbor(fromHex(hex)) as CborValue[]; const verdict = decodeCbor(envelope[0] as Uint8Array) as Obj; delete verdict.verifier; delete verdict.verdict_id; return toHex(encodeCbor(verdict)); };
@@ -30,10 +30,11 @@ function one(id: string, kind: CliRow["kind"], bundle: Uint8Array, inputs: Input
   const pyrefHex = /^\s+CBOR hex: ([0-9a-f]+)$/mu.exec(pyref.stdout.toString())?.[1] ?? null;
   const harnessHex = /^Signed verdict CBOR hex: ([0-9a-f]+)$/mu.exec(harness.stdout.toString())?.[1] ?? null;
   const both = pyrefHex !== null && harnessHex !== null;
-  return {
+  const row = {
     id, kind, pyref_exit: pyref.exitCode, harness_exit: harness.exitCode, pyref_class: PYREF_CLASS[pyref.exitCode] ?? `exit ${pyref.exitCode}`, harness_class: HARNESS_CLASS[harness.exitCode] ?? `exit ${harness.exitCode}`,
     exit_class_agree: agree(pyref.exitCode, harness.exitCode), hex_equal: both ? pyrefHex === harnessHex : null, payload_equal_modulo_identity: both ? stripIdentity(pyrefHex) === stripIdentity(harnessHex) : null,
   };
+  return { ...row, disagreement: !row.exit_class_agree || row.payload_equal_modulo_identity === false };
 }
 
 export function runCliLane(sample: number, executed: readonly Planned[], rows: readonly BaselineRow[], rng: Rng, out: string): CliLane {
@@ -45,5 +46,5 @@ export function runCliLane(sample: number, executed: readonly Planned[], rows: r
     ...picked.map((item) => one(item.id, "mutant", item.mutant.bytes, item.entry.row.seed.inputs, directory)),
     ...rp.map((row, index) => one(`rp-${String(index).padStart(2, "0")}`, "rp-seed", row.seed.raw, row.seed.inputs, directory)),
   ];
-  return { sampled_mutants: picked.length, rp_seeds: rp.length, rows: result, disagreements: result.filter((row) => !row.exit_class_agree || row.payload_equal_modulo_identity === false).map((row) => `${row.id}: pyref ${row.pyref_class}, harness ${row.harness_class}, payload-modulo-identity ${row.payload_equal_modulo_identity}`) };
+  return { sampled_mutants: picked.length, rp_seeds: rp.length, rows: result, disagreements: result.filter((row) => row.disagreement).map((row) => `${row.id}: pyref ${row.pyref_class}, harness ${row.harness_class}, payload-modulo-identity ${row.payload_equal_modulo_identity}`) };
 }

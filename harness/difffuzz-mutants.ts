@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { decodeCbor } from "./cbor";
 import { Comparison, Side, compare, harnessSide, masked, sideOf, stableSide, verdictNoop } from "./difffuzz-compare";
 import { Mutant, Operator, SeedView, survives } from "./difffuzz-mutant";
-import { BatchRequest, Identity, PyrefBatch, Site, runAcross } from "./difffuzz-pyref";
+import { BatchRequest, BatchResponse, Identity, PyrefBatch, Site, runAcross } from "./difffuzz-pyref";
 import { Rng } from "./difffuzz-rng";
 import { Seed } from "./difffuzz-seeds";
 import { Obj } from "./mutate";
@@ -26,8 +26,11 @@ export function seedViews(rows: readonly BaselineRow[]): SeedEntry[] {
   });
 }
 
-export interface StepCounts { planned: number; executed: number; noop: number; unsupported: number; masked: number; verdict_noop: number; findings: number }
-const zero = (): StepCounts => ({ planned: 0, executed: 0, noop: 0, unsupported: 0, masked: 0, verdict_noop: 0, findings: 0 });
+// planned = targeted + noop + unsupported; targeted = mutants submitted at the step; reached = targeted mutants whose
+// outcome shows the target step was evaluated by at least one verifier (conformant, or failing at or after it);
+// masked and verdict_noop are subsets of targeted; findings = disagreements among targeted.
+export interface StepCounts { planned: number; targeted: number; reached: number; noop: number; unsupported: number; masked: number; verdict_noop: number; findings: number }
+const zero = (): StepCounts => ({ planned: 0, targeted: 0, reached: 0, noop: 0, unsupported: 0, masked: 0, verdict_noop: 0, findings: 0 });
 export const groupOf = (operator: Operator): string => operator.layer === "raw" ? "raw" : operator.targetStep === null ? "generic" : `step-${operator.targetStep}`;
 
 // Budget: raw <= RAW_SHARE; the rest split evenly over the targeted groups (every step >= 5 % as long as there are <= 16 groups).
@@ -44,6 +47,8 @@ export interface Finding { id: string; channel: Comparison; operator: Operator; 
 export interface MutantRun { perStep: Record<string, StepCounts>; perOperator: Record<string, StepCounts>; outcomes: Outcome[]; findings: Finding[]; operatorErrors: Record<string, string[]>; sites: Site[]; executed: Planned[] }
 
 const bump = (table: Record<string, StepCounts>, key: string, field: keyof StepCounts): void => { (table[key] ??= zero())[field] += 1; };
+// Derived from the results, not the operator: a side that passed, or failed at or after the target, evaluated the target step.
+const reached = (harness: Side, pyref: Side, targetStep: number | null): boolean => [harness, pyref].some((side) => side.result === "conformant" || (side.step !== null && (targetStep === null || side.step >= targetStep)));
 // A seed shape the operator cannot even inspect is not applicable.
 const applicable = (operator: Operator, view: SeedView): boolean => { try { return operator.applicable(view); } catch { return false; } };
 
@@ -63,7 +68,7 @@ export async function runMutants(total: number, operators: readonly Operator[], 
       try { mutant = operator.apply(entry.view, rng); } catch (error) { (operatorErrors[operator.name] ??= []).push(`${entry.row.seed.path}: ${(error as Error).message}`); mutant = null; }
       if (mutant === null) { bump(perStep, group, "unsupported"); bump(perOperator, operator.name, "unsupported"); continue; }
       if (!survives(entry.view, mutant)) { bump(perStep, group, "noop"); bump(perOperator, operator.name, "noop"); continue; }
-      bump(perStep, group, "executed"); bump(perOperator, operator.name, "executed");
+      bump(perStep, group, "targeted"); bump(perOperator, operator.name, "targeted");
       planned.push({ id, operator, entry, mutant });
     }
   }
@@ -77,11 +82,24 @@ export async function runMutants(total: number, operators: readonly Operator[], 
     const pyref = sideOf(response); const harness = harnessSides[index]!;
     const channel = compare(harness, pyref); const group = groupOf(item.operator);
     const kind: Outcome["kind"] = channel !== "agree" ? "finding" : verdictNoop(harness, pyref, item.entry.row.pyref) ? "verdict_noop" : masked(harness, pyref, item.operator.targetStep) ? "masked" : "agree";
+    if (reached(harness, pyref, item.operator.targetStep)) { bump(perStep, group, "reached"); bump(perOperator, item.operator.name, "reached"); }
     if (kind === "finding") { bump(perStep, group, "findings"); bump(perOperator, item.operator.name, "findings"); findings.push({ id: item.id, channel, operator: item.operator, detail: item.mutant.detail, seed: item.entry.row.seed, bundle: item.mutant.bytes, harness, pyref, request: requests[index]! }); }
     else if (kind !== "agree") { bump(perStep, group, kind); bump(perOperator, item.operator.name, kind); }
     outcomes.push({ id: item.id, operator: item.operator.name, seed: item.entry.row.seed.path, kind, channel, harness, pyref, detail: item.mutant.detail });
   });
   return { perStep, perOperator, outcomes, findings, operatorErrors, sites, executed: planned };
+}
+
+// Second pyref execution of every finding (the driver runs it under PYTHONHASHSEED=random): any difference in
+// result, reason, step, verdict bytes or crash type tags the finding hash-seed-sensitive. Returns the tagged count.
+export function tagHashSeedSensitivity(findings: readonly Finding[], responses: readonly BatchResponse[]): number {
+  let sensitive = 0;
+  findings.forEach((finding, index) => {
+    const again = sideOf(responses[index]!);
+    finding.hash_seed_sensitive = again.result !== finding.pyref.result || again.reason !== finding.pyref.reason || again.step !== finding.pyref.step || again.verdict_hex !== finding.pyref.verdict_hex || (again.crash?.type ?? null) !== (finding.pyref.crash?.type ?? null);
+    if (finding.hash_seed_sensitive) sensitive += 1;
+  });
+  return sensitive;
 }
 
 // DIR/<id>/bundle.cbor, context.cbor (if any), inputs.json, both.json (stable and volatile objects apart).
