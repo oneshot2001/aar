@@ -27,6 +27,8 @@ function args(): { seed: number; mutants: number; out: string; chunk: number; pr
 
 // pyref is CPU-bound and single-threaded: the baseline and the mutant stream are spread over this many batch processes.
 const PYREF_LANES = 3;
+// The leg stream derives from the seed with a fixed domain offset ("LEGS"), so leg counts do not move with --mutants.
+const LEG_RNG_DOMAIN = 0x4C454753;
 const git = (...command: string[]): string => Bun.spawnSync(["git", ...command], { cwd: root }).stdout.toString().trim();
 const now = (): number => Date.now();
 const progress = (message: string): void => { console.error(`[difffuzz] ${message}`); };
@@ -58,7 +60,7 @@ async function main(): Promise<number> {
     const t2 = now(); const mutants: MutantRun = await runMutants(options.mutants, OPERATORS, entries, rng, batches, identity); times.mutants_ms = now() - t2; progress(`${mutants.executed.length} mutants executed, ${mutants.findings.length} findings in ${times.mutants_ms} ms`);
     const sites: Site[] = [...baseline.sites, ...mutants.sites];
     let legs = null;
-    if (options.legs) { const t3 = now(); legs = await runLegs(entries, rng, batches, identity); times.legs_ms = now() - t3; progress(`legs ${JSON.stringify(legs.counts)} in ${times.legs_ms} ms`); sites.push(...legs.sites); }
+    if (options.legs) { const t3 = now(); legs = await runLegs(entries, new Rng(options.seed ^ LEG_RNG_DOMAIN), batches, identity); times.legs_ms = now() - t3; progress(`legs ${JSON.stringify(legs.counts)} in ${times.legs_ms} ms`); sites.push(...legs.sites); }
     const findings: Finding[] = [...mutants.findings, ...(legs?.findings ?? [])];
     const t4 = now(); const sensitive = await hashSeedReexecution(findings, options.chunk, options.premises); times.hash_seed_ms = now() - t4; progress(`hash-seed re-execution: ${sensitive} of ${findings.length} findings sensitive in ${times.hash_seed_ms} ms`);
     // Written only now, so every both.json carries its hash-seed tag.
@@ -79,7 +81,7 @@ async function main(): Promise<number> {
     const accept = formatAccept(summary);
     const report = {
       stable: {
-        source_revision: git("rev-parse", "HEAD"), dirty: git("status", "--porcelain", "--untracked-files=no").length > 0,
+        source_revision: git("rev-parse", "HEAD"), dirty: git("status", "--porcelain").length > 0,
         seed: options.seed, mutants: options.mutants, rng: RNG_SPEC, operators: Object.fromEntries(OPERATORS.map((operator) => [operator.name, { version: operator.version, layer: operator.layer, target_step: operator.targetStep, repair_boundary: operator.repairBoundary }])),
         summary, controls: controls.map((control) => ({ name: control.name, passed: control.passed })),
         per_step: mutants.perStep, per_operator: mutants.perOperator, verdict_noops: Object.values(mutants.perStep).reduce((total, counts) => total + counts.verdict_noop, 0), masked: Object.values(mutants.perStep).reduce((total, counts) => total + counts.masked, 0),
