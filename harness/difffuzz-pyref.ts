@@ -62,6 +62,8 @@ export async function runAcross(batches: readonly PyrefBatch[], requests: readon
 }
 
 export interface BatchOptions { premises?: boolean; chunk?: number; deadlineMs?: number; env?: Record<string, string> }
+// What the transport needs of a process; Bun.spawn's result satisfies it, and a test can hand in streams of its own.
+export interface ProcessLike { stdin: { write(data: string): number; flush(): void; end(): void }; stdout: ReadableStream<Uint8Array>; stderr: ReadableStream<Uint8Array>; kill(): void; exited: Promise<number> }
 
 export class PyrefBatch {
   readonly chunk: number;
@@ -70,27 +72,31 @@ export class PyrefBatch {
   stderr = "";
   private buffer = "";
   private readonly decoder = new TextDecoder();
-  private readonly stdin: { write(data: string): number; flush(): void; end(): void };
-  private constructor(private readonly proc: ReturnType<typeof Bun.spawn>, private readonly reader: ReadableStreamDefaultReader<Uint8Array>, readonly handshake: Handshake, options: BatchOptions) {
+  private readonly reader: ReadableStreamDefaultReader<Uint8Array>;
+  handshake!: Handshake;
+  private constructor(private readonly proc: ProcessLike, options: BatchOptions) {
     this.chunk = options.chunk ?? 250;
     this.deadlineMs = options.deadlineMs ?? 300_000;
-    this.stdin = proc.stdin as unknown as PyrefBatch["stdin"];
+    this.reader = proc.stdout.getReader();
+    void this.drainStderr(proc.stderr.getReader());
   }
+
+  // Transport over an already-running process, handshake not read (tests).
+  static fromProcess(proc: ProcessLike, options: BatchOptions = {}): PyrefBatch { return new PyrefBatch(proc, options); }
 
   static async start(options: BatchOptions = {}): Promise<PyrefBatch> {
     const proc = Bun.spawn(["python3", "-B", "-m", "pyref.batch", ...(options.premises ? ["--premises"] : [])], {
       cwd: root, stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { ...process.env, PYTHONHASHSEED: "0", ...options.env },
     });
-    const batch = new PyrefBatch(proc, proc.stdout.getReader(), undefined as unknown as Handshake, options);
-    void batch.drainStderr(proc.stderr.getReader());
-    const line = await batch.readLine(30_000);
+    const batch = new PyrefBatch(proc as unknown as ProcessLike, options);
+    const line = await batch.readLine(Date.now() + 30_000);
     if (line === null) throw new AdapterError(`pyref batch exited before its handshake: ${batch.stderr}`);
     const handshake = JSON.parse(line) as Handshake;
     const expected = sourceDigests();
     if (handshake.hello !== 1) throw new AdapterError("handshake is not hello 1");
     if (handshake.checkout !== join(root, "pyref")) throw new AdapterError(`pyref checkout ${handshake.checkout} is not ${join(root, "pyref")}`);
     for (const name of SOURCES) if (handshake.sources[name] !== expected[name]) throw new AdapterError(`${name}: pyref sha256 ${handshake.sources[name]} differs from the driver's ${expected[name]}`);
-    (batch as { handshake: Handshake }).handshake = handshake;
+    batch.handshake = handshake;
     return batch;
   }
 
@@ -102,32 +108,33 @@ export class PyrefBatch {
     }
   }
 
-  // One stdout line, or null at EOF; a deadline kills the batch.
-  private async readLine(deadlineMs: number): Promise<string | null> {
-    const started = Date.now();
+  // One stdout line, or null at EOF, before the absolute deadline (a Date.now() instant shared by the whole exchange);
+  // passing it kills the batch.
+  private async readLine(deadline: number): Promise<string | null> {
     for (;;) {
       const newline = this.buffer.indexOf("\n");
       if (newline >= 0) { const line = this.buffer.slice(0, newline); this.buffer = this.buffer.slice(newline + 1); return line; }
-      const remaining = deadlineMs - (Date.now() - started);
-      if (remaining <= 0) { this.proc.kill(); throw new AdapterError(`pyref batch produced no line within ${deadlineMs} ms; stderr: ${this.stderr}`); }
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) { this.proc.kill(); throw new AdapterError(`pyref batch exchange exceeded its ${this.deadlineMs} ms deadline; stderr: ${this.stderr}`); }
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<"timeout">((resolve) => { timer = setTimeout(() => resolve("timeout"), remaining); });
       const read = await Promise.race([this.reader.read(), timeout]);
       clearTimeout(timer);
-      if (read === "timeout") { this.proc.kill(); throw new AdapterError(`pyref batch produced no line within ${deadlineMs} ms; stderr: ${this.stderr}`); }
+      if (read === "timeout") { this.proc.kill(); throw new AdapterError(`pyref batch exchange exceeded its ${this.deadlineMs} ms deadline; stderr: ${this.stderr}`); }
       if (read.done) { if (this.buffer.length === 0) return null; const line = this.buffer; this.buffer = ""; return line; }
       this.buffer += this.decoder.decode(read.value, { stream: true });
     }
   }
 
-  // Write raw lines, read exactly as many response lines (the deadline covers the whole exchange).
+  // Write raw lines, read exactly as many response lines; one absolute deadline covers the whole exchange.
   async exchange(lines: readonly string[]): Promise<string[]> {
-    this.stdin.write(lines.map((line) => `${line}\n`).join(""));
-    this.stdin.flush();
+    const deadline = Date.now() + this.deadlineMs;
+    this.proc.stdin.write(lines.map((line) => `${line}\n`).join(""));
+    this.proc.stdin.flush();
     this.sent += lines.length;
     const responses: string[] = [];
     for (let index = 0; index < lines.length; index += 1) {
-      const line = await this.readLine(this.deadlineMs);
+      const line = await this.readLine(deadline);
       if (line === null) throw new AdapterError(`pyref batch closed stdout after ${responses.length} of ${lines.length} responses; stderr: ${this.stderr}`);
       responses.push(line);
     }
@@ -145,8 +152,8 @@ export class PyrefBatch {
 
   // EOF, then the done count must equal every line sent (well-formed or not).
   async close(): Promise<number> {
-    this.stdin.end();
-    const line = await this.readLine(this.deadlineMs);
+    this.proc.stdin.end();
+    const line = await this.readLine(Date.now() + this.deadlineMs);
     const done = line === null ? undefined : (JSON.parse(line) as { done?: number }).done;
     if (done !== this.sent) { this.proc.kill(); throw new AdapterError(`pyref batch reported done=${done}, driver sent ${this.sent}`); }
     await this.proc.exited;
