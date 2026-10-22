@@ -1,5 +1,5 @@
 // Differential fuzz driver (Packet D). Usage:
-//   bun run harness/difffuzz.ts --seed N --mutants N --out DIR [--chunk 250] [--premises] [--legs] [--cli-lane N]
+//   bun run harness/difffuzz.ts --seed N --mutants N --out DIR [--chunk 250] [--lanes 3] [--premises] [--legs] [--cli-lane N]
 // Exit 0 = run completed (findings, if any, are in DIR); 2 = baseline mismatch;
 // 3 = a control did not fire; 4 = adapter (transport/handshake) failure.
 // Nothing under kats/ is written; a run reports only with every number, in the
@@ -18,15 +18,15 @@ import { aggregate, formatAccept } from "./difffuzz-report";
 import { RNG_SPEC, Rng } from "./difffuzz-rng";
 import { loadSeeds } from "./difffuzz-seeds";
 
-function args(): { seed: number; mutants: number; out: string; chunk: number; premises: boolean; legs: boolean; cliLane: number } {
+function args(): { seed: number; mutants: number; out: string; chunk: number; lanes: number; premises: boolean; legs: boolean; cliLane: number } {
   const argv = process.argv.slice(2); const flag = (name: string): string | undefined => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
   const seed = Number(flag("--seed")); const mutants = Number(flag("--mutants")); const out = flag("--out");
-  if (!Number.isInteger(seed) || !Number.isInteger(mutants) || mutants < 0 || out === undefined) { console.error("usage: bun run harness/difffuzz.ts --seed N --mutants N --out DIR [--chunk 250] [--premises] [--legs] [--cli-lane N]"); process.exit(1); }
-  return { seed, mutants, out, chunk: Number(flag("--chunk") ?? 250), premises: argv.includes("--premises"), legs: argv.includes("--legs"), cliLane: Number(flag("--cli-lane") ?? 0) };
+  const lanes = Number(flag("--lanes") ?? 3);
+  if (!Number.isInteger(seed) || !Number.isInteger(mutants) || mutants < 0 || out === undefined || !Number.isInteger(lanes) || lanes < 1) { console.error("usage: bun run harness/difffuzz.ts --seed N --mutants N --out DIR [--chunk 250] [--lanes 3] [--premises] [--legs] [--cli-lane N]"); process.exit(1); }
+  return { seed, mutants, out, chunk: Number(flag("--chunk") ?? 250), lanes, premises: argv.includes("--premises"), legs: argv.includes("--legs"), cliLane: Number(flag("--cli-lane") ?? 0) };
 }
 
-// pyref is CPU-bound and single-threaded: the baseline and the mutant stream are spread over this many batch processes.
-const PYREF_LANES = 3;
+// pyref is CPU-bound and single-threaded: the baseline, the mutant stream and the legs are spread over --lanes batch processes (default 3).
 // The leg stream derives from the seed with a fixed domain offset ("LEGS"), so leg counts do not move with --mutants.
 const LEG_RNG_DOMAIN = 0x4C454753;
 const git = (...command: string[]): string => Bun.spawnSync(["git", ...command], { cwd: root }).stdout.toString().trim();
@@ -47,7 +47,7 @@ async function main(): Promise<number> {
   mkdirSync(options.out, { recursive: true });
   const seeds = loadSeeds(); times.seeds_ms = now() - started; progress(`${seeds.length} seeds loaded in ${times.seeds_ms} ms`);
   let batches: PyrefBatch[];
-  try { batches = await Promise.all(Array.from({ length: PYREF_LANES }, () => PyrefBatch.start({ chunk: options.chunk, premises: options.premises }))); } catch (error) { console.error(`adapter: ${(error as Error).message}`); return 4; }
+  try { batches = await Promise.all(Array.from({ length: options.lanes }, () => PyrefBatch.start({ chunk: options.chunk, premises: options.premises }))); } catch (error) { console.error(`adapter: ${(error as Error).message}`); return 4; }
   const batch = batches[0]!; const identity = batch.handshake.identity;
   let baseline: Baseline;
   try {
@@ -82,7 +82,7 @@ async function main(): Promise<number> {
     const report = {
       stable: {
         source_revision: git("rev-parse", "HEAD"), dirty: git("status", "--porcelain").length > 0,
-        seed: options.seed, mutants: options.mutants, rng: RNG_SPEC, operators: Object.fromEntries(OPERATORS.map((operator) => [operator.name, { version: operator.version, layer: operator.layer, target_step: operator.targetStep, repair_boundary: operator.repairBoundary }])),
+        seed: options.seed, mutants: options.mutants, lanes: options.lanes, rng: RNG_SPEC, operators: Object.fromEntries(OPERATORS.map((operator) => [operator.name, { version: operator.version, layer: operator.layer, target_step: operator.targetStep, repair_boundary: operator.repairBoundary }])),
         summary, controls: controls.map((control) => ({ name: control.name, passed: control.passed })),
         per_step: mutants.perStep, per_operator: mutants.perOperator, verdict_noops: Object.values(mutants.perStep).reduce((total, counts) => total + counts.verdict_noop, 0), masked: Object.values(mutants.perStep).reduce((total, counts) => total + counts.masked, 0),
         findings: findings.map((finding) => ({ id: finding.id, channel: finding.channel, operator: finding.operator.name, seed: finding.seed.path, detail: finding.detail, hash_seed_sensitive: finding.hash_seed_sensitive ?? false })),
