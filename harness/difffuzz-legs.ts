@@ -4,7 +4,11 @@
 // compare() gave it; a required leg removed with both verifiers still
 // conformant is removal-accepted; a leg operator exception is operator-error,
 // never unsupported. Nothing is written here: the driver re-executes every
-// finding under a random hash seed first, then writes.
+// finding under a random hash seed first, then writes. Files a leg mutant
+// needs on disk go to a temp directory, never into the run directory.
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { CborValue, decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
 import { request } from "./difffuzz-baseline";
 import { Side, compare, harnessSide, sideOf } from "./difffuzz-compare";
@@ -22,7 +26,8 @@ const field = (verdict: Obj | null, path: string): string => verdict === null ? 
 export interface LegFinding extends Finding { leg: string; class: LegClass; outcome: LegOutcome; allowed: Allowed }
 export interface LegsRun { counts: LegCounts; perLeg: Record<string, LegCounts>; findings: LegFinding[]; operatorErrors: Record<string, string[]>; sites: Site[] }
 
-export async function runLegs(entries: readonly SeedEntry[], rng: Rng, batches: readonly PyrefBatch[], identity: Identity, out: string): Promise<LegsRun> {
+export async function runLegs(entries: readonly SeedEntry[], rng: Rng, batches: readonly PyrefBatch[], identity: Identity): Promise<LegsRun> {
+  let workDirectory: string | null = null; const work = (): string => (workDirectory ??= mkdtempSync(join(tmpdir(), "difffuzz-legs-")));
   const counts = zeroLegCounts(); const perLeg: Record<string, LegCounts> = {}; const operatorErrors: Record<string, string[]> = {};
   // counts per leg and per leg/class, so a removal that legitimately leaves the verdict unchanged is readable apart from a corruption
   const bump = (leg: string, klass: LegClass, outcome: LegOutcome): void => { counts[outcome] += 1; (perLeg[leg] ??= zeroLegCounts())[outcome] += 1; (perLeg[`${leg}/${klass}`] ??= zeroLegCounts())[outcome] += 1; };
@@ -33,7 +38,7 @@ export async function runLegs(entries: readonly SeedEntry[], rng: Rng, batches: 
       for (const klass of Object.keys(leg.classes) as LegClass[]) {
         const id = `leg-${String(serial++).padStart(5, "0")}`;
         let mutant: LegMutant | null = null;
-        try { if (leg.applicable(entry.view.bundle, entry.view.policy)) mutant = leg.classes[klass]!(entry, rng, out, id); } catch (error) {
+        try { if (leg.applicable(entry.view.bundle, entry.view.policy)) mutant = leg.classes[klass]!(entry, rng, work, id); } catch (error) {
           (operatorErrors[`${leg.leg}/${klass}`] ??= []).push(`${entry.row.seed.path}: ${(error as Error).message}`); bump(leg.leg, klass, "operator-error"); continue;
         }
         if (mutant === null) { bump(leg.leg, klass, "unsupported"); continue; }

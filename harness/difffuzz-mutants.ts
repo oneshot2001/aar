@@ -1,12 +1,12 @@
 // Mutant planning and execution for the differential fuzz driver: per-step
 // quotas, weighted seed choice, survival check, both verifiers, classification
 // into findings / verdict no-ops / masked / agree, and the per-finding record.
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { extname, join } from "node:path";
 import { decodeCbor } from "./cbor";
 import { Comparison, Side, compare, harnessSide, masked, sideOf, stableSide, verdictNoop } from "./difffuzz-compare";
 import { Mutant, Operator, SeedView, survives } from "./difffuzz-mutant";
-import { BatchRequest, BatchResponse, Identity, PyrefBatch, Site, runAcross } from "./difffuzz-pyref";
+import { BatchRequest, BatchResponse, Identity, PyrefBatch, Site, runAcross, sha256Hex } from "./difffuzz-pyref";
 import { Rng } from "./difffuzz-rng";
 import { Seed } from "./difffuzz-seeds";
 import { Obj } from "./mutate";
@@ -102,14 +102,22 @@ export function tagHashSeedSensitivity(findings: readonly Finding[], responses: 
   return sensitive;
 }
 
-// DIR/<id>/bundle.cbor, context.cbor (if any), inputs.json, both.json (stable and volatile objects apart).
+// DIR/<id>/: bundle.cbor, context.cbor (if any), every file input copied under its sha256 name (policy, signing key,
+// trust-policy pin — the policy leg's rewritten policy is the policy input), inputs.json naming those copies relative
+// to the directory, both.json (stable and volatile objects apart, request identity included). A replay needs nothing
+// outside the directory but the two verifiers.
 export function writeFinding(out: string, finding: Finding, extra: Record<string, unknown> = {}): void {
   const directory = join(out, finding.id); mkdirSync(directory, { recursive: true });
   writeFileSync(join(directory, "bundle.cbor"), finding.bundle);
   if (finding.request.context_hex !== null) writeFileSync(join(directory, "context.cbor"), Buffer.from(finding.request.context_hex, "hex"));
-  writeFileSync(join(directory, "inputs.json"), `${JSON.stringify(finding.request.inputs, null, 2)}\n`);
+  const inputs: Record<string, unknown> = { ...finding.request.inputs };
+  for (const key of ["policy", "signing_key", "trust_policy"] as const) {
+    const source = finding.request.inputs[key]; if (source === null) continue;
+    const bytes = readFileSync(source); const name = `${sha256Hex(bytes)}${extname(source)}`; writeFileSync(join(directory, name), bytes); inputs[key] = name;
+  }
+  writeFileSync(join(directory, "inputs.json"), `${JSON.stringify(inputs, null, 2)}\n`);
   const both = {
-    stable: { id: finding.id, channel: finding.channel, operator: { name: finding.operator.name, version: finding.operator.version, layer: finding.operator.layer, target_step: finding.operator.targetStep, repair_boundary: finding.operator.repairBoundary }, detail: finding.detail, seed: { path: finding.seed.path, pinned: finding.seed.pinned }, harness: stableSide(finding.harness), pyref: stableSide(finding.pyref), hash_seed_sensitive: finding.hash_seed_sensitive ?? false, ...extra },
+    stable: { id: finding.id, channel: finding.channel, operator: { name: finding.operator.name, version: finding.operator.version, layer: finding.operator.layer, target_step: finding.operator.targetStep, repair_boundary: finding.operator.repairBoundary }, detail: finding.detail, seed: { path: finding.seed.path, pinned: finding.seed.pinned }, identity: finding.request.identity, harness: stableSide(finding.harness), pyref: stableSide(finding.pyref), hash_seed_sensitive: finding.hash_seed_sensitive ?? false, ...extra },
     volatile: { harness: { verdict_hex: finding.harness.verdict_hex, crash: finding.harness.crash }, pyref: { verdict_hex: finding.pyref.verdict_hex, crash: finding.pyref.crash }, directory },
   };
   writeFileSync(join(directory, "both.json"), `${JSON.stringify(both, null, 2)}\n`);

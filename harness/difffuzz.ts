@@ -58,7 +58,7 @@ async function main(): Promise<number> {
     const t2 = now(); const mutants: MutantRun = await runMutants(options.mutants, OPERATORS, entries, rng, batches, identity); times.mutants_ms = now() - t2; progress(`${mutants.executed.length} mutants executed, ${mutants.findings.length} findings in ${times.mutants_ms} ms`);
     const sites: Site[] = [...baseline.sites, ...mutants.sites];
     let legs = null;
-    if (options.legs) { const t3 = now(); legs = await runLegs(entries, rng, batches, identity, options.out); times.legs_ms = now() - t3; progress(`legs ${JSON.stringify(legs.counts)} in ${times.legs_ms} ms`); sites.push(...legs.sites); }
+    if (options.legs) { const t3 = now(); legs = await runLegs(entries, rng, batches, identity); times.legs_ms = now() - t3; progress(`legs ${JSON.stringify(legs.counts)} in ${times.legs_ms} ms`); sites.push(...legs.sites); }
     const findings: Finding[] = [...mutants.findings, ...(legs?.findings ?? [])];
     const t4 = now(); const sensitive = await hashSeedReexecution(findings, options.chunk, options.premises); times.hash_seed_ms = now() - t4; progress(`hash-seed re-execution: ${sensitive} of ${findings.length} findings sensitive in ${times.hash_seed_ms} ms`);
     // Written only now, so every both.json carries its hash-seed tag.

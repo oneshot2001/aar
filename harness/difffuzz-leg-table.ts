@@ -4,7 +4,7 @@
 // outcome set. Removal of optional evidence may leave the verdict unchanged; a
 // corrupted retained leg that stays conformant, or a weakened claim whose
 // governing field did not move, is a finding (D-03 item 1).
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CborValue, encodeCbor, toHex } from "./cbor";
 import { dispatchedAuthorization, getAt, list, resignAt } from "./difffuzz-mutant";
@@ -22,7 +22,8 @@ export type LegClass = "corruption" | "removal" | "claimWeakening";
 // which observations may disappear, and (claim weakening) the verdict fields that must move.
 export interface Allowed { results: readonly string[]; codes: readonly string[]; limitsUnchangedOk: boolean; observationsMayDrop: readonly string[]; mustMove: readonly string[] }
 export interface LegMutant { bytes: Uint8Array; detail: string; allowed: Allowed; inputs?: Inputs; options?: VerifyB1Options }
-type Apply = (entry: SeedEntry, rng: Rng, out: string, id: string) => LegMutant | null;
+// `work()` yields a scratch directory outside the run directory for files a mutant must reference on disk (a rewritten policy).
+type Apply = (entry: SeedEntry, rng: Rng, work: () => string, id: string) => LegMutant | null;
 export interface Leg { leg: string; step: number; applicable(bundle: Obj, policy: boolean): boolean; classes: Partial<Record<LegClass, Apply>> }
 
 const reject = (...codes: string[]): Allowed => ({ results: ["nonconformant"], codes, limitsUnchangedOk: false, observationsMayDrop: [], mustMove: [] });
@@ -59,14 +60,14 @@ const dispatchedActions = (bundle: Obj): Set<string> => new Set(receipts(bundle)
 
 // Relying-party ceiling: drop one allowed_key_usages entry from the policy's artifact root; required when a carried
 // credential of that usage signs something, in which case the policy must reject (relying_party.py:254).
-const rpRemoval: Apply = (entry, rng, out, id) => {
+const rpRemoval: Apply = (entry, rng, work, id) => {
   const { inputs, options } = entry.row.seed; if (inputs.policy === null || inputs.signing_key === null) return null;
   const policy = JSON.parse(readFileSync(inputs.policy, "utf8")); const roots = (policy.artifact_roots ?? []) as { allowed_key_usages: string[] }[];
   const candidates = roots.filter((root) => Array.isArray(root.allowed_key_usages) && root.allowed_key_usages.length > 1); if (candidates.length === 0) return null;
   const root = rng.pick(candidates); const usage = rng.pick(root.allowed_key_usages); root.allowed_key_usages = root.allowed_key_usages.filter((item) => item !== usage);
   const bundle = entry.view.bundle; const used = signerKids(bundle);
   const required = list(bundle, "credentials").some((envelope) => { const credential = payload(envelope); return credential.key_usage === usage && used.has(toHex(credential.subject_kid as Uint8Array)); });
-  const directory = join(out, "legs-policy"); mkdirSync(directory, { recursive: true }); const path = join(directory, `${id}.policy.json`); writeFileSync(path, `${JSON.stringify(policy, null, 2)}\n`);
+  const path = join(work(), `${id}.policy.json`); writeFileSync(path, `${JSON.stringify(policy, null, 2)}\n`);
   return { bytes: entry.view.bytes, detail: `policy allowed_key_usages minus ${usage} (${required ? "a carried credential of that usage signs" : "no signer of that usage"})`, allowed: required ? reject("credential/root-not-accepted@8") : stays(),
     inputs: { ...inputs, policy: path }, options: { ...options, configuration: loadConfiguration(path, inputs.signing_key, inputs.evaluated_at) } };
 };
