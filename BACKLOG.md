@@ -5,6 +5,8 @@ Branch `night/YYYY-MM-DD` off `main`. Never push. Never touch `spec/` normative 
 
 ## Ready
 
+- [ ] First differential-fuzz night run (Packet D tool, read-only against the verifiers): `bun run harness/difffuzz.ts --seed 20261022 --mutants 5000 --legs --premises --cli-lane 50 --lanes 3 --out docs/fuzz-runs/2026-10-22` and commit the output directory (report.json, legs.json, saturation.json, any finding packages). Do not fix, re-pin, or edit anything the run finds; findings are ruled in the morning review. — accept: the command exits 0; `docs/fuzz-runs/2026-10-22/report.json` exists and shows `controls 8/8` and `baseline 513/513`; its `run:` line is appended verbatim as one line to `docs/fuzz-runs/README.md` (create the file with a one-sentence header if absent); `bun test harness/difffuzz-report.test.ts` exits 0; no change under `spec/`, `kats/`, `harness/`, `pyref/`, `adapters/`, `demo/`.
+
 ## Strategy (2026-09-27, Codex-pair settled, Matthew accepted)
 v0.2 stays experimental. No v1.0 freeze until the blockers below clear AND one independent
 integrator (VMS/export tool + evidence recipient) is working one workflow against the spec.
