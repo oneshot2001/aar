@@ -5,6 +5,7 @@ import { buildCountersignFixtures } from "./countersign-fixtures";
 import { promotedProofWithDomain, promotedRoot, rfc6962Leaf } from "./merkle";
 import { TEST_KEYS, TestKeyName } from "./testkeys";
 import { object, clone, same, artifacts, payload, cose, protectedMap, signerFor, contentType, resign, mutateArtifact, mutateReceipt, mutateReceiptWhere, sortArtifacts, compare, recalcSelector, recalcTrust, modifyCose, receiptList, keepReceipts, withoutField, rebuildEventChain, rfcRootFromProof, rebuildManifest, addSecondEpoch, flipSignature, relinkEventChain, mutateLastEvent, mutateMerkleBatch, addManifestWithAnchor, crossEpochChild, addTopLevelDelegation } from "./mutate";
+import { mutateEmbeddedDelegation, receiptBy, replaceReceipt } from "./mutate-graph";
 
 type Obj = Record<string, CborValue>;
 
@@ -209,22 +210,6 @@ function addOpaquePayload(bundle: Obj, label: string): Uint8Array {
   return digest;
 }
 
-function receiptBy(bundle: Obj, predicate: (value: Obj) => boolean): CborValue {
-  const entry = receiptList(bundle).find((candidate) => predicate(payload(candidate)));
-  if (entry === undefined) throw new Error("receipt target missing");
-  return entry;
-}
-
-function replaceReceipt(bundle: Obj, original: CborValue, next: Obj): CborValue {
-  const list = receiptList(bundle);
-  const index = list.indexOf(original);
-  if (index < 0) throw new Error("receipt replacement target missing");
-  const replacement = resign(original, next, true);
-  list[index] = replacement;
-  sortArtifacts(bundle, "receipts");
-  return replacement;
-}
-
 function updateAttemptFlow(bundle: Obj, mutation: (attempt: Obj, receipts: Obj[]) => void): void {
   const attemptEnvelope = receiptBy(bundle, (value) => value.kind === "action_attempt" && (value.body as Obj).disposition === "eligible_for_dispatch");
   const oldAttempt = payload(attemptEnvelope);
@@ -291,48 +276,6 @@ function addLaterDominatorDefect(bundle: Obj): void {
 
 // n arrays nested one in the next, innermost empty (the reviewer's round-3 shape).
 function nest(n: number): CborValue { let value: CborValue = []; for (let i = 1; i < n; i += 1) value = [value]; return value; }
-
-function mutateEmbeddedDelegation(bundle: Obj, mutation: (value: Obj) => void): void {
-  const authorizationEnvelope = receiptBy(bundle, (value) => value.kind === "authorization" && ((value.body as Obj).decision as Obj).decision === "permit");
-  const oldAuthorization = payload(authorizationEnvelope);
-  const nextAuthorization = clone(oldAuthorization);
-  const body = nextAuthorization.body as Obj;
-  const delegationEnvelope = body.delegation!;
-  const delegation = clone(payload(delegationEnvelope));
-  mutation(delegation);
-  delegation.delegation_id = domainHash("AAR-DELEGATION-ID-v1", Object.fromEntries(Object.entries(delegation).filter(([key]) => key !== "delegation_id")));
-  body.delegation = resign(delegationEnvelope, delegation);
-  const decision = body.decision as Obj;
-  decision.delegation_id = delegation.delegation_id!;
-  decision.decision_commitment = domainHash("AAR-DECISION-RECORD-v1", Object.fromEntries(Object.entries(decision).filter(([key]) => key !== "decision_commitment")));
-  const replacement = replaceReceipt(bundle, authorizationEnvelope, nextAuthorization);
-
-  const replacements = new Map([[toHex(oldAuthorization.receipt_id as Uint8Array), payload(replacement).receipt_id as Uint8Array]]);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const envelope of [...receiptList(bundle)]) {
-      const current = payload(envelope);
-      const next = clone(current);
-      let replace = false;
-      for (const edge of next.parents as Obj[]) {
-        const parentId = replacements.get(toHex(edge.parent_id as Uint8Array));
-        if (parentId !== undefined) { edge.parent_id = parentId; replace = true; }
-      }
-      const nextBody = next.body as Obj;
-      for (const field of ["authorization_id", "attempt_id", "subject_id"] as const) {
-        if (!(nextBody[field] instanceof Uint8Array)) continue;
-        const id = replacements.get(toHex(nextBody[field]));
-        if (id !== undefined) { nextBody[field] = id; replace = true; }
-      }
-      if (!replace) continue;
-      (next.freshness as Obj).intended_parents = (next.parents as Obj[]).map((edge) => edge.parent_id!);
-      const nextEnvelope = replaceReceipt(bundle, envelope, next);
-      replacements.set(toHex(current.receipt_id as Uint8Array), payload(nextEnvelope).receipt_id as Uint8Array);
-      changed = true;
-    }
-  }
-}
 
 // Probe-test entry point (verifier.test.ts): the embedded-delegation mutator with cascade.
 export function mutateEmbeddedDelegationForProbe(bundle: Obj, mutation: (value: Obj) => void): void {

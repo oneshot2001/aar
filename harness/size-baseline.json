@@ -5,7 +5,7 @@
   "demo/ep/wire-builder.ts": 37622,
   "demo/run-scenario.ts": 22087,
   "harness/fixtures.ts": 41766,
-  "harness/negative-fixtures.ts": 210999,
+  "harness/negative-fixtures.ts": 208100,
   "harness/verifier.ts": 161478,
   "pyref/kat.py": 41936,
   "pyref/verifier.py": 144969

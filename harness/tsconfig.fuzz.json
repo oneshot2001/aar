@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "include": [
+    "./difffuzz.ts", "./difffuzz-baseline.ts", "./difffuzz-cli-lane.ts", "./difffuzz-compare.ts", "./difffuzz-legs.ts", "./difffuzz-leg-table.ts",
+    "./difffuzz-mutant.ts", "./difffuzz-mutants.ts", "./difffuzz-operators.ts", "./difffuzz-operators-steps.ts",
+    "./difffuzz-premises.ts", "./difffuzz-pyref.ts", "./difffuzz-rng.ts", "./difffuzz-seeds.ts", "./difffuzz*.test.ts"
+  ],
+  "exclude": ["./runtime.d.ts"]
+}

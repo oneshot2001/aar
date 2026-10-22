@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fromHex, toHex } from "./cbor";
+import { toHex } from "./cbor";
 import { hash } from "./crypto";
 
 export const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -45,10 +45,20 @@ export function checkChunk(requests: readonly BatchRequest[], lines: readonly st
     try { response = JSON.parse(lines[index]!) as BatchResponse; } catch { throw new AdapterError(`response ${index} is not JSON: ${lines[index]!.slice(0, 120)}`); }
     if ("protocol_error" in response) throw new AdapterError(`protocol error on ${request.id}: ${response.protocol_error}`);
     if (response.id !== request.id) throw new AdapterError(`response ${index} answers ${response.id}, expected ${request.id}`);
-    const expected = sha256Hex(request.bundle_hex === null ? new Uint8Array() : fromHex(request.bundle_hex));
+    const expected = sha256Hex(request.bundle_hex === null ? new Uint8Array() : Buffer.from(request.bundle_hex, "hex"));
     if (response.input_sha256 !== expected) throw new AdapterError(`${request.id}: input digest echo ${response.input_sha256} differs from ${expected}`);
     return response;
   });
+}
+
+// Requests spread round-robin over several batch processes (pyref is CPU-bound), responses back in request order.
+export async function runAcross(batches: readonly PyrefBatch[], requests: readonly BatchRequest[]): Promise<BatchResponse[]> {
+  const lanes = batches.map(() => [] as number[]);
+  requests.forEach((_, index) => lanes[index % batches.length]!.push(index));
+  const results = await Promise.all(batches.map((batch, lane) => batch.run(lanes[lane]!.map((index) => requests[index]!))));
+  const out: BatchResponse[] = new Array<BatchResponse>(requests.length);
+  lanes.forEach((lane, l) => lane.forEach((index, k) => { out[index] = results[l]![k]!; }));
+  return out;
 }
 
 export interface BatchOptions { premises?: boolean; chunk?: number; deadlineMs?: number; env?: Record<string, string> }
@@ -100,8 +110,10 @@ export class PyrefBatch {
       if (newline >= 0) { const line = this.buffer.slice(0, newline); this.buffer = this.buffer.slice(newline + 1); return line; }
       const remaining = deadlineMs - (Date.now() - started);
       if (remaining <= 0) { this.proc.kill(); throw new AdapterError(`pyref batch produced no line within ${deadlineMs} ms; stderr: ${this.stderr}`); }
-      const timer = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), remaining));
-      const read = await Promise.race([this.reader.read(), timer]);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<"timeout">((resolve) => { timer = setTimeout(() => resolve("timeout"), remaining); });
+      const read = await Promise.race([this.reader.read(), timeout]);
+      clearTimeout(timer);
       if (read === "timeout") { this.proc.kill(); throw new AdapterError(`pyref batch produced no line within ${deadlineMs} ms; stderr: ${this.stderr}`); }
       if (read.done) { if (this.buffer.length === 0) return null; const line = this.buffer; this.buffer = ""; return line; }
       this.buffer += this.decoder.decode(read.value, { stream: true });

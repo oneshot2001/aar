@@ -8,3 +8,6 @@ demo/artifacts/
 demo/**/*.private.json
 demo/**/*.journal.jsonl
 demo/**/*.witness.jsonl
+
+# Differential fuzz findings (Packet D); never committed, never under kats/.
+harness/difffuzz-out/
