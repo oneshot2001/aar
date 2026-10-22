@@ -72,7 +72,7 @@ async function main(): Promise<number> {
     if (sat !== null) writeFileSync(join(options.out, "saturation.json"), `${JSON.stringify(sat, null, 2)}\n`);
     for (const lane of batches) await lane.close();
     const summary = aggregate({
-      seed: options.seed, perStep: mutants.perStep, mutantFindings: mutants.findings, legs, cli: cliLane === null ? null : { rows: cliLane.rows, notApplicable: 0 },
+      seed: options.seed, perStep: mutants.perStep, mutantFindings: mutants.findings, legs, cli: cliLane === null ? null : { rows: cliLane.rows, notApplicable: cliLane.not_applicable },
       controls: { fired, total: controls.length }, baseline: { reproduced: baseline.count - baseline.mismatches.length, seeds: seeds.length },
       saturation: sat === null ? null : { percent: sat.saturation_percent, sites: sat.inventory_size, excluded: sat.excluded.length }, hashSeedSensitive: sensitive,
     });
