@@ -32,7 +32,13 @@ describe("relying-party CLI flags", () => {
       const args = files(item);
       for (const [name, run] of Object.entries(clis)) {
         const proc = run(args);
-        if (item.valid) { expect(proc.exitCode, `${name} ${item.name}: ${proc.stderr.toString()}`).not.toBe(2); continue; }
+        if (item.valid) {
+          // A valid configuration always yields a signed verdict: conformant (0) or a
+          // nonconformant ceiling rejection (1); never a usage error or a crash.
+          expect([0, 1], `${name} ${item.name}: ${proc.stderr.toString()}`).toContain(proc.exitCode);
+          expect(proc.stdout.toString(), `${name} ${item.name}`).toContain("CBOR hex");
+          continue;
+        }
         expect(proc.exitCode, `${name} ${item.name}: ${proc.stderr.toString()}`).toBe(2);
         expect(proc.stdout.toString(), `${name} ${item.name}`).not.toContain("CBOR hex");
         expect(proc.stderr.toString(), `${name} ${item.name}`).toContain("error");
