@@ -1,6 +1,6 @@
 # Verifier parity audit 2026-10-08: pre-existing full-corpus byte gaps
 
-Found while building D-77; not caused by it. Tracked as the differential-fuzzing freeze blocker in `BACKLOG.md`; the differential fuzz tool now exists (`harness/difffuzz.ts`, Packet D, 2026-10-22) and no run is yet recorded against the blocker. The executable form of the corpus gate is the full-corpus test in `harness/crossimpl.test.ts` (no longer skipped).
+Found while building D-77; not caused by it. Tracked as the differential-fuzzing freeze blocker in `BACKLOG.md`; the differential fuzz tool now exists (`harness/difffuzz.ts`, Packet D, 2026-10-22) and no run is yet recorded against the blocker; the positive range leg has no oracle yet (no positive corpus row carries `ranges`, BACKLOG). The executable form of the corpus gate is the full-corpus test in `harness/crossimpl.test.ts` (no longer skipped).
 
 2026-10-08. D-77 implements all 13 requested KATs; each has the expected result/reason and identical signed verdict bytes under a shared verifier identity. The wider 232-fixture audit finds 192 identical verdicts and 40 differences. No existing fixture expectation was edited.
 

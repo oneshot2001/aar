@@ -2160,10 +2160,13 @@ rule is amended explicitly for this release rather than hidden inside D-83).
 **Decision (non-normative).** A run of `harness/difffuzz.ts` compares the
 TypeScript harness and pyref on mutants of the corpus rows and reports one
 line, the accept line in `BACKLOG.md`, with every number on it. The line
-states what was executed; nothing is claimed for a shape the run did not
-execute. Two implementations can share a bug, so agreement is not
-correctness: the CDDL oracle (D-74) checks that the objects a run touches
-are valid instances of the schema, and the leg oracle checks that each
+separates what was planned from what was executed (survival no-ops and
+unsupported shapes are counted, not executed); nothing is claimed for a
+shape the run did not execute. Two implementations can share a bug, so
+agreement is not correctness. The release schema gate (D-74) validates the
+artifacts it enumerates — the corpus and the demo — and does not validate
+fuzz mutants; the leg oracle is the only check in a run that does not
+depend on the two verifiers agreeing: it checks that each
 evidence leg a positive row carries is load-bearing against the spec's
 allowed-outcome set (corruption of a retained leg rejects; removal of
 optional evidence may leave the verdict unchanged; a weakened claim moves
@@ -2171,8 +2174,11 @@ the field that governs it). Rejection-site saturation is a budget rule for
 how much of pyref's `_fail` / `CBORError` inventory a run reached; it is not
 premise coverage and says nothing about a clause being driven both ways.
 A finding is a split between the two verifiers (`bytes`, `classification`,
-`crash`) or a leg-oracle class (`corruption-accepted`,
-`claim-weakening-unmoved`); findings are promoted to fixtures by hand, never
+`crash`, whether a mutant or a leg mutant produced it) or a leg-oracle class
+(`corruption-accepted`, `claim-weakening-unmoved`, `removal-accepted`); leg
+outcomes outside the allowed set that are not acceptance (`unexpected`), leg
+operator errors and CLI-lane disagreements are named on the line as well;
+findings are promoted to fixtures by hand, never
 auto-promoted to `_fail`. A run that cannot reproduce every pinned corpus row
 or fire every control reports nothing else.
 
