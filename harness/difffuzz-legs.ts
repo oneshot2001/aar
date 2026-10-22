@@ -22,7 +22,9 @@ export interface LegsRun { counts: Record<LegOutcome, number>; perLeg: Record<st
 
 export async function runLegs(entries: readonly SeedEntry[], rng: Rng, batches: readonly PyrefBatch[], identity: Identity, out: string): Promise<LegsRun> {
   const zero = (): Record<LegOutcome, number> => ({ pass: 0, masked: 0, "corruption-accepted": 0, "claim-weakening-unmoved": 0, split: 0, unsupported: 0, unexpected: 0 });
-  const counts = zero(); const perLeg: Record<string, Record<LegOutcome, number>> = {}; const bump = (leg: string, outcome: LegOutcome): void => { counts[outcome] += 1; (perLeg[leg] ??= zero())[outcome] += 1; };
+  const counts = zero(); const perLeg: Record<string, Record<LegOutcome, number>> = {};
+  // counts per leg and per leg/class, so a removal that legitimately leaves the verdict unchanged is readable apart from a corruption
+  const bump = (leg: string, klass: LegClass, outcome: LegOutcome): void => { counts[outcome] += 1; (perLeg[leg] ??= zero())[outcome] += 1; (perLeg[`${leg}/${klass}`] ??= zero())[outcome] += 1; };
   interface Planned { id: string; entry: SeedEntry; leg: Leg; klass: LegClass; mutant: LegMutant }
   const planned: Planned[] = []; let serial = 0;
   for (const entry of entries.filter((candidate) => candidate.view.conformant)) {
@@ -31,7 +33,7 @@ export async function runLegs(entries: readonly SeedEntry[], rng: Rng, batches: 
         const id = `leg-${String(serial++).padStart(5, "0")}`;
         let mutant: LegMutant | null = null;
         try { if (leg.applicable(entry.view.bundle, entry.view.policy)) mutant = leg.classes[klass]!(entry, rng, out, id); } catch { mutant = null; }
-        if (mutant === null) { bump(leg.leg, "unsupported"); continue; }
+        if (mutant === null) { bump(leg.leg, klass, "unsupported"); continue; }
         planned.push({ id, entry, leg, klass, mutant });
       }
     }
@@ -59,7 +61,7 @@ export async function runLegs(entries: readonly SeedEntry[], rng: Rng, batches: 
       else outcome = dropped.some((observation) => !allowed.observationsMayDrop.includes(observation)) || (!allowed.limitsUnchangedOk && allowed.mustMove.length === 0 && moved.length === 0) ? "unexpected" : "pass";
       if (outcome !== "pass") base.detail += ` | moved: ${moved.join(",") || "none"}; dropped: ${dropped.join(",") || "none"}`;
     }
-    bump(item.leg.leg, outcome);
+    bump(item.leg.leg, item.klass, outcome);
     if (outcome !== "pass" && outcome !== "masked") { const finding: LegFinding = { ...base, channel: comparison, leg: item.leg.leg, class: item.klass, outcome }; findings.push(finding); writeFinding(out, finding, { leg: item.leg.leg, class: item.klass, outcome, allowed: item.mutant.allowed }); }
   });
   return { counts, perLeg, findings, splitFindings, sites };
