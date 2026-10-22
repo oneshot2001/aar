@@ -9,3 +9,7 @@ When a change would push a file over its limit, split it instead: extract a cohe
 Baseline upkeep: an entry only moves down, in the same commit that shrinks the file (the test fails on a pinned file that is smaller than its entry). Never raise an entry or add one.
 
 Module shape between the TypeScript harness and the Python reference is reviewed, not enforced: the ratchet measures bytes; whether a split mirrors cleanly across the two implementations is a review question.
+
+## Regenerating fixtures
+
+Order matters: `bun run harness/generate.ts` (clears `kats/positive/`), then `bun run harness/generate-negative.ts` (writes the negative set and the D-77/80/82 repair positives back), then `bun run harness/generate-relying-party.ts`; then `python3 -B -m pyref.kat --slice all` to re-pin. Running `generate-negative.ts` before `generate.ts` loses 20 positive rows.
