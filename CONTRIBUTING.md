@@ -24,10 +24,10 @@ pyref rejection sites fired (`pyref/batch.py --premises`, inventory from `pyref/
 `saturation.json`; `--cli-lane N` sends N sampled mutants plus the relying-party rows through both CLIs.
 Findings land under `DIR/<id>/` (`bundle.cbor`, every file input copied under its sha256 name, `inputs.json`, `both.json`);
 `DIR/legs.json` breaks `unsupported` (and every other leg outcome) out per leg and per leg/class; `DIR/report.json`
-carries the accept line, whose one shape is
-`accept: seed S, planned N / executed E / no-op O / unsupported U mutants, bytes/classification/crash = a/b/c, controls 8/8, baseline 513/513, legs pass/masked/finding/unexpected/unsupported/operator-error = p/m/f/x/u/e, cli disagreements = d of n (or "cli not run"), saturation X % of Y sites (Z excluded), hash-seed-sensitive = h`
+carries the run line, whose one shape is
+`run: seed S, planned N / executed E / no-op O / unsupported U mutants, bytes/classification/crash = a/b/c, controls 8/8, baseline 513/513, legs pass/masked/finding/unexpected/unsupported/operator-error = p/m/f/x/u/e, cli disagreements = d of n (or "cli not run"), saturation X % of Y sites (Z excluded), hash-seed-sensitive = h`
 (`BACKLOG.md` fuzz item). `harness/difffuzz-out/` is git-ignored; nothing under `kats/` is written by the tool.
 
 Promotion: a finding becomes a fixture by hand — a `bundleFixture` row in `harness/generate-negative.ts`'s
 builders (`negative-fixtures.ts`), then the regeneration order above, then `python3 -B -m pyref.kat --slice all`
-to re-pin. A re-pin is a version bump; a run result is only ever reported as its accept line.
+to re-pin. A re-pin is a version bump; a run result is only ever reported as its run line.

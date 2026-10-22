@@ -28,7 +28,7 @@ export interface CliRow {
   exit_class_agree: boolean; pyref_verdict: boolean; harness_verdict: boolean; verdict_missing: boolean; hex_equal: boolean | null; payload_equal_modulo_identity: boolean | null;
   disagreement: boolean; reasons: string[];
 }
-export interface CliLane { sampled_mutants: number; rp_seeds: number; not_applicable: number; rows: CliRow[]; disagreements: string[] }
+export interface CliLane { sampled_mutants: number; rp_seeds: number; pool_not_applicable: number; rp_not_applicable: number; rows: CliRow[]; disagreements: string[] }
 
 const stripIdentity = (hex: string): string => { const envelope = decodeCbor(fromHex(hex)) as CborValue[]; const verdict = decodeCbor(envelope[0] as Uint8Array) as Obj; delete verdict.verifier; delete verdict.verdict_id; return toHex(encodeCbor(verdict)); };
 
@@ -74,7 +74,7 @@ export function runCliLane(sample: number, executed: readonly Planned[], rows: r
     ...applicableRp.map((row, index) => one(`rp-${String(index).padStart(2, "0")}`, "rp-seed", row.seed.raw, row.seed.inputs, directory)),
   ];
   return {
-    sampled_mutants: picked.length, rp_seeds: applicableRp.length, not_applicable: (executed.length - applicableMutants.length) + (rp.length - applicableRp.length), rows: result,
+    sampled_mutants: picked.length, rp_seeds: applicableRp.length, pool_not_applicable: executed.length - applicableMutants.length, rp_not_applicable: rp.length - applicableRp.length, rows: result,
     disagreements: result.filter((row) => row.disagreement).map((row) => `${row.id}: ${row.reasons.join("; ")}`),
   };
 }

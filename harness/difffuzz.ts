@@ -3,7 +3,7 @@
 // Exit 0 = run completed (findings, if any, are in DIR); 2 = baseline mismatch;
 // 3 = a control did not fire; 4 = adapter (transport/handshake) failure.
 // Nothing under kats/ is written; a run reports only with every number, in the
-// accept line difffuzz-report.ts formats from the aggregate of every lane.
+// run line difffuzz-report.ts formats from the aggregate of every lane.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Baseline, runBaseline, runControls } from "./difffuzz-baseline";
@@ -74,7 +74,7 @@ async function main(): Promise<number> {
     if (sat !== null) writeFileSync(join(options.out, "saturation.json"), `${JSON.stringify(sat, null, 2)}\n`);
     for (const lane of batches) await lane.close();
     const summary = aggregate({
-      seed: options.seed, perStep: mutants.perStep, mutantFindings: mutants.findings, legs, cli: cliLane === null ? null : { rows: cliLane.rows, notApplicable: cliLane.not_applicable },
+      seed: options.seed, perStep: mutants.perStep, mutantFindings: mutants.findings, legs, cli: cliLane === null ? null : { rows: cliLane.rows, notApplicable: cliLane.pool_not_applicable + cliLane.rp_not_applicable },
       controls: { fired, total: controls.length }, baseline: { reproduced: baseline.count - baseline.mismatches.length, seeds: seeds.length },
       saturation: sat === null ? null : { percent: sat.saturation_percent, sites: sat.inventory_size, excluded: sat.excluded.length }, hashSeedSensitive: sensitive,
     });

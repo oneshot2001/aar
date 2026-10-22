@@ -2159,7 +2159,7 @@ rule is amended explicitly for this release rather than hidden inside D-83).
 
 **Decision (non-normative).** A run of `harness/difffuzz.ts` compares the
 TypeScript harness and pyref on mutants of the corpus rows and reports one
-line, the accept line in `BACKLOG.md`, with every number on it. The line
+line, the run line in `BACKLOG.md`, with every number on it. The line
 separates what was planned from what was executed (survival no-ops and
 unsupported shapes are counted, not executed); nothing is claimed for a
 shape the run did not execute. Two implementations can share a bug, so
@@ -2191,7 +2191,7 @@ dead comparator, a stale import, an absent limit read as a bug. The accept
 line is the only form a run result takes so that none of those readings
 survives.
 
-**Alternatives considered.** A coverage percentage on the accept line
+**Alternatives considered.** A coverage percentage on the run line
 (renamed: line events do not evaluate premises); an expected verdict per
 mutant (fabricated; replaced by reachability and the leg table); a sixth
 "leg not load-bearing" channel (split into masked / pass / the two finding

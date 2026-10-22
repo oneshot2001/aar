@@ -6,7 +6,7 @@
 // never unsupported. Nothing is written here: the driver re-executes every
 // finding under a random hash seed first, then writes. Files a leg mutant
 // needs on disk go to a temp directory, never into the run directory.
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CborValue, decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
@@ -75,5 +75,6 @@ export async function runLegs(entries: readonly SeedEntry[], rng: Rng, batches: 
       detail, seed: item.entry.row.seed, bundle: item.mutant.bytes, harness, pyref, request: requests[index]!, leg: item.leg.leg, class: item.klass, outcome, allowed,
     });
   });
+  if (workDirectory !== null) rmSync(workDirectory, { recursive: true, force: true });
   return { counts, perLeg, findings, operatorErrors, sites };
 }

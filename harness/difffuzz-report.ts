@@ -1,7 +1,7 @@
-// Run aggregation and the accept-line formatter (Packet D, fix-first A): the
+// Run aggregation and the run-line formatter (Packet D, fix-first A): the
 // one place a run's numbers are joined, so a leg split, an unexpected leg
 // outcome, a CLI disagreement or a leg operator error cannot stay in a JSON
-// file while the accept line reads clean. Pure functions; the synthetic test
+// file while the run line reads clean. Pure functions; the synthetic test
 // feeds them directly.
 import type { Comparison } from "./difffuzz-compare";
 import type { StepCounts } from "./difffuzz-mutants";
@@ -54,5 +54,5 @@ export function formatAccept(s: Summary): string {
   const legs = s.legs === null ? "legs not run" : `legs pass/masked/finding/unexpected/unsupported/operator-error = ${s.legs.counts.pass}/${s.legs.counts.masked}/${s.legs.finding}/${s.legs.counts.unexpected}/${s.legs.counts.unsupported}/${s.legs.counts["operator-error"]}`;
   const cli = s.cli === null ? "cli not run" : `cli disagreements = ${s.cli.disagreements} of ${s.cli.rows}`;
   const saturation = s.saturation === null ? "saturation not measured" : `saturation ${s.saturation.percent} % of ${s.saturation.sites} sites (${s.saturation.excluded} excluded)`;
-  return `accept: seed ${s.seed}, planned ${s.planned} / executed ${s.executed} / no-op ${s.noop} / unsupported ${s.unsupported} mutants, bytes/classification/crash = ${s.channels.bytes}/${s.channels.classification}/${s.channels.crash}, controls ${s.controls.fired}/${s.controls.total}, baseline ${s.baseline.reproduced}/${s.baseline.seeds}, ${legs}, ${cli}, ${saturation}, hash-seed-sensitive = ${s.hashSeedSensitive}`;
+  return `run: seed ${s.seed}, planned ${s.planned} / executed ${s.executed} / no-op ${s.noop} / unsupported ${s.unsupported} mutants, bytes/classification/crash = ${s.channels.bytes}/${s.channels.classification}/${s.channels.crash}, controls ${s.controls.fired}/${s.controls.total}, baseline ${s.baseline.reproduced}/${s.baseline.seeds}, ${legs}, ${cli}, ${saturation}, hash-seed-sensitive = ${s.hashSeedSensitive}`;
 }
