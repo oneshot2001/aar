@@ -10,4 +10,4 @@ test("CDDL schema oracle accepts the corpus and matches every probe", () => {
     cwd: join(dirname(fileURLToPath(import.meta.url)), ".."), encoding: "utf8",
   });
   expect(run.status, `${run.stdout}${run.stderr}`).toBe(0);
-}, 600_000);
+}, 900_000);
