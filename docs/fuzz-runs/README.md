@@ -1,0 +1,3 @@
+This directory records differential-fuzz runs and their generated reports and finding packages.
+
+run: seed 20261022, planned 5000 / executed 4909 / no-op 60 / unsupported 31 mutants, bytes/classification/crash = 0/4/0, controls 8/8, baseline 513/513, legs pass/masked/finding/unexpected/unsupported/operator-error = 755/19/0/0/786/0, cli disagreements = 0 of 81, saturation 71.3 % of 366 sites (4 excluded), hash-seed-sensitive = 0
