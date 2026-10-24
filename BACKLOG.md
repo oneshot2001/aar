@@ -5,6 +5,7 @@ Branch `night/YYYY-MM-DD` off `main`. Never push. Never touch `spec/` normative 
 
 ## Ready
 
+- [ ] Second differential-fuzz night run, new seed (from 2026-10-24 night-run review of 2a7d29a; Packet D tool, read-only against the verifiers): `bun run harness/difffuzz.ts --seed 20261024 --mutants 5000 --legs --premises --cli-lane 50 --lanes 3 --out docs/fuzz-runs/2026-10-24` and commit the output directory (report.json, legs.json, saturation.json, any finding packages). Do not fix, re-pin, or edit anything the run finds; findings are ruled in the morning review. The 2026-10-22 run's step-9 split (`receipt/coordinate-collision` on the issuer-sequence-rollback seed: harness `identity/issuer-sequence-rollback`, pyref `identity/coordinate-equivocation`) is a known spec gap awaiting a ruling; expect it to recur. Append the new report's `run:` line verbatim as one line to `docs/fuzz-runs/README.md` — accept: `test -f docs/fuzz-runs/2026-10-24/report.json && grep -q '^run: seed 20261024, .*controls 8/8, baseline 513/513' docs/fuzz-runs/README.md && bun test harness/difffuzz-report.test.ts && git diff --quiet main -- spec kats harness pyref adapters demo` exits 0 (exits 1 before the run: no report).
 
 ## Strategy (2026-09-27, Codex-pair settled, Matthew accepted)
 v0.2 stays experimental. No v1.0 freeze until the blockers below clear AND one independent
