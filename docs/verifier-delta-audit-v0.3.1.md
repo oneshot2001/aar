@@ -66,3 +66,32 @@ in both fuzz runs) and are kept as two rows, one per recorded finding.
 
 Corpus after re-pin: 526 rows (`pyref/results-c2.json`), 526 matched, 526
 deterministic, 0 divergences.
+
+## Round 2: review fixes (2026-10-26)
+
+The review round moved prior-state shape validation into both libraries,
+removed the unreachable phase-A reuse pass, and added six rows. v0.3.1 is
+unreleased, and its version string and build preimages did not change, so no
+verdict re-pins: the 526 rows above are byte-identical to `a6200ea`. Under
+`kats/`, the only changes are the 18 files of the six new rows. Every
+round-1 entry in `pyref/results-c2.json` is unchanged: result, code, step,
+observations, `stateful_properties` and `verdict_sha256`.
+
+The six rows through both v0.3.0 verifiers (`a840688`) and v0.3.1:
+
+| Row | v0.3.0 harness | v0.3.0 pyref | v0.3.1 (both) |
+|---|---|---|---|
+| `negative/stateful/d86-phase-b-issuer-outranks-epoch-rollback` | epoch-sequence-rollback | epoch-sequence-rollback | issuer-sequence-rollback |
+| `negative/stateful/d86-phase-b-equivocation-outranks-rollback` | epoch-sequence-rollback | epoch-sequence-rollback | coordinate-equivocation |
+| `negative/stateful/d86-duplicate-not-exempt-from-equivocation` | epoch-sequence-rollback | epoch-sequence-rollback | coordinate-equivocation |
+| `negative/stateful/d86-duplicate-not-exempt-from-reuse` | reuse | reuse | reuse |
+| `positive/stateful/d86-history-only-conflict` | conformant | conformant | conformant, no `duplicate_exact` |
+| `negative/stateful/d86-partial-history-epoch-rollback` | epoch-sequence-rollback | epoch-sequence-rollback | epoch-sequence-rollback |
+
+On the first three rows, v0.3.0 interleaved its checks per receipt and
+compared epoch sequences with `<=`, so it reported the first epoch rollback it
+met. The last row records unchanged behaviour (`BACKLOG.md`, prior-state
+contract).
+
+Corpus after round 2: 532 rows (`pyref/results-c2.json`), 532 matched, 532
+deterministic, 0 divergences.

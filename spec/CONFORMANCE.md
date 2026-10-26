@@ -370,8 +370,11 @@ normative as the step order itself (D-54).
       rollback.
 
    Within a class the reported witness is the first carried receipt in
-   canonical artifact order, then the first entry in committed order. Entries
-   that conflict only with each other do not fail the bundle. Before phase A,
+   canonical artifact order, then the first entry in committed order. The
+   signed verdict carries the class code only, so the witness is not
+   observable in it; an implementation may expose it as a diagnostic (the
+   harness's failure `path`). Entries that conflict only with each other do
+   not fail the bundle. Before phase A,
    an entry whose `receipt_id` and `envelope_digest` equal a carried receipt's
    but whose coordinates differ from that receipt's is a usage error (section
    5), and no verdict is produced.

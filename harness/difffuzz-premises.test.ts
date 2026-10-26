@@ -24,5 +24,5 @@ test("pyref.premises inventory: every _fail site has a literal code or is in the
     else expect(site.code).toMatch(/^[a-z]+\/[a-z0-9-]+$/u);
   }
   for (const site of excluded) expect(site.reason.includes("unreachable")).toBe(true);
-  console.log(`rejection-site inventory: ${counts["pyref/verifier.py"]} verifier.py / ${counts["pyref/relying_party.py"]} relying_party.py / ${counts["pyref/cbor.py"]} cbor.py (${excluded.length} excluded as documented unreachable)`);
+  console.log(`rejection-site inventory: ${counts["pyref/verifier.py"]} verifier.py / ${counts["pyref/emission_identity.py"]} emission_identity.py / ${counts["pyref/relying_party.py"]} relying_party.py / ${counts["pyref/cbor.py"]} cbor.py (${excluded.length} excluded as documented unreachable)`);
 });

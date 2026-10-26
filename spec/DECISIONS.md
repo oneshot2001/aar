@@ -2204,8 +2204,9 @@ failure outranks every phase-B failure.
 
 0. **History consistency (usage error, no verdict).** Two supplied
    `prior_emissions` entries with the same `receipt_id` and `envelope_digest`
-   but different coordinates are a usage error, checked with the D-76
-   duplicate/unsorted rule before the first bundle byte is read. An entry
+   but different coordinates are a usage error, checked after the entry-shape
+   check and the D-76 duplicate/unsorted rule, before evaluation begins
+   (step 1). An entry
    whose `receipt_id` and `envelope_digest` equal a carried receipt's but
    whose coordinates (`issuer_kid`, `issuer_seq`, `epoch_owner_kid`,
    `epoch_id`, `epoch_seq`) differ from that receipt's is a usage error,
@@ -2229,8 +2230,10 @@ failure outranks every phase-B failure.
    different ID is equivocation under (ii).
 3. **Witness order.** Within a class the reported witness is the first
    carried receipt in canonical artifact order, then the first entry in
-   committed (sorted) order. Entries that conflict only with each other do not
-   fail the bundle.
+   committed (sorted) order. The signed verdict carries the class code only,
+   so the witness is not observable in it; it shows only as the harness's
+   diagnostic failure `path`. Entries that conflict only with each other do
+   not fail the bundle.
 4. **Unchanged.** `prior_emissions_digest` hashes the supplied history exactly
    as today, never a filtered set; the verdict stays `v: 5`, the bundle wire
    v0.2, every content type as it was, and `stateful_not_evaluated` without
@@ -2239,10 +2242,17 @@ failure outranks every phase-B failure.
 The declared spec becomes v0.3.1, a patch release on the D-77 precedent
 (acceptance and order fixes, no wire change). Every signed verdict re-pins,
 because the verifier version and build identity are signed; the decoded
-old/new delta is `docs/verifier-delta-audit-v0.3.1.md`. The six fuzz
-splits, Q1 to Q3, full-history re-observation, and the phase-order and
-class-order cases are pinned as `d86-*` stateful KATs; the usage errors are
-unit and CLI tests in both verifiers.
+old/new delta is `docs/verifier-delta-audit-v0.3.1.md`. Nineteen `d86-*`
+stateful KATs pin the rule: the six fuzz splits; Q1 to Q3; full-history
+re-observation; phase order with and without prior state; phase-B class
+order (reuse over rollback, issuer rollback over epoch rollback,
+equivocation over rollback); an exact duplicate exempt from neither reuse
+nor equivocation; entries that conflict only with each other; and partial
+history (an exact copy of only the highest-`epoch_seq` receipt is rollback
+for the others). The usage errors and rule 0(b) over a phase-A failure are
+unit tests in both verifiers and pyref CLI tests (the harness has no
+prior-state CLI flag); the issuer-before-epoch witness is a harness unit test
+on its diagnostic `path`.
 
 **Why.** Step 9 named four codes and no precedence, and the two verifiers
 filled the gap differently. Six differential-fuzz splits
@@ -2257,7 +2267,13 @@ defects the verifiers shared. Q1: an entry reusing a carried receipt's issuer
 coordinate under another ID passed. Q2: an entry reusing its epoch
 coordinate was reported as epoch rollback. Q3: an exact re-presentation of a
 carried receipt was rejected as epoch rollback, though this step calls exact
-repeated bytes a duplicate. These are conformance defects, not precedence
+repeated bytes a duplicate. The exemption fixes Q3 for the re-presented
+receipt itself; every other carried receipt is still judged by the ordinary
+rollback rule against the supplied history, so history holding a copy of only
+the highest-`epoch_seq` receipt makes the bundle's lower receipts rollback
+(`d86-partial-history-epoch-rollback`, unchanged from v0.3.0; whether
+`prior_emissions` is a complete record or a high-water mark is open in
+`BACKLOG.md`). These are conformance defects, not precedence
 choices: D-05 defines duplicate, reuse and equivocation with no bundle
 boundary, D-06 makes both sequence domains monotonic and the epoch domain
 unique, and D-82 amendment (ah) ("a reused epoch coordinate naming a
