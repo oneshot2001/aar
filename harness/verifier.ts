@@ -1,6 +1,7 @@
 import { p256 } from "@noble/curves/nist.js";
 import { CborScalar, CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
 import { domainHash, hash, P256_HALF_ORDER, signatureScalars } from "./crypto";
+import { checkPriorHistory, validateEmission } from "./emission-identity";
 import { promotedRoot, rfc6962Leaf, verifyPromotedProof, verifyRfc6962Consistency, verifyRfc6962Inclusion } from "./merkle";
 import { acceptRoots, Configuration, signerUses, verifierIdentity } from "./relying-party";
 import { emitFailureVerdict, emitVerdict } from "./verdict";
@@ -113,7 +114,7 @@ export function object(value: CborValue | undefined): value is Obj {
   return typeof value === "object" && value !== null && !Array.isArray(value) && !(value instanceof Uint8Array) && !(value instanceof Map);
 }
 
-function uint(value: CborValue | undefined): value is number {
+export function uint(value: CborValue | undefined): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
@@ -139,7 +140,7 @@ export function compareEncoded(left: CborValue, right: CborValue): number {
   return 0;
 }
 
-function observe(observations: string[], value: string): void {
+export function observe(observations: string[], value: string): void {
   if (!observations.includes(value)) observations.push(value);
 }
 
@@ -1289,45 +1290,6 @@ function validateMediatorCountersignatures(parsed: Parsed, observations: string[
   return undefined;
 }
 
-function validateEmission(parsed: Parsed, prior: readonly PriorEmission[], observations: string[]): B1Failure | undefined {
-  const byId = new Map<string, ParsedEnvelope>();
-  const issuerCoordinates = new Map<string, string>();
-  const epochCoordinates = new Map<string, string>();
-  for (const receipt of parsed.receipt) {
-    const id = toHex(receipt.payload.receipt_id as Uint8Array);
-    const existing = byId.get(id);
-    if (existing !== undefined) {
-      if (!equalBytes(existing.envelopeBytes, receipt.envelopeBytes)) return failure(9, "identity/reuse", "receipts");
-      observe(observations, "duplicate_exact");
-      continue;
-    }
-    byId.set(id, receipt);
-    for (const old of prior) {
-      if (equalBytes(old.receiptId, receipt.payload.receipt_id as Uint8Array)) {
-        if (!equalBytes(old.envelopeDigest, hash(receipt.envelopeBytes))) return failure(9, "identity/reuse", "receipts");
-        observe(observations, "duplicate_exact");
-      }
-    }
-    const binding = receipt.payload.binding as Obj;
-    const emission = receipt.payload.emission as Obj;
-    // Identity coordinates are used as map keys below; pin their types first so
-    // malformed input yields a signed verdict instead of a silent array-typed
-    // coordinate collision (pyref _emission_identity parity).
-    if (!uint(emission.issuer_seq)) return failure(9, "schema/bad-type", "receipt.emission.issuer_seq");
-    if (!bytes(binding.epoch_owner_kid, 32) || !uint(binding.epoch_id) || !uint(binding.epoch_seq)) return failure(9, "schema/bad-type", "receipt.binding");
-    const issuer = `${toHex(receipt.kid)}:${emission.issuer_seq as number}`;
-    const epoch = `${toHex(binding.epoch_owner_kid as Uint8Array)}:${binding.epoch_id as number}:${binding.epoch_seq as number}`;
-    if (issuerCoordinates.has(issuer) && issuerCoordinates.get(issuer) !== id) return failure(9, "identity/coordinate-equivocation", "receipt.emission.issuer_seq");
-    if (epochCoordinates.has(epoch) && epochCoordinates.get(epoch) !== id) return failure(9, "identity/coordinate-equivocation", "receipt.binding.epoch_seq");
-    issuerCoordinates.set(issuer, id); epochCoordinates.set(epoch, id);
-    for (const old of prior) {
-      if (same(old.issuerKid, receipt.kid) && (emission.issuer_seq as number) < old.issuerSeq) return failure(9, "identity/issuer-sequence-rollback", "receipt.emission.issuer_seq");
-      if (same(old.epochOwnerKid, binding.epoch_owner_kid) && old.epochId === binding.epoch_id && (binding.epoch_seq as number) <= old.epochSeq) return failure(9, "identity/epoch-sequence-rollback", "receipt.binding.epoch_seq");
-    }
-  }
-  return undefined;
-}
-
 const KIND_ROLES: Record<string, readonly string[]> = { observation: ["agent", "enforcement_point", "outcome_observer"], inference: ["agent"], authorization: ["enforcement_point"], action_attempt: ["enforcement_point"], dispatch: ["enforcement_point"], outcome_observation: ["outcome_observer"] };
 
 const KIND_OUTCOME_LEVELS: Record<string, readonly string[]> = { action_attempt: ["accepted"], dispatch: ["dispatched"], outcome_observation: ["device_acknowledged", "independently_sensed", "contradicted", "unknown"] };
@@ -2109,7 +2071,7 @@ function validateBundle(input: Uint8Array, options: VerifyB1Options): B1Verifica
   const lifecycleIssue = validateCredentialLifecycle(bundle, parsed, options.configuration);
   if (lifecycleIssue) return fail(lifecycleIssue);
   const observations: string[] = [];
-  const emissionIssue = validateEmission(parsed, options.priorEmissions ?? [], observations);
+  const emissionIssue = validateEmission(parsed, options.priorEmissions, observations);
   if (emissionIssue) return fail(emissionIssue);
   const receiptIssue = validateReceiptSemantics(bundle, parsed);
   if (receiptIssue) return fail(receiptIssue);
@@ -2151,6 +2113,7 @@ export function verifyBundle(input: Uint8Array, options: VerifyB1Options): B1Ver
   if (priorKeys.some((key, index) => index > 0 && priorKeys[index - 1]! >= key)) {
     throw new Error("prior-state.prior_emissions must be strictly sorted and unique");
   }
+  checkPriorHistory(options.priorEmissions ?? []);
   return validateBundle(input, options);
 }
 

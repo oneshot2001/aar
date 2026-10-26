@@ -136,7 +136,10 @@ must be strictly sorted and unique by deterministic CBOR of
 `[replay_domain, invocation_id, content_digest]`. `prior_emissions` must also be
 strictly sorted and unique by deterministic CBOR of `[issuer_kid, issuer_seq,
 epoch_owner_kid, epoch_id, epoch_seq, receipt_id, envelope_digest]` with hex
-strings decoded to byte strings. Unsorted or duplicate entries are usage errors.
+strings decoded to byte strings. Unsorted or duplicate entries are usage errors,
+as are two entries with one `receipt_id` and `envelope_digest` but different
+coordinates, and an entry whose `receipt_id` and `envelope_digest` match a
+carried receipt's but whose coordinates do not (D-86; exit 2, no verdict).
 
 ```json
 {
@@ -227,9 +230,9 @@ neither signature must be treated as third-party assurance or used as a
 deployment credential.
 
 The implementation-defined verifier identity preimages are stable constants:
-`pyref-aar-v0.3.0-d83-relying-party-build-v1` for `build_digest` and
+`pyref-aar-v0.3.1-d86-emission-identity-build-v1` for `build_digest` and
 `pyref-aar-v0.2-gate4-c2-fixed-conformance-config-v1` for `config_digest`.
 
-Both verifiers report version `v0.3.0`. The harness build digest is SHA-256 of
-UTF-8 `harness-aar-v0.3.0-d83-relying-party-build-v1`; its config digest keeps
+Both verifiers report version `v0.3.1`. The harness build digest is SHA-256 of
+UTF-8 `harness-aar-v0.3.1-d86-emission-identity-build-v1`; its config digest keeps
 the preimage `AAR-KAT-OPAQUE-ID:verifier-config:aar-reference-verifier@0.2.0-default`.

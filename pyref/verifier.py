@@ -12,7 +12,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from . import hashes, relying_party, verdict
+from . import emission_identity, hashes, relying_party, verdict
 from .cbor import CBORError, dumps, loads
 from .crypto import N, is_der_ecdsa_signature, parse_p256_spki, verify_es256
 
@@ -1399,65 +1399,6 @@ def _credential_lifecycle(state: State) -> None:
                 _fail("credential/status-missing", 8)
 
 
-def _emission_identity(state: State) -> None:
-    observations: list[dict[str, Any]] = []
-    for envelope in state.envelopes["receipts"]:
-        receipt = envelope.payload
-        # Identity coordinates are indexed as map keys below; pin their types
-        # first so malformed input yields a signed verdict, never an unhashable
-        # TypeError (harness validateReceiptIdentity parity).
-        if not _uint(receipt["emission"].get("issuer_seq")):
-            _fail("schema/bad-type", 9)
-        if not (_bstr(receipt["binding"].get("epoch_owner_kid"), 32)
-                and _uint(receipt["binding"].get("epoch_id"))
-                and _uint(receipt["binding"].get("epoch_seq"))):
-            _fail("schema/bad-type", 9)
-        observations.append({
-            "issuer_kid": envelope.protected[4],
-            "issuer_seq": receipt["emission"]["issuer_seq"],
-            "epoch_owner_kid": receipt["binding"]["epoch_owner_kid"],
-            "epoch_id": receipt["binding"]["epoch_id"],
-            "epoch_seq": receipt["binding"]["epoch_seq"],
-            "receipt_id": receipt["receipt_id"],
-            "envelope_digest": hashes.sha256(envelope.envelope_bytes),
-        })
-
-    by_receipt: dict[bytes, bytes] = {}
-    by_issuer_coordinate: dict[tuple[bytes, int], bytes] = {}
-    by_epoch_coordinate: dict[tuple[bytes, int, int], bytes] = {}
-    for item in observations:
-        receipt_id = item["receipt_id"]
-        if receipt_id in by_receipt and by_receipt[receipt_id] != item["envelope_digest"]:
-            _fail("identity/reuse", 9)
-        by_receipt[receipt_id] = item["envelope_digest"]
-        issuer_coordinate = item["issuer_kid"], item["issuer_seq"]
-        epoch_coordinate = item["epoch_owner_kid"], item["epoch_id"], item["epoch_seq"]
-        if issuer_coordinate in by_issuer_coordinate and by_issuer_coordinate[issuer_coordinate] != receipt_id:
-            _fail("identity/coordinate-equivocation", 9)
-        if epoch_coordinate in by_epoch_coordinate and by_epoch_coordinate[epoch_coordinate] != receipt_id:
-            _fail("identity/coordinate-equivocation", 9)  # amendment (ah)
-        by_issuer_coordinate[issuer_coordinate] = receipt_id
-        by_epoch_coordinate[epoch_coordinate] = receipt_id
-
-    if state.prior_state is None:
-        state.stateful_checks = "not_evaluated"
-        return
-    state.stateful_checks = "evaluated"
-    for prior in state.prior_state.get("prior_emissions", []):
-        prior_id = bytes.fromhex(prior["receipt_id"])
-        prior_digest = bytes.fromhex(prior["envelope_digest"])
-        for item in observations:
-            if item["receipt_id"] == prior_id and item["envelope_digest"] != prior_digest:
-                _fail("identity/reuse", 9)
-            if item["issuer_kid"] == bytes.fromhex(prior["issuer_kid"]) \
-                    and item["issuer_seq"] < prior["issuer_seq"]:
-                _fail("identity/issuer-sequence-rollback", 9)
-            if item["epoch_owner_kid"] == bytes.fromhex(prior["epoch_owner_kid"]) \
-                    and item["epoch_id"] == prior["epoch_id"] \
-                    and item["epoch_seq"] <= prior["epoch_seq"]:
-                _fail("identity/epoch-sequence-rollback", 9)
-
-
 def _body_kind(body: Any) -> str | None:
     if not _type_ok(body, "map"):
         return None
@@ -2600,6 +2541,7 @@ def _prior_emissions_map(value: dict[str, Any]) -> dict[str, Any]:
     ]
     if any(previous >= current for previous, current in zip(emission_order, emission_order[1:])):
         raise ValueError("prior-state.prior_emissions must be strictly sorted and unique")
+    emission_identity.check_history(entries)
     return {"entries": entries}
 
 
@@ -2669,7 +2611,7 @@ def evaluate(
         _envelope_checks(state)
         _content_commitments(state)
         _credential_lifecycle(state)
-        _emission_identity(state)
+        emission_identity.emission_identity(state)
         _receipt_semantics(state)
         _mediator_countersignature_checks(state)
         _replay_freshness(state)

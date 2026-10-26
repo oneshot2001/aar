@@ -1,5 +1,6 @@
-"""Rejection-site inventory (Packet D): every ``_fail(`` call in verifier.py and
-relying_party.py and every ``CBORError(`` construction in cbor.py, by AST.
+"""Rejection-site inventory (Packet D): every ``_fail(`` call in verifier.py,
+relying_party.py and emission_identity.py, and every ``CBORError(``
+construction in cbor.py, by AST.
 Decoder checks the source documents as unreachable are listed under EXCLUDED
 with that comment as the reason. ``python3 -B -m pyref.premises`` prints JSON.
 """
@@ -13,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
-FAIL_FILES = ("pyref/verifier.py", "pyref/relying_party.py")
+FAIL_FILES = ("pyref/verifier.py", "pyref/relying_party.py", "pyref/emission_identity.py")
 CBOR_FILE = "pyref/cbor.py"
 UNREACHABLE_MARK = "unreachable"
 

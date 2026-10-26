@@ -9,7 +9,7 @@ import { toHex } from "./cbor";
 import { hash } from "./crypto";
 
 export const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-export const SOURCES = ["pyref/verifier.py", "pyref/cbor.py", "pyref/relying_party.py", "pyref/verdict.py", "pyref/batch.py"];
+export const SOURCES = ["pyref/verifier.py", "pyref/cbor.py", "pyref/relying_party.py", "pyref/emission_identity.py", "pyref/verdict.py", "pyref/batch.py"];
 
 export interface Inputs {
   evaluated_at: number;

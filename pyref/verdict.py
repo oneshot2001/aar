@@ -18,7 +18,7 @@ def _limits_digest() -> bytes:
     return hashes.domain_hash("AAR-VERDICT-LIMITS-v1", verifier.LIMITS)
 
 
-BUILD_DIGEST = hashes.sha256(b"pyref-aar-v0.3.0-d83-relying-party-build-v1")
+BUILD_DIGEST = hashes.sha256(b"pyref-aar-v0.3.1-d86-emission-identity-build-v1")
 CONFIG_DIGEST = hashes.sha256(b"pyref-aar-v0.2-gate4-c2-fixed-conformance-config-v1")
 
 
@@ -108,7 +108,7 @@ def _verdict_fields(state: verifier.State, result: str, reason: str | None, step
         "bundle_digest": hashes.sha256(state.raw),
         "selector_commitment": selector_commitment,
         "verifier": {
-            "product": "pyref", "version": "v0.3.0",
+            "product": "pyref", "version": "v0.3.1",
             "build_digest": BUILD_DIGEST, "config_digest": CONFIG_DIGEST,
             "limits_digest": _limits_digest(),
         },
