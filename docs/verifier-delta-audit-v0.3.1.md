@@ -114,5 +114,13 @@ other:
 - The pyref CLI reports container and top-level errors with the libraries'
   messages.
 
-Every refusal is a usage error with one message in the harness, the pyref
-library and the pyref CLI.
+For `prior_emissions` data, every refusal is a usage error with one message
+in the harness, the pyref library and the pyref CLI, except where a caller
+passes the other implementation's byte encoding (a string to the harness's
+typed API, `bytes` to pyref's JSON-form library call): both refuse, each in
+its own words. Not covered: JSON syntax errors (each runtime's parser
+message), the replay `entries` shape (checked by the pyref CLI only), and
+objects built to defeat the harness's typed check from inside the verifier's
+process (a `Uint8Array` subclass overriding `length`, a `Proxy` answering
+differently on repeated reads, non-enumerable or symbol keys), which
+CONFORMANCE section 5 puts out of scope; hardening is a BACKLOG item.

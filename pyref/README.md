@@ -143,8 +143,10 @@ no whitespace). Any other shape is a usage error, as are unsorted or
 duplicate entries, two entries with one `receipt_id` and `envelope_digest`
 but different coordinates, and an entry whose `receipt_id` and
 `envelope_digest` match a carried receipt's but whose coordinates do not
-(D-86; exit 2, no verdict). `evaluate(prior_state=...)` runs the same checks,
-closed top level included, and raises `ValueError` with the same message.
+(D-86; exit 2, no verdict). `evaluate(prior_state=...)` runs the same
+`prior_emissions` checks, closed top level included, and raises `ValueError`
+with the same message. The `entries` (replay state) shape and JSON syntax are
+checked by the command line only.
 
 ```json
 {

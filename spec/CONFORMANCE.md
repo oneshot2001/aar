@@ -1125,16 +1125,21 @@ The verdict digest preimages are frozen as follows:
   receipt_id: bstr .size 32, envelope_digest: bstr .size 32 }`. Entries are
   strictly sorted and unique by deterministic CBOR of `[issuer_kid, issuer_seq,
   epoch_owner_kid, epoch_id, epoch_seq, receipt_id, envelope_digest]`.
-  A supplied prior state that does not match this closed map is a usage error
-  at every entry point, library or command line, checked before evaluation
-  begins and before any digest is computed over it: the prior state is a JSON
-  object whose only keys are `prior_emissions` and `entries` (replay state,
-  checked on its own), `prior_emissions` is an array, each entry has exactly
+  A supplied prior state that does not match this closed map is a usage error,
+  whether it arrives as a JSON prior-state file or as data passed to a library
+  call, checked before evaluation begins and before any digest is computed over
+  it: the prior state is a JSON object whose only keys are `prior_emissions`
+  and `entries` (replay state, outside this check), `prior_emissions` is an
+  array, each entry has exactly
   the seven keys, the three
   sequence and epoch values are unsigned integers (a boolean is not one),
   compared by numeric value so that the JSON spelling (`1`, `1.0`, `1e0`) does
   not matter, and the four byte strings are 32 bytes (hexadecimal in a JSON
-  prior-state file).
+  prior-state file). The check is for malformed data. A library caller passes
+  plain values (plain objects and arrays, plain byte arrays); code running in
+  the verifier's own process can already sign any verdict with the verifier
+  key, so objects built to defeat the check from inside that process are out
+  of scope.
   After that shape check, duplicate or unsorted `prior_emissions` is a
   usage error, as are two entries with the same `receipt_id` and
   `envelope_digest` but different coordinates and, detected at step 9 before
