@@ -2196,3 +2196,98 @@ survives.
 mutant (fabricated; replaced by reachability and the leg table); a sixth
 "leg not load-bearing" channel (split into masked / pass / the two finding
 classes, because §5 does not give every leg a limit).
+
+## D-86 — Emission identity checks the bundle before history, one class at a time
+
+**Decision.** CONFORMANCE step 9 runs in two phases, and every phase-A
+failure outranks every phase-B failure.
+
+0. **History consistency (usage error, no verdict).** Two supplied
+   `prior_emissions` entries with the same `receipt_id` and `envelope_digest`
+   but different coordinates are a usage error, checked with the D-76
+   duplicate/unsorted rule before the first bundle byte is read. An entry
+   whose `receipt_id` and `envelope_digest` equal a carried receipt's but
+   whose coordinates (`issuer_kid`, `issuer_seq`, `epoch_owner_kid`,
+   `epoch_id`, `epoch_seq`) differ from that receipt's is a usage error,
+   checked at step 9 before phase A.
+1. **Phase A (always).** Over the carried receipts in canonical artifact
+   order: one full pass for `identity/reuse`, then one full pass for
+   `identity/coordinate-equivocation`, the issuer coordinate `(signing kid,
+   issuer_seq)` before the epoch coordinate `(owner, epoch_id, epoch_seq)` for
+   each receipt. An exact in-bundle repeat stays a coalesced duplicate
+   observation.
+2. **Phase B (only with supplied prior state).** Over every carried
+   receipt × entry pair: (i) one full pass for `identity/reuse` (same ID,
+   different digest); (ii) one full pass for
+   `identity/coordinate-equivocation` (same issuer or epoch coordinate,
+   different ID); (iii) over the remaining receipts, one full pass for
+   `identity/issuer-sequence-rollback` (same signing kid, strictly lower
+   `issuer_seq`), then one for `identity/epoch-sequence-rollback` (same owner
+   and `epoch_id`, strictly lower `epoch_seq`). A carried receipt equal to an
+   entry in ID, digest and coordinates is a duplicate observation
+   (`duplicate_exact`, in both verifiers) and is exempt from (iii), never from
+   (i) or (ii). The epoch comparison changes from `<=` to `<`; equality with a
+   different ID is equivocation under (ii).
+3. **Witness order.** Within a class the reported witness is the first
+   carried receipt in canonical artifact order, then the first entry in
+   committed (sorted) order. Entries that conflict only with each other do not
+   fail the bundle.
+4. **Unchanged.** `prior_emissions_digest` hashes the supplied history exactly
+   as today, never a filtered set; the verdict stays `v: 5`, the bundle wire
+   v0.2, every content type as it was, and `stateful_not_evaluated` without
+   prior state as before.
+
+The declared spec becomes v0.3.1, a patch release on the D-77 precedent
+(acceptance and order fixes, no wire change). Every signed verdict re-pins,
+because the verifier version and build identity are signed; the decoded
+old/new delta is `docs/verifier-delta-audit-v0.3.1.md`. The six fuzz
+splits, Q1 to Q3, full-history re-observation, and the phase-order and
+class-order cases are pinned as `d86-*` stateful KATs; the usage errors are
+unit and CLI tests in both verifiers.
+
+**Why.** Step 9 named four codes and no precedence, and the two verifiers
+filled the gap differently. Six differential-fuzz splits
+(`docs/fuzz-runs/2026-10-22/` m-01770, m-01931, m-01969, m-01986;
+`docs/fuzz-runs/2026-10-24/` m-01906, m-01946) carried an in-bundle issuer
+coordinate collision on a rollback seed: with the seed's history the harness,
+which interleaved its checks per receipt, reported a rollback and pyref,
+which ran its in-bundle checks first, reported equivocation; without history
+the harness also reported equivocation, so its code for the same bytes
+depended on the history it held. Three history probes (2026-10-26) found
+defects the verifiers shared. Q1: an entry reusing a carried receipt's issuer
+coordinate under another ID passed. Q2: an entry reusing its epoch
+coordinate was reported as epoch rollback. Q3: an exact re-presentation of a
+carried receipt was rejected as epoch rollback, though this step calls exact
+repeated bytes a duplicate. These are conformance defects, not precedence
+choices: D-05 defines duplicate, reuse and equivocation with no bundle
+boundary, D-06 makes both sequence domains monotonic and the epoch domain
+unique, and D-82 amendment (ah) ("a reused epoch coordinate naming a
+different receipt id is `identity/coordinate-equivocation` and only a
+decreasing sequence is rollback") is not limited to one bundle. Two phases
+keep the code for an intrinsic defect independent of the verifier's history,
+so two relying parties holding different histories name the same defect for
+the same bytes. Class-wide passes keep serialization order from choosing the
+class (pyref looped over history first, the harness over receipts first). The
+duplicate exemption is receipt-wide because a per-entry one still rejects a
+full re-observation: with exact copies of every carried receipt as history,
+the receipt at epoch sequence 8 meets the copy at 9. The usage error exists
+because the history tuple is unique only as a whole, so contradictory
+records for one receipt were accepted, and a verifier should not sign a
+verdict over history it can see is corrupt.
+
+**Alternatives considered.** Global class order across both phases (reuse
+anywhere, then equivocation anywhere, then rollback): an intrinsic collision
+could not then mask a history reuse in the reported code, but that code
+would depend on the history supplied. Both orders reject the same bundles
+and differ only in the code; while codes are diagnostic, stability across
+verifier histories is worth more (rejected; revisit if a relying party is
+expected to act differently on reuse than on equivocation). Per-receipt
+interleave (the harness before this decision): receipt or history order
+picks the class. Rollback first, as the relying party's stronger evidence:
+the same history dependence, and a fork is reported as a rollback. A
+per-entry duplicate exemption (fails full re-observation, above). Treating
+an entry that contradicts a carried receipt as an ordinary non-duplicate,
+checked on its stated coordinates: a signed verdict over corrupt input.
+D-52 is not the precedent for phase order: it is an anti-masking rule, not
+a general state-independent-first rule; the two-phase choice rests on
+verdict stability alone.

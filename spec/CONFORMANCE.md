@@ -338,14 +338,40 @@ normative as the step order itself (D-54).
    86,400-second anchor cadence.
    Lease duration is `status_snapshot.lease_not_after - lease_not_before`; use
    before/after that interval fails even if the credential validity is wider.
-9. **Emission identity.** Sort observations by `(issuer kid, issuer_seq)` and by
-   `(epoch owner kid, epoch_id, epoch_seq)`. Exact repeated envelope bytes are one
-   duplicate observation and are coalesced with an informational verdict entry.
-   The same `receipt_id` with different envelope bytes is identity reuse. One
-   coordinate naming different IDs is equivocation
-   (`identity/coordinate-equivocation`, whichever coordinate repeats). A
-   decreasing issuer or epoch sequence is rollback. A gap is not itself a reject
-   in a `valid_subset` bundle.
+9. **Emission identity.** A receipt's issuer coordinate is `(signing kid,
+   issuer_seq)` and its epoch coordinate is `(epoch owner kid, epoch_id,
+   epoch_seq)`. Exact repeated envelope bytes are one duplicate observation and
+   are coalesced with an informational verdict entry. The same `receipt_id` with
+   different envelope bytes is identity reuse. One coordinate naming different
+   IDs is equivocation (`identity/coordinate-equivocation`, whichever coordinate
+   repeats). A strictly decreasing issuer or epoch sequence is rollback. A gap is
+   not itself a reject in a `valid_subset` bundle. The checks run in two phases,
+   and every phase-A failure outranks every phase-B failure (D-86):
+   1. **Phase A (always).** Over the carried receipts in canonical artifact
+      order, one full pass for `identity/reuse`, then one full pass for
+      `identity/coordinate-equivocation`, checking each receipt's issuer
+      coordinate before its epoch coordinate.
+   2. **Phase B (only when prior state is supplied).** Over every pair of a
+      carried receipt and a `prior_emissions` entry: (i) one full pass for
+      `identity/reuse` (same `receipt_id`, different `envelope_digest`); (ii) one
+      full pass for `identity/coordinate-equivocation` (same issuer coordinate
+      or same epoch coordinate, different `receipt_id`); (iii) over the
+      remaining receipts, one full pass for
+      `identity/issuer-sequence-rollback` (same signing kid, `issuer_seq`
+      strictly lower than the entry's), then one full pass for
+      `identity/epoch-sequence-rollback` (same epoch owner kid and `epoch_id`,
+      `epoch_seq` strictly lower than the entry's). A carried receipt equal to
+      an entry in `receipt_id`, `envelope_digest` and every coordinate is a
+      duplicate observation; it is exempt from (iii) but not from (i) or (ii).
+      An equal sequence naming a different ID is equivocation under (ii), never
+      rollback.
+
+   Within a class the reported witness is the first carried receipt in
+   canonical artifact order, then the first entry in committed order. Entries
+   that conflict only with each other do not fail the bundle. Before phase A,
+   an entry whose `receipt_id` and `envelope_digest` equal a carried receipt's
+   but whose coordinates differ from that receipt's is a usage error (section
+   5), and no verdict is produced.
 10. **Receipt schema semantics.** Require `kind`/body and kind/signer-role
     agreement; required evidence label presence (a label absent from the kind
     that requires it, or present on a kind that forbids it, is that class's
@@ -757,10 +783,10 @@ one input has several defects, section 2 selects the first verifier code.
 | `manifest/media-type-mismatch` | A manifest reference and supplied payload have different media types. |
 | `identity/receipt-id-mismatch` | Recomputed receipt ID differs from `receipt_id`. |
 | `identity/artifact-id-mismatch` | Recomputed delegation, credential, status, rotation, epoch-event, anchor, or Merkle-batch ID differs from its declared primary ID. |
-| `identity/reuse` | One receipt ID names nonidentical envelope bytes relative to prior evaluated state. |
-| `identity/coordinate-equivocation` | One issuer or epoch coordinate names different receipt IDs. |
-| `identity/issuer-sequence-rollback` | Issuer sequence decreases relative to a prior committed receipt in evaluated state. |
-| `identity/epoch-sequence-rollback` | Epoch sequence decreases within one owner/epoch (a reused coordinate naming a different ID is equivocation). |
+| `identity/reuse` | One receipt ID names nonidentical envelope bytes within the bundle (step 9 phase A) or relative to a supplied prior-state entry (phase B). |
+| `identity/coordinate-equivocation` | One issuer or epoch coordinate names different receipt IDs within the bundle (phase A) or between a carried receipt and a supplied prior-state entry (phase B); entries that conflict only with each other do not fail the bundle. |
+| `identity/issuer-sequence-rollback` | A carried receipt that exactly duplicates no prior-state entry has an `issuer_seq` strictly lower than an entry's for the same signing kid (an equal coordinate naming a different ID is equivocation). |
+| `identity/epoch-sequence-rollback` | A carried receipt that exactly duplicates no prior-state entry has an `epoch_seq` strictly lower than an entry's within the same owner/epoch (a reused coordinate naming a different ID is equivocation). |
 | `receipt/kind-body-mismatch` | Receipt `kind` does not select the supplied body production. |
 | `receipt/signer-role-mismatch` | Receipt kind, protected/payload role, or required credential key usage violates the closed signer matrix. |
 | `receipt/manifest-inconsistent` | Consumption, presentation, decision, or command manifest ordinals, counts, or cross-references disagree after direct byte/digest checks. |
@@ -1052,7 +1078,9 @@ uses `v: 5` because `verdict-trust-policy` gained
 `control_path_completeness` (D-84); its protected content type names the
 v0.3 line because a policy-mode signer cannot be resolved from the bundle
 (section 6), while every bundle artifact keeps its v0.2 content type. A v2,
-v3 or v4 consumer must not silently accept this verdict.
+v3 or v4 consumer must not silently accept this verdict. The v0.3.1 verdict
+keeps `v: 5` and this content type; v0.3.1 changes only step 9's precedence
+and history comparisons (D-86).
 
 `relying_party_policy_digest` is the SHA-256 of deterministic CBOR
 `["AAR-RP-POLICY-v1", relying-party-policy]` whenever a relying-party policy
@@ -1091,7 +1119,13 @@ The verdict digest preimages are frozen as follows:
   strictly sorted and unique by deterministic CBOR of `[issuer_kid, issuer_seq,
   epoch_owner_kid, epoch_id, epoch_seq, receipt_id, envelope_digest]`.
   Duplicate or unsorted `prior_emissions` in a supplied prior-state file is a
-  usage error. Supplying a file whose `prior_emissions` is empty or absent binds
+  usage error, as are two entries with the same `receipt_id` and
+  `envelope_digest` but different coordinates and, detected at step 9 before
+  phase A, an entry whose `receipt_id` and `envelope_digest` equal a carried
+  receipt's but whose coordinates differ from that receipt's (D-86); a usage
+  error produces no verdict. The digest always covers the supplied entries
+  exactly as given, never a subset step 9 exempts or filters. Supplying a file
+  whose `prior_emissions` is empty or absent binds
   the digest of `{ entries: [] }`. When no prior state was supplied,
   `prior_emissions_digest` is 32 zero bytes. No supplied prior state uses a zero
   digest (the D-51 absence discipline, extended by D-76).
