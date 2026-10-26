@@ -96,7 +96,8 @@ export function buildStatefulFixtures(): StatefulFixture[] {
   const lowestEpoch = source.entries.reduce((low, entry) => entry.epochSeq < low.epochSeq ? entry : low);
   const highestEpoch = source.entries.reduce((high, entry) => entry.epochSeq > high.epochSeq ? entry : high);
   const ids = (label: string): Pick<PriorEmission, "receiptId" | "envelopeDigest"> => ({ receiptId: deterministicId(`prior:${label}-receipt`), envelopeDigest: deterministicId(`prior:${label}-envelope`) });
-  // An epoch rollback for receipts[0] and nothing else; its zero issuer kid sorts it first in committed order.
+  // An epoch rollback for every carried receipt in receipts[0]'s epoch (here every carried receipt) and no other
+  // check; its zero issuer kid sorts it first in committed order.
   const epochAbove = { ...common, ...other, issuerKid: new Uint8Array(32), issuerSeq: 0, epochSeq: 9_999_999 };
   // One issuer and one epoch coordinate no carried receipt uses.
   const unrelated = { issuerKid: deterministicId("prior:history-only-issuer"), issuerSeq: 0, epochOwnerKid: deterministicId("prior:history-only-owner"), epochId: 1, epochSeq: 0 };

@@ -95,3 +95,24 @@ contract).
 
 Corpus after round 2: 532 rows (`pyref/results-c2.json`), 532 matched, 532
 deterministic, 0 divergences.
+
+## Round 3: prior-state boundary (2026-10-26)
+
+No row moved. `kats/` and `pyref/results-c2.json` are byte-identical to
+`37b6a43` (532 rows), and no row was added. The round closed four ways a
+prior state one verifier refuses could still be hashed or signed by the
+other:
+
+- The harness typed boundary (`verifyBundle`) and every verdict digest,
+  `emitFailureVerdict` included, now refuse malformed history. A typed extra
+  field or a hex-string byte field had signed conformant, and the failure
+  signer hashed `epoch_seq: false`.
+- Uint fields compare by numeric value: pyref reads JSON `1.0`, `1e0` and
+  `-0.0` as integers, as `JSON.parse` does for the harness. pyref had refused
+  `1.0`, which the harness accepted.
+- The library top level is closed to `prior_emissions` and `entries`.
+- The pyref CLI reports container and top-level errors with the libraries'
+  messages.
+
+Every refusal is a usage error with one message in the harness, the pyref
+library and the pyref CLI.
