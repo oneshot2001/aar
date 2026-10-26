@@ -340,17 +340,20 @@ normative as the step order itself (D-54).
    before/after that interval fails even if the credential validity is wider.
 9. **Emission identity.** A receipt's issuer coordinate is `(signing kid,
    issuer_seq)` and its epoch coordinate is `(epoch owner kid, epoch_id,
-   epoch_seq)`. Exact repeated envelope bytes are one duplicate observation and
-   are coalesced with an informational verdict entry. The same `receipt_id` with
-   different envelope bytes is identity reuse. One coordinate naming different
-   IDs is equivocation (`identity/coordinate-equivocation`, whichever coordinate
-   repeats). A strictly decreasing issuer or epoch sequence is rollback. A gap is
-   not itself a reject in a `valid_subset` bundle. The checks run in two phases,
+   epoch_seq)`. A `receipt_id` repeated within `artifacts.receipts` has already
+   failed step 3 (`schema/duplicate-entry`), equal bytes or not, so carried
+   receipts meet each other here only by coordinate. A carried receipt that
+   exactly re-presents a supplied prior-state entry is a duplicate observation
+   (`duplicate_exact`, an informational verdict entry). The same `receipt_id`
+   as a prior-state entry with different envelope bytes is identity reuse. One
+   coordinate naming different IDs is equivocation
+   (`identity/coordinate-equivocation`, whichever coordinate repeats). A
+   strictly decreasing issuer or epoch sequence is rollback. A gap is not
+   itself a reject in a `valid_subset` bundle. The checks run in two phases,
    and every phase-A failure outranks every phase-B failure (D-86):
    1. **Phase A (always).** Over the carried receipts in canonical artifact
-      order, one full pass for `identity/reuse`, then one full pass for
-      `identity/coordinate-equivocation`, checking each receipt's issuer
-      coordinate before its epoch coordinate.
+      order, one full pass for `identity/coordinate-equivocation`, checking
+      each receipt's issuer coordinate before its epoch coordinate.
    2. **Phase B (only when prior state is supplied).** Over every pair of a
       carried receipt and a `prior_emissions` entry: (i) one full pass for
       `identity/reuse` (same `receipt_id`, different `envelope_digest`); (ii) one
@@ -783,7 +786,7 @@ one input has several defects, section 2 selects the first verifier code.
 | `manifest/media-type-mismatch` | A manifest reference and supplied payload have different media types. |
 | `identity/receipt-id-mismatch` | Recomputed receipt ID differs from `receipt_id`. |
 | `identity/artifact-id-mismatch` | Recomputed delegation, credential, status, rotation, epoch-event, anchor, or Merkle-batch ID differs from its declared primary ID. |
-| `identity/reuse` | One receipt ID names nonidentical envelope bytes within the bundle (step 9 phase A) or relative to a supplied prior-state entry (phase B). |
+| `identity/reuse` | A carried receipt ID names envelope bytes different from a supplied prior-state entry's (step 9 phase B). A receipt ID repeated within the bundle fails earlier, at step 3 (`schema/duplicate-entry`). |
 | `identity/coordinate-equivocation` | One issuer or epoch coordinate names different receipt IDs within the bundle (phase A) or between a carried receipt and a supplied prior-state entry (phase B); entries that conflict only with each other do not fail the bundle. |
 | `identity/issuer-sequence-rollback` | A carried receipt that exactly duplicates no prior-state entry has an `issuer_seq` strictly lower than an entry's for the same signing kid (an equal coordinate naming a different ID is equivocation). |
 | `identity/epoch-sequence-rollback` | A carried receipt that exactly duplicates no prior-state entry has an `epoch_seq` strictly lower than an entry's within the same owner/epoch (a reused coordinate naming a different ID is equivocation). |
@@ -890,7 +893,8 @@ relevant `schema/missing-field`) so the trigger remains unambiguous.
 These are signed verdict observations, not reason codes and never replace the
 first-failure reason:
 
-- `duplicate_exact`: identical envelope bytes were observed more than once;
+- `duplicate_exact`: a carried receipt exactly re-presents a supplied
+  prior-state entry (step 9 phase B);
 - `valid_prefix`: epochs validate only through the newest fresh expected head;
 - `producer_declared_complete`: `complete` holds for selected signed indexes;
 - `ingress_completeness_not_established`: no independent census/reconciliation;

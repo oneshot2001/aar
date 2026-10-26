@@ -108,14 +108,8 @@ def emission_identity(state: verifier.State) -> None:
            for item in carried for entry in history):
         raise relying_party.UsageError(HISTORY_CONTRADICTS_RECEIPT)
 
-    # Phase A: reuse over the whole bundle, then equivocation (issuer before epoch per receipt).
-    by_receipt: dict[bytes, bytes] = {}
-    for item in carried:
-        if item["receipt_id"] in by_receipt:
-            if by_receipt[item["receipt_id"]] != item["envelope_digest"]:
-                verifier._fail("identity/reuse", 9)
-            state.observations.append("duplicate_exact")
-        by_receipt[item["receipt_id"]] = item["envelope_digest"]
+    # Phase A: one equivocation pass, issuer before epoch per receipt. Step 3 already
+    # rejects a repeated receipt_id in artifacts.receipts, so there is no in-bundle reuse.
     by_issuer_coordinate: dict[tuple[bytes, int], bytes] = {}
     by_epoch_coordinate: dict[tuple[bytes, int, int], bytes] = {}
     for item in carried:

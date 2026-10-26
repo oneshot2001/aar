@@ -2211,11 +2211,10 @@ failure outranks every phase-B failure.
    `epoch_id`, `epoch_seq`) differ from that receipt's is a usage error,
    checked at step 9 before phase A.
 1. **Phase A (always).** Over the carried receipts in canonical artifact
-   order: one full pass for `identity/reuse`, then one full pass for
-   `identity/coordinate-equivocation`, the issuer coordinate `(signing kid,
-   issuer_seq)` before the epoch coordinate `(owner, epoch_id, epoch_seq)` for
-   each receipt. An exact in-bundle repeat stays a coalesced duplicate
-   observation.
+   order: one full pass for `identity/coordinate-equivocation`, the issuer
+   coordinate `(signing kid, issuer_seq)` before the epoch coordinate
+   `(owner, epoch_id, epoch_seq)` for each receipt. A `receipt_id` repeated
+   within the bundle has already failed step 3 (`schema/duplicate-entry`).
 2. **Phase B (only with supplied prior state).** Over every carried
    receipt × entry pair: (i) one full pass for `identity/reuse` (same ID,
    different digest); (ii) one full pass for
@@ -2298,3 +2297,9 @@ unsigned integers that are never booleans, four 32-byte values, checked by
 the library and the command line alike before evaluation begins. pyref's
 library had taken entries unchecked, so `epoch_seq: false` compared equal to
 0 and pyref signed a conformant verdict over history the harness refused.
+Phase A is one equivocation pass: step 3 rejects any repeated `receipt_id`
+in `artifacts.receipts`, equal bytes or not, before step 9 runs, so the
+phase-A reuse pass and the coalesced in-bundle duplicate were unreachable in
+both verifiers; both are removed and step 3 stays as released.
+`duplicate_exact` now means only an exact re-observation of a prior-state
+entry (the D-05 duplicate, observed against history).

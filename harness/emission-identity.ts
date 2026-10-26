@@ -86,14 +86,8 @@ export function validateEmission(parsed: Parsed, prior: readonly PriorEmission[]
     throw new Error(HISTORY_CONTRADICTS_RECEIPT);
   }
 
-  // Phase A: reuse over the whole bundle, then equivocation (issuer before epoch per receipt).
-  const byId = new Map<string, string>();
-  for (const receipt of carried) {
-    const digest = byId.get(receipt.id);
-    if (digest !== undefined && digest !== receipt.digest) return failure(9, "identity/reuse", "receipts");
-    if (digest !== undefined) observe(observations, "duplicate_exact");
-    byId.set(receipt.id, receipt.digest);
-  }
+  // Phase A: one equivocation pass, issuer before epoch per receipt. Step 3 already
+  // rejects a repeated receipt_id in artifacts.receipts, so there is no in-bundle reuse.
   const issuers = new Map<string, string>();
   const epochs = new Map<string, string>();
   for (const receipt of carried) {
