@@ -12,7 +12,7 @@ Module shape between the TypeScript harness and the Python reference is reviewed
 
 ## Regenerating fixtures
 
-Order matters: `bun run harness/generate.ts` (clears `kats/positive/`), then `bun run harness/generate-negative.ts` (writes the negative set and the D-77/80/82 repair positives back), then `bun run harness/generate-relying-party.ts`; then `python3 -B -m pyref.kat --slice all` to re-pin. Running `generate-negative.ts` before `generate.ts` loses 20 positive rows.
+Order matters: `bun run harness/generate.ts` (clears `kats/positive/`), then `bun run harness/generate-negative.ts` (writes the negative set, the stateful rows under `kats/negative/stateful/` and, for conformant ones, `kats/positive/stateful/`, and the D-77/80/82 repair positives back), then `bun run harness/generate-relying-party.ts`; then `python3 -B -m pyref.kat --slice all` to re-pin. Running `generate-negative.ts` before `generate.ts` loses 20 positive rows.
 
 ## Differential fuzz
 

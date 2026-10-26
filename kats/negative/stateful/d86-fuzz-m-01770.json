@@ -1,0 +1,5 @@
+{
+  "name": "d86-fuzz-m-01770",
+  "expected_code": "identity/coordinate-equivocation",
+  "mutation_description": "Fuzz split docs/fuzz-runs/2026-10-22/m-01770 rebuilt: receipts[5].emission.issuer_seq = 104 repeats a sibling's issuer coordinate on the issuer-sequence-rollback seed and prior; the in-bundle collision (phase A) outranks the history rollback (D-86)."
+}

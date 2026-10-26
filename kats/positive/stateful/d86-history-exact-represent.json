@@ -1,0 +1,9 @@
+{
+  "name": "d86-history-exact-represent",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "expected_observations": [
+    "duplicate_exact"
+  ],
+  "mutation_description": "Q3: the prior entry exactly re-presents one carried receipt; it is a duplicate observation, exempt from rollback against its own sequence."
+}

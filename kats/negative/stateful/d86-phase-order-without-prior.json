@@ -1,0 +1,5 @@
+{
+  "name": "d86-phase-order-without-prior",
+  "expected_code": "identity/coordinate-equivocation",
+  "mutation_description": "Phase order: the d86-phase-order-with-prior bundle evaluated without prior state reports the same code."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "d86-history-reuse-outranks-rollback",
+  "expected_code": "identity/reuse",
+  "mutation_description": "Phase B class order: receipts[0] is an epoch rollback against the first committed entry and an ID reuse against a later one; the reuse pass runs first."
+}

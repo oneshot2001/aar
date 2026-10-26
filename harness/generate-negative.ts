@@ -23,14 +23,18 @@ const fork = buildFixtures().forkDeclared;
 await writeFile(join(outputDirectory, `${fork.filename}.cbor`), fork.bytes);
 await writeFile(join(outputDirectory, `${fork.filename}.json`), `${JSON.stringify(fork.descriptor, null, 2)}\n`);
 
-const statefulDirectory = join(outputDirectory, "stateful");
-await mkdir(statefulDirectory, { recursive: true });
-for (const entry of await readdir(statefulDirectory)) if (entry.endsWith(".cbor") || entry.endsWith(".json")) await rm(join(statefulDirectory, entry));
+// D-86: conformant stateful rows live under kats/positive/stateful/, the rest under kats/negative/stateful/.
+const statefulDirectory = (code: string | null): string => join(outputDirectory, "..", code === null ? "positive" : "negative", "stateful");
+for (const directory of [statefulDirectory(null), statefulDirectory("")]) {
+  await mkdir(directory, { recursive: true });
+  for (const entry of await readdir(directory)) if (entry.endsWith(".cbor") || entry.endsWith(".json")) await rm(join(directory, entry));
+}
 const stateful = buildStatefulFixtures();
 for (const fixture of stateful) {
-  await writeFile(join(statefulDirectory, `${fixture.name}.bundle.cbor`), fixture.bundle);
-  await writeFile(join(statefulDirectory, `${fixture.name}.prior.json`), `${JSON.stringify(fixture.prior, null, 2)}\n`);
-  await writeFile(join(statefulDirectory, `${fixture.name}.json`), `${JSON.stringify(fixture.descriptor, null, 2)}\n`);
+  const directory = statefulDirectory(fixture.descriptor.expected_code);
+  await writeFile(join(directory, `${fixture.name}.bundle.cbor`), fixture.bundle);
+  if (fixture.prior) await writeFile(join(directory, `${fixture.name}.prior.json`), `${JSON.stringify(fixture.prior, null, 2)}\n`);
+  await writeFile(join(directory, `${fixture.name}.json`), `${JSON.stringify(fixture.descriptor, null, 2)}\n`);
 }
 
 const classDirectory = join(outputDirectory, "..", "class-boundary");

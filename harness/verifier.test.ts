@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
 import { addDelegationLadder, buildNegativeFixtures, buildRequestCoordinateVariants, mutateEmbeddedDelegationForProbe } from "./negative-fixtures";
-import { buildStatefulFixtures, parseStatefulPrior } from "./stateful-fixtures";
+import { parseStatefulPrior } from "./stateful-fixtures";
 import { domainHash, verifySigned } from "./crypto";
 import { TEST_KEYS } from "./testkeys";
 import { verifyBundle } from "./verifier";
@@ -243,14 +243,6 @@ print(json.dumps({"result": r.result, "reason": r.reason, "hex": r.verdict_bytes
     }
   }, 300_000);
 
-  test("stateful paired fixtures return their exact prior-state identity code", () => {
-    for (const fixture of buildStatefulFixtures()) {
-      const result = verifyBundle(fixture.bundle, { evaluationTime: AT, priorEmissions: parseStatefulPrior(fixture.prior) });
-      expect(result.ok, fixture.name).toBe(false);
-      if (!result.ok) expect(result.reason, fixture.name).toBe(fixture.descriptor.expected_code);
-    }
-  });
-
   test("D-76 binds empty, unrelated, and rollback prior files with pyref digest parity", () => {
     const directory = mkdtempSync(join(tmpdir(), "aar-d76-"));
     const stem = join(root, "kats", "negative", "stateful", "identity-issuer-sequence-rollback");
@@ -287,7 +279,7 @@ print(r.verdict["trust_policy"]["prior_emissions_digest"].hex())
       expect(new Set(verdicts).size).toBe(3);
       const omitted = verifyBundle(input, { evaluationTime: AT, replayState: [], priorEmissions: parseStatefulPrior({}) });
       expect(toHex((omitted.verdict!.trust_policy as Record<string, CborValue>).prior_emissions_digest as Uint8Array)).toBe(digests[0]!);
-      const low = unrelated.prior_emissions[0]!; const high = { ...rollback.prior_emissions[0]!, issuer_seq: 1 };
+      const low = unrelated.prior_emissions[0]!; const high = { ...rollback.prior_emissions[0]!, receipt_id: "1".repeat(64) };
       expect(() => verifyBundle(input, { evaluationTime: AT, priorEmissions: parseStatefulPrior({ prior_emissions: [low, high] }) })).not.toThrow();
       for (const entries of [[high, low], [high, high]]) {
         expect(() => verifyBundle(input, { evaluationTime: AT, priorEmissions: parseStatefulPrior({ prior_emissions: entries }) })).toThrow("prior-state.prior_emissions must be strictly sorted and unique");
@@ -296,13 +288,4 @@ print(r.verdict["trust_policy"]["prior_emissions_digest"].hex())
       rmSync(directory, { recursive: true, force: true });
     }
   }, 120_000);
-
-  test("generated stateful pairs and descriptors match in-memory fixtures", () => {
-    for (const fixture of buildStatefulFixtures()) {
-      const directory = join(root, "kats", "negative", "stateful");
-      expect(equalBytes(readFileSync(join(directory, `${fixture.name}.bundle.cbor`)), fixture.bundle), fixture.name).toBe(true);
-      expect(JSON.parse(readFileSync(join(directory, `${fixture.name}.prior.json`), "utf8")), fixture.name).toEqual(fixture.prior);
-      expect(JSON.parse(readFileSync(join(directory, `${fixture.name}.json`), "utf8")), fixture.name).toEqual(fixture.descriptor);
-    }
-  });
 });

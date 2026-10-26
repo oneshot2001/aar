@@ -608,7 +608,7 @@ def _c2_fixture_paths() -> list[Path]:
     paths.extend((ROOT / "kats" / "evidence-commit").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "countersign").glob("*.cbor"))
     paths.extend((ROOT / "kats" / "negative").glob("*.cbor"))
-    paths.extend((ROOT / "kats" / "negative" / "stateful").glob("*.bundle.cbor"))
+    paths.extend((ROOT / "kats").glob("*/stateful/*.bundle.cbor"))
     paths.extend(_rp_fixture_paths())
     return sorted(paths)
 
@@ -724,7 +724,7 @@ def _prior_digest_checks() -> None:
                            prior_state=prior, replay_state=replay)
         assert omitted.verdict["trust_policy"]["prior_emissions_digest"] == digests[0]
         low = unrelated["prior_emissions"][0]
-        high = {**rollback["prior_emissions"][0], "issuer_seq": 1}
+        high = {**rollback["prior_emissions"][0], "receipt_id": "1" * 64}
         try:
             evaluate(raw, evaluated_at=KAT_EVALUATION_TIME,
                      prior_state={"prior_emissions": [high, low]})

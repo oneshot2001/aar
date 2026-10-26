@@ -1,0 +1,5 @@
+{
+  "name": "d86-history-issuer-coordinate",
+  "expected_code": "identity/coordinate-equivocation",
+  "mutation_description": "Q1: a prior entry names a carried receipt's issuer coordinate (its issuer's lowest issuer_seq) under a different receipt ID, in an unrelated epoch."
+}
