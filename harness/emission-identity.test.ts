@@ -8,11 +8,12 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { equalBytes } from "./cbor";
+import { equalBytes, toHex } from "./cbor";
 import { deterministicId } from "./crypto";
 import { HISTORY_CONTRADICTS_ITSELF, HISTORY_CONTRADICTS_RECEIPT, parsePriorState } from "./emission-identity";
 import { buildStatefulFixtures, exactEntries, FUZZ_SPLITS, mutated, parseStatefulPrior, priorJson, StatefulFixture } from "./stateful-fixtures";
-import { Obj, PriorEmission, verifyBundle } from "./verifier";
+import { emitFailureVerdict } from "./verdict";
+import { failure, Obj, PriorEmission, verifyBundle } from "./verifier";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const AT = 1_735_689_800;
@@ -153,8 +154,25 @@ describe("D-86 emission identity", () => {
       ["extra key", { prior_emissions: [{ ...exact, note: 0 }] }, `${label}: unknown note`, "ValueError"],
     ];
     expectUsageError(represent.bundle, cases);
-    // A typed caller of verifyBundle meets the same check at the prior-state boundary.
-    const typed = { ...parseStatefulPrior(represent.prior!)[0]!, epochSeq: false } as unknown as PriorEmission;
-    expect(() => verifyBundle(represent.bundle, { evaluationTime: AT, priorEmissions: [typed] })).toThrow(`${label}.epoch_seq must be an unsigned integer <= 9007199254740991`);
+  });
+
+  test("the typed boundary (verifyBundle and every verdict digest) refuses what pyref refuses and never decodes a string (E-11)", () => {
+    const represent = fixture("d86-history-exact-represent");
+    const entry = parseStatefulPrior(represent.prior!)[0]!;
+    const label = "prior-state.prior_emissions[0]";
+    const typed: [string, unknown, string][] = [
+      ["bool uint", { ...entry, epochSeq: false }, `${label}.epoch_seq must be an unsigned integer <= 9007199254740991`],
+      ["extra field", { ...entry, note: 0 }, `${label}: unknown note`],
+      ["missing field", Object.fromEntries(Object.entries(entry).filter(([field]) => field !== "epochSeq")), `${label}: missing epoch_seq`],
+      ["hex string", { ...entry, issuerKid: toHex(entry.issuerKid) }, `${label}.issuer_kid must be a 32-byte Uint8Array`],
+      ["31 bytes", { ...entry, issuerKid: entry.issuerKid.slice(1) }, `${label}.issuer_kid must decode to exactly 32 bytes`],
+    ];
+    for (const [name, item, message] of typed) {
+      const priorEmissions = [item as PriorEmission];
+      expect(() => verifyBundle(represent.bundle, { evaluationTime: AT, priorEmissions }), name).toThrow(message);
+      // The exported failure signer hashes the same history: it refuses before hashing.
+      expect(() => emitFailureVerdict(new Uint8Array(), failure(2, "cbor/noncanonical"), { evaluationTime: AT, priorEmissions }), name).toThrow(message);
+    }
+    expect(() => verifyBundle(represent.bundle, { evaluationTime: AT, priorEmissions: {} as unknown as PriorEmission[] })).toThrow("prior-state.prior_emissions must be an array");
   });
 });

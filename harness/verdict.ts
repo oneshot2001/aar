@@ -1,5 +1,6 @@
 import { CborScalar, CborValue, encodeCbor, toHex } from "./cbor";
 import { deterministicId, domainHash, hash, signDetachedWithKey } from "./crypto";
+import { checkPriorEmissions } from "./emission-identity";
 import { Configuration, signerKey } from "./relying-party";
 import { bytes, compareEncoded, entryMatchesSelector, same } from "./verifier";
 import type { B1Failure, B1Success, EvidenceLimits, Obj, Parsed, PriorEmission, ReplayUse, validateInputOrigins, VerifyB1Options } from "./verifier";
@@ -44,8 +45,11 @@ function replayStateDigest(state: readonly ReplayUse[] | undefined): Uint8Array 
   return state === undefined ? ZERO_DIGEST : domainHash("AAR-VERDICT-REPLAY-v1", replayStateMap(state));
 }
 
+// Refuses malformed history before hashing it, for every verdict constructor
+// (pyref verdict._prior_emissions_digest validates through _prior_emissions_map).
 function priorEmissionsDigest(state: readonly PriorEmission[] | undefined): Uint8Array {
   if (state === undefined) return ZERO_DIGEST;
+  checkPriorEmissions(state);
   const entries = state.map((entry) => ({
     issuer_kid: entry.issuerKid, issuer_seq: entry.issuerSeq,
     epoch_owner_kid: entry.epochOwnerKid, epoch_id: entry.epochId, epoch_seq: entry.epochSeq,

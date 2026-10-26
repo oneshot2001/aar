@@ -13,35 +13,45 @@ export const HISTORY_CONTRADICTS_RECEIPT = "prior-state.prior_emissions entry ma
 const PRIOR_KEYS = [["issuer_kid", "issuerKid"], ["issuer_seq", "issuerSeq"], ["epoch_owner_kid", "epochOwnerKid"], ["epoch_id", "epochId"], ["epoch_seq", "epochSeq"], ["receipt_id", "receiptId"], ["envelope_digest", "envelopeDigest"]] as const;
 const plain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-// One entry field, with pyref's messages: a uint, or 32 bytes as hex (JSON) or as bytes (a typed caller).
-function priorField(value: unknown, key: string, label: string): number | Uint8Array {
-  if (key === "issuer_seq" || key === "epoch_id" || key === "epoch_seq") {
-    if (!uint(value as CborValue)) throw new Error(`${label} must be an unsigned integer <= 9007199254740991`);
-    return value as number;
-  }
-  if (value instanceof Uint8Array && value.length === 32) return value;
-  if (value instanceof Uint8Array) throw new Error(`${label} must decode to exactly 32 bytes`);
-  if (typeof value !== "string") throw new Error(`${label} must be a 32-byte lowercase or uppercase hex string`);
-  if (!/^(?:[0-9a-fA-F]{2})*$/.test(value)) throw new Error(`${label} is not valid hex`);
-  if (value.length !== 64) throw new Error(`${label} must decode to exactly 32 bytes`);
-  return fromHex(value);
+const UINT_KEYS: readonly string[] = ["issuer_seq", "epoch_id", "epoch_seq"];
+
+function uintField(value: unknown, label: string): number {
+  if (!uint(value as CborValue)) throw new Error(`${label} must be an unsigned integer <= 9007199254740991`);
+  return value as number;
 }
 
-// The JSON prior state (pyref emission_identity.prior_entries): closed seven-key entries.
+// A closed entry: every field present, nothing else, named by its wire key when
+// missing (pyref's message). The JSON form uses wire keys, the typed form field names.
+function closedEntry(item: unknown, label: string, typed: boolean): Record<string, unknown> {
+  if (!plain(item)) throw new Error(`${label} must be a JSON object`);
+  const names: readonly string[] = PRIOR_KEYS.map(([key, field]) => typed ? field : key);
+  const missing = PRIOR_KEYS.filter(([key, field]) => !Object.hasOwn(item, typed ? field : key)).map(([key]) => key).sort();
+  const unknown = Object.keys(item).filter((key) => !names.includes(key)).sort();
+  if (missing.length > 0 || unknown.length > 0) {
+    throw new Error(`${label}: ${[...(missing.length > 0 ? [`missing ${missing.join(", ")}`] : []), ...(unknown.length > 0 ? [`unknown ${unknown.join(", ")}`] : [])].join("; ")}`);
+  }
+  return item;
+}
+
+// The JSON prior state (pyref emission_identity.prior_entries): a closed top level and
+// closed seven-key entries; hex strings are decoded here and nowhere else.
 export function parsePriorState(value: unknown): PriorEmission[] {
   if (!plain(value)) throw new Error("prior-state must be a JSON object");
+  const unknown = Object.keys(value).filter((key) => key !== "prior_emissions" && key !== "entries").sort();
+  if (unknown.length > 0) throw new Error(`prior-state: unknown ${unknown.join(", ")}`);
   const source = Object.hasOwn(value, "prior_emissions") ? value.prior_emissions : [];
   if (!Array.isArray(source)) throw new Error("prior-state.prior_emissions must be an array");
-  const names: readonly string[] = PRIOR_KEYS.map(([key]) => key);
   return source.map((item: unknown, index) => {
     const label = `prior-state.prior_emissions[${index}]`;
-    if (!plain(item)) throw new Error(`${label} must be a JSON object`);
-    const missing = names.filter((key) => !Object.hasOwn(item, key)).sort();
-    const unknown = Object.keys(item).filter((key) => !names.includes(key)).sort();
-    if (missing.length > 0 || unknown.length > 0) {
-      throw new Error(`${label}: ${[...(missing.length > 0 ? [`missing ${missing.join(", ")}`] : []), ...(unknown.length > 0 ? [`unknown ${unknown.join(", ")}`] : [])].join("; ")}`);
-    }
-    return Object.fromEntries(PRIOR_KEYS.map(([key, field]) => [field, priorField(item[key], key, `${label}.${key}`)])) as unknown as PriorEmission;
+    const entry = closedEntry(item, label, false);
+    return Object.fromEntries(PRIOR_KEYS.map(([key, field]) => {
+      const raw = entry[key];
+      if (UINT_KEYS.includes(key)) return [field, uintField(raw, `${label}.${key}`)];
+      if (typeof raw !== "string") throw new Error(`${label}.${key} must be a 32-byte lowercase or uppercase hex string`);
+      if (!/^(?:[0-9a-fA-F]{2})*$/.test(raw)) throw new Error(`${label}.${key} is not valid hex`);
+      if (raw.length !== 64) throw new Error(`${label}.${key} must decode to exactly 32 bytes`);
+      return [field, fromHex(raw)];
+    })) as unknown as PriorEmission;
   });
 }
 
@@ -54,10 +64,22 @@ function emission(id: Uint8Array, digest: Uint8Array, kid: Uint8Array, seq: numb
 const fromPrior = (entry: PriorEmission): Emission => emission(entry.receiptId, entry.envelopeDigest, entry.issuerKid, entry.issuerSeq, entry.epochOwnerKid, entry.epochId, entry.epochSeq);
 const sameCoordinates = (left: Emission, right: Emission): boolean => left.issuer === right.issuer && left.epoch === right.epoch;
 
-// verifyBundle's prior-state boundary, before evaluation begins: entry shape, the
-// D-76 strict order, then D-86 rule 0(a) (pyref emission_identity.prior_entries).
+// The typed prior-state boundary, run by verifyBundle before evaluation begins and by
+// the verdict digest before hashing (pyref emission_identity.prior_entries): an array
+// of closed entries holding 32-byte Uint8Arrays (a string is refused, never decoded)
+// and uints, then the D-76 strict order, then D-86 rule 0(a).
 export function checkPriorEmissions(prior: readonly PriorEmission[]): void {
-  prior.forEach((entry, index) => { for (const [key, field] of PRIOR_KEYS) priorField(entry[field], key, `prior-state.prior_emissions[${index}].${key}`); });
+  if (!Array.isArray(prior)) throw new Error("prior-state.prior_emissions must be an array");
+  prior.forEach((item, index) => {
+    const label = `prior-state.prior_emissions[${index}]`;
+    const entry = closedEntry(item, label, true);
+    for (const [key, field] of PRIOR_KEYS) {
+      const value = entry[field];
+      if (UINT_KEYS.includes(key)) uintField(value, `${label}.${key}`);
+      else if (!(value instanceof Uint8Array)) throw new Error(`${label}.${key} must be a 32-byte Uint8Array`);
+      else if (value.length !== 32) throw new Error(`${label}.${key} must decode to exactly 32 bytes`);
+    }
+  });
   const keys = prior.map((entry) => toHex(encodeCbor(PRIOR_KEYS.map(([, field]) => entry[field]))));
   if (keys.some((key, index) => index > 0 && keys[index - 1]! >= key)) throw new Error("prior-state.prior_emissions must be strictly sorted and unique");
   const seen = new Map<string, Emission>();
