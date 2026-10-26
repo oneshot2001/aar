@@ -180,30 +180,11 @@ def _prior_state(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     if not isinstance(emissions_source, list) or not isinstance(entries_source, list):
         raise UsageError("prior-state.prior_emissions and prior-state.entries must be arrays")
 
-    emissions = []
-    emission_keys = {
-        "issuer_kid", "issuer_seq", "epoch_owner_kid", "epoch_id", "epoch_seq",
-        "receipt_id", "envelope_digest",
-    }
-    for index, item in enumerate(emissions_source):
-        label = f"prior-state.prior_emissions[{index}]"
-        item = _closed(item, emission_keys, label)
-        emissions.append({
-            "issuer_kid": _hex_bytes(item["issuer_kid"], 32, f"{label}.issuer_kid").hex(),
-            "issuer_seq": _uint(item["issuer_seq"], f"{label}.issuer_seq"),
-            "epoch_owner_kid": _hex_bytes(
-                item["epoch_owner_kid"], 32, f"{label}.epoch_owner_kid"
-            ).hex(),
-            "epoch_id": _uint(item["epoch_id"], f"{label}.epoch_id"),
-            "epoch_seq": _uint(item["epoch_seq"], f"{label}.epoch_seq"),
-            "receipt_id": _hex_bytes(item["receipt_id"], 32, f"{label}.receipt_id").hex(),
-            "envelope_digest": _hex_bytes(
-                item["envelope_digest"], 32, f"{label}.envelope_digest"
-            ).hex(),
-        })
-
+    # The library's own check (entry shape, D-76 order, D-86 rule 0(a)), so the
+    # CLI and evaluate() refuse the same history with the same message.
+    emissions = {"prior_emissions": emissions_source}
     try:
-        _prior_emissions_map({"prior_emissions": emissions})
+        _prior_emissions_map(emissions)
     except ValueError as exc:
         raise UsageError(str(exc)) from exc
 
@@ -222,7 +203,7 @@ def _prior_state(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     ]
     if any(previous >= current for previous, current in zip(entry_keys, entry_keys[1:])):
         raise UsageError("prior-state.entries must be strictly sorted and unique")
-    return {"prior_emissions": emissions}, {"entries": entries}
+    return emissions, {"entries": entries}
 
 
 def _check_policy_pin(raw: bytes, policy: dict[str, Any]) -> None:

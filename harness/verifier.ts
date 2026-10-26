@@ -1,7 +1,7 @@
 import { p256 } from "@noble/curves/nist.js";
 import { CborScalar, CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
 import { domainHash, hash, P256_HALF_ORDER, signatureScalars } from "./crypto";
-import { checkPriorHistory, validateEmission } from "./emission-identity";
+import { checkPriorEmissions, validateEmission } from "./emission-identity";
 import { promotedRoot, rfc6962Leaf, verifyPromotedProof, verifyRfc6962Consistency, verifyRfc6962Inclusion } from "./merkle";
 import { acceptRoots, Configuration, signerUses, verifierIdentity } from "./relying-party";
 import { emitFailureVerdict, emitVerdict } from "./verdict";
@@ -2106,14 +2106,7 @@ export function verifyBundle(input: Uint8Array, options: VerifyB1Options): B1Ver
   // (pyref --at symmetry); the wall clock is never read. The runtime check
   // covers untyped callers.
   if (!uint(options?.evaluationTime)) throw new Error("verifyBundle requires options.evaluationTime as a uint <= 2^53-1; wall-clock fallback is forbidden");
-  const priorKeys = (options.priorEmissions ?? []).map((entry) => toHex(encodeCbor([
-    entry.issuerKid, entry.issuerSeq, entry.epochOwnerKid, entry.epochId,
-    entry.epochSeq, entry.receiptId, entry.envelopeDigest,
-  ])));
-  if (priorKeys.some((key, index) => index > 0 && priorKeys[index - 1]! >= key)) {
-    throw new Error("prior-state.prior_emissions must be strictly sorted and unique");
-  }
-  checkPriorHistory(options.priorEmissions ?? []);
+  checkPriorEmissions(options.priorEmissions ?? []);
   return validateBundle(input, options);
 }
 

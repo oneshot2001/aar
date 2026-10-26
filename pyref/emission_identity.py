@@ -1,18 +1,20 @@
 """CONFORMANCE step 9, emission identity (D-86).
 
-History consistency, then phase A over the carried receipts alone, then phase
-B against supplied prior state, one reason class per full pass.
-``harness/emission-identity.ts`` mirrors this module. Rejections go through
-``verifier._fail`` by attribute so the premise recorder sees them; history that
-contradicts itself or a carried receipt is a usage error (no verdict), like
-the D-76 duplicate/unsorted rule.
+Supplied prior state is checked first (entry shape, D-76 order, rule 0(a)),
+then phase A over the carried receipts alone, then phase B against the prior
+state, one reason class per full pass. ``harness/emission-identity.ts``
+mirrors this module. Rejections go through ``verifier._fail`` by attribute so
+the premise recorder sees them; malformed or contradictory history is a usage
+error (no verdict), like the D-76 duplicate/unsorted rule.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from . import hashes, relying_party, verifier
+from .cbor import dumps
 
 HISTORY_CONTRADICTS_ITSELF = (
     "prior-state.prior_emissions entries with one receipt_id and envelope_digest must have the same coordinates"
@@ -20,6 +22,9 @@ HISTORY_CONTRADICTS_ITSELF = (
 HISTORY_CONTRADICTS_RECEIPT = (
     "prior-state.prior_emissions entry matches a carried receipt's receipt_id and envelope_digest but not its coordinates"
 )
+ENTRY_KEYS = ("issuer_kid", "issuer_seq", "epoch_owner_kid", "epoch_id", "epoch_seq", "receipt_id", "envelope_digest")
+UINT_KEYS = ("issuer_seq", "epoch_id", "epoch_seq")
+HEX = re.compile(r"(?:[0-9a-fA-F]{2})*")
 
 
 def _issuer(item: dict[str, Any]) -> tuple[bytes, int]:
@@ -30,13 +35,48 @@ def _epoch(item: dict[str, Any]) -> tuple[bytes, int, int]:
     return item["epoch_owner_kid"], item["epoch_id"], item["epoch_seq"]
 
 
-def check_history(entries: list[dict[str, Any]]) -> None:
-    """D-86 rule 0(a): checked with the duplicate/unsorted rule, before any bundle byte is read."""
+def _field(value: Any, key: str, label: str) -> Any:
+    if key in UINT_KEYS:
+        if not verifier._uint(value):
+            raise ValueError(f"{label} must be an unsigned integer <= 9007199254740991")
+        return value
+    if not isinstance(value, str):
+        raise ValueError(f"{label} must be a 32-byte lowercase or uppercase hex string")
+    if not HEX.fullmatch(value):
+        raise ValueError(f"{label} is not valid hex")
+    if len(value) != 64:
+        raise ValueError(f"{label} must decode to exactly 32 bytes")
+    return bytes.fromhex(value)
+
+
+def prior_entries(value: dict[str, Any]) -> list[dict[str, Any]]:
+    """Supplied prior state, for evaluate() and the CLI alike: each entry is the
+    closed seven-key map (uints, 32-byte hex), then the D-76 strict order, then
+    D-86 rule 0(a). Any failure raises ValueError before evaluation begins."""
+    if not isinstance(value, dict):
+        raise ValueError("prior-state must be a JSON object")
+    source = value.get("prior_emissions", [])
+    if not isinstance(source, list):
+        raise ValueError("prior-state.prior_emissions must be an array")
+    entries = []
+    for index, item in enumerate(source):
+        label = f"prior-state.prior_emissions[{index}]"
+        if not isinstance(item, dict):
+            raise ValueError(f"{label} must be a JSON object")
+        missing, unknown = sorted(set(ENTRY_KEYS) - set(item)), sorted(set(item) - set(ENTRY_KEYS))
+        if missing or unknown:
+            details = ([f"missing {', '.join(missing)}"] if missing else []) + ([f"unknown {', '.join(unknown)}"] if unknown else [])
+            raise ValueError(f"{label}: {'; '.join(details)}")
+        entries.append({key: _field(item[key], key, f"{label}.{key}") for key in ENTRY_KEYS})
+    order = [dumps([entry[key] for key in ENTRY_KEYS]) for entry in entries]
+    if any(previous >= current for previous, current in zip(order, order[1:])):
+        raise ValueError("prior-state.prior_emissions must be strictly sorted and unique")
     seen: dict[tuple[bytes, bytes], tuple[Any, ...]] = {}
     for entry in entries:
         coordinates = _issuer(entry) + _epoch(entry)
         if seen.setdefault((entry["receipt_id"], entry["envelope_digest"]), coordinates) != coordinates:
             raise ValueError(HISTORY_CONTRADICTS_ITSELF)
+    return entries
 
 
 def emission_identity(state: verifier.State) -> None:

@@ -1,5 +1,6 @@
-import { CborValue, decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
+import { CborValue, decodeCbor, encodeCbor, toHex } from "./cbor";
 import { deterministicId, hash } from "./crypto";
+import { parsePriorState } from "./emission-identity";
 import { buildFixtures } from "./fixtures";
 import { mutateReceiptWhere, payload, protectedMap, receiptList, same } from "./mutate";
 import { PriorEmission } from "./verifier";
@@ -61,12 +62,9 @@ function priorJson(...values: PriorEmission[]): StatefulPriorJson {
   })) };
 }
 
+// The JSON prior state, validated as pyref's library and CLI validate it (E-06).
 export function parseStatefulPrior(value: StatefulPriorJson): PriorEmission[] {
-  return (value.prior_emissions ?? []).map((entry) => ({
-    issuerKid: fromHex(entry.issuer_kid), issuerSeq: entry.issuer_seq,
-    epochOwnerKid: fromHex(entry.epoch_owner_kid), epochId: entry.epoch_id, epochSeq: entry.epoch_seq,
-    receiptId: fromHex(entry.receipt_id), envelopeDigest: fromHex(entry.envelope_digest),
-  }));
+  return parsePriorState(value);
 }
 
 // One carried receipt mutated through the harness/mutate.ts path (re-id + re-sign + sort).

@@ -2291,3 +2291,10 @@ checked on its stated coordinates: a signed verdict over corrupt input.
 D-52 is not the precedent for phase order: it is an anti-masking rule, not
 a general state-independent-first rule; the two-phase choice rests on
 verdict stability alone.
+
+**Amended in review (2026-10-26).** Rule 0 is preceded by the prior-state
+entry-shape check (CONFORMANCE section 5): the closed seven-key map, three
+unsigned integers that are never booleans, four 32-byte values, checked by
+the library and the command line alike before evaluation begins. pyref's
+library had taken entries unchecked, so `epoch_seq: false` compared equal to
+0 and pyref signed a conformant verdict over history the harness refused.

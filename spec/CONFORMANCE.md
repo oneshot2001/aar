@@ -1118,7 +1118,12 @@ The verdict digest preimages are frozen as follows:
   receipt_id: bstr .size 32, envelope_digest: bstr .size 32 }`. Entries are
   strictly sorted and unique by deterministic CBOR of `[issuer_kid, issuer_seq,
   epoch_owner_kid, epoch_id, epoch_seq, receipt_id, envelope_digest]`.
-  Duplicate or unsorted `prior_emissions` in a supplied prior-state file is a
+  A supplied prior state that does not match this closed map is a usage error
+  at every entry point, library or command line, checked before evaluation
+  begins: each `prior_emissions` entry has exactly the seven keys, the three
+  sequence and epoch values are unsigned integers (a boolean is not one), and
+  the four byte strings are 32 bytes (hexadecimal in a JSON prior-state file).
+  After that shape check, duplicate or unsorted `prior_emissions` is a
   usage error, as are two entries with the same `receipt_id` and
   `envelope_digest` but different coordinates and, detected at step 9 before
   phase A, an entry whose `receipt_id` and `envelope_digest` equal a carried
