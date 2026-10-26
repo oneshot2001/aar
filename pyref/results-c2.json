@@ -1,6 +1,6 @@
 {
   "deterministic": true,
-  "deterministic_fixtures": 526,
+  "deterministic_fixtures": 532,
   "divergence_count": 0,
   "divergences": [],
   "entry_point_findings": 1,
@@ -6067,6 +6067,34 @@
       "expected_code": "identity/coordinate-equivocation",
       "expected_result": "nonconformant",
       "first_failure_step": 9,
+      "fixture": "kats/negative/stateful/d86-duplicate-not-exempt-from-equivocation.bundle.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "identity/coordinate-equivocation",
+      "produced_result": "nonconformant",
+      "stateful_properties": "evaluated",
+      "verdict_sha256": "2991efa8e51ee40549960d2e98be6f93ea0f372530b623d72810993816322ce1"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "identity/reuse",
+      "expected_result": "nonconformant",
+      "first_failure_step": 9,
+      "fixture": "kats/negative/stateful/d86-duplicate-not-exempt-from-reuse.bundle.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "identity/reuse",
+      "produced_result": "nonconformant",
+      "stateful_properties": "evaluated",
+      "verdict_sha256": "7e08f02fa4a568b3d5ebbfa95fab062b410b7dd44cba759f9bb59ec061d40eda"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "identity/coordinate-equivocation",
+      "expected_result": "nonconformant",
+      "first_failure_step": 9,
       "fixture": "kats/negative/stateful/d86-fuzz-m-01770.bundle.cbor",
       "matched": true,
       "produced_class": null,
@@ -6186,6 +6214,48 @@
       "produced_result": "nonconformant",
       "stateful_properties": "evaluated",
       "verdict_sha256": "57e0af00003afe66a9bb916401fc2aba8b96f1f3eda0ce51c26d098a83d266ee"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "identity/epoch-sequence-rollback",
+      "expected_result": "nonconformant",
+      "first_failure_step": 9,
+      "fixture": "kats/negative/stateful/d86-partial-history-epoch-rollback.bundle.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "identity/epoch-sequence-rollback",
+      "produced_result": "nonconformant",
+      "stateful_properties": "evaluated",
+      "verdict_sha256": "81d2191027c6bd73c27d185122e821a4cc5c84fee3dc89038fa8ca0644433360"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "identity/coordinate-equivocation",
+      "expected_result": "nonconformant",
+      "first_failure_step": 9,
+      "fixture": "kats/negative/stateful/d86-phase-b-equivocation-outranks-rollback.bundle.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "identity/coordinate-equivocation",
+      "produced_result": "nonconformant",
+      "stateful_properties": "evaluated",
+      "verdict_sha256": "8465c9a7069782858ca60003c9886588d5100cece3e65682c02d74d1c1deafe3"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "identity/issuer-sequence-rollback",
+      "expected_result": "nonconformant",
+      "first_failure_step": 9,
+      "fixture": "kats/negative/stateful/d86-phase-b-issuer-outranks-epoch-rollback.bundle.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "identity/issuer-sequence-rollback",
+      "produced_result": "nonconformant",
+      "stateful_properties": "evaluated",
+      "verdict_sha256": "d28a722960dac56ab8e4360f7d23da50946af06b78cd9f9699d025f65192880c"
     },
     {
       "deterministic": true,
@@ -7028,6 +7098,29 @@
       "verdict_sha256": "f8cb5a5af42a689a15909896b7bd22d50a88259486e6928c302bca0b188eb52f"
     },
     {
+      "absent_observations": [
+        "duplicate_exact"
+      ],
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": null,
+      "expected_observations": [],
+      "expected_result": "conformant",
+      "first_failure_step": null,
+      "fixture": "kats/positive/stateful/d86-history-only-conflict.bundle.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": null,
+      "produced_observations": [
+        "membership_only",
+        "anchor_existence_order_only",
+        "ingress_completeness_not_established"
+      ],
+      "produced_result": "conformant",
+      "stateful_properties": "evaluated",
+      "verdict_sha256": "95940f060838e85047e5d5debaedea14c6ea4140b66819fa0a75055652c8a4b1"
+    },
+    {
       "deterministic": true,
       "expected_class": null,
       "expected_code": null,
@@ -7574,8 +7667,8 @@
       "verdict_sha256": "4b2edd3c05c6fea2003601e98e9e6bee9e9d8027ad34a9ed05c421cecfc4af26"
     }
   ],
-  "fixtures_evaluated": 526,
-  "matches": 526,
+  "fixtures_evaluated": 532,
+  "matches": 532,
   "mismatches": 0,
   "schema_version": 1,
   "slice": "C2"

@@ -1,0 +1,5 @@
+{
+  "name": "d86-duplicate-not-exempt-from-reuse",
+  "expected_code": "identity/reuse",
+  "mutation_description": "An exact copy of one carried receipt plus an entry giving that receipt ID other envelope bytes: the duplicate is exempt from rollback only, so the reuse pass still fails it."
+}

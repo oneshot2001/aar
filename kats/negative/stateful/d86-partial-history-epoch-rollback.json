@@ -1,0 +1,5 @@
+{
+  "name": "d86-partial-history-epoch-rollback",
+  "expected_code": "identity/epoch-sequence-rollback",
+  "mutation_description": "Partial history: an exact copy of only the highest-epoch_seq carried receipt. That receipt is a duplicate observation; the bundle's other receipts in its epoch have lower epoch_seq and are epoch rollback against it (unchanged from v0.3.0; whether prior state is a complete record or a high-water mark is a BACKLOG design question)."
+}

@@ -1,15 +1,18 @@
 // D-86 step-9 emission identity: the stateful KATs (moved here from verifier.test.ts),
 // the six fuzz splits rebuilt from their recorded mutation, and the history usage
-// errors (entry shape, rule 0) in the harness, the pyref library and the pyref CLI.
+// errors (entry shape, rule 0) in the harness, the pyref library and the pyref CLI;
+// the phase and witness orders the corpus cannot show (rule 0(b) over phase A, issuer
+// before epoch coordinate by harness path).
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { equalBytes } from "./cbor";
+import { deterministicId } from "./crypto";
 import { HISTORY_CONTRADICTS_ITSELF, HISTORY_CONTRADICTS_RECEIPT, parsePriorState } from "./emission-identity";
-import { buildStatefulFixtures, FUZZ_SPLITS, parseStatefulPrior, StatefulFixture } from "./stateful-fixtures";
-import { PriorEmission, verifyBundle } from "./verifier";
+import { buildStatefulFixtures, exactEntries, FUZZ_SPLITS, mutated, parseStatefulPrior, priorJson, StatefulFixture } from "./stateful-fixtures";
+import { Obj, PriorEmission, verifyBundle } from "./verifier";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const AT = 1_735_689_800;
@@ -72,11 +75,13 @@ function expectUsageError(bytes: Uint8Array, cases: readonly UsageCase[]): void 
 }
 
 describe("D-86 emission identity", () => {
-  test("every stateful fixture returns its expected code; a conformant one observes duplicate_exact", () => {
+  test("every stateful fixture returns its expected code; a conformant one has its expected observations and not its absent ones", () => {
     for (const fixture of fixtures) {
       const result = verifyBundle(fixture.bundle, { evaluationTime: AT, ...(fixture.prior ? { priorEmissions: parseStatefulPrior(fixture.prior) } : {}) });
       expect(result.ok ? null : result.reason, fixture.name).toBe(fixture.descriptor.expected_code);
-      if (result.ok) expect(result.verdict.observations, fixture.name).toContain("duplicate_exact");
+      if (!result.ok) continue;
+      for (const observation of fixture.descriptor.expected_observations ?? []) expect(result.verdict.observations, fixture.name).toContain(observation);
+      for (const observation of fixture.descriptor.absent_observations ?? []) expect(result.verdict.observations, fixture.name).not.toContain(observation);
     }
   });
 
@@ -99,14 +104,42 @@ describe("D-86 emission identity", () => {
     }
   });
 
-  test("history contradicting itself (0a) or a carried receipt (0b) is a usage error: harness throw, pyref ValueError, pyref CLI exit 2 with no verdict", () => {
+  test("history contradicting itself (0a) or a carried receipt (0b) is a usage error whichever coordinate differs: harness throw, pyref ValueError (0b its UsageError subclass), pyref CLI exit 2 with no verdict", () => {
     const represent = fixture("d86-history-exact-represent");
-    const exact = represent.prior!.prior_emissions![0]!;
-    const moved = { ...exact, epoch_owner_kid: "00".repeat(32) }; // same receipt ID and digest, other coordinates; sorts first
-    expectUsageError(represent.bundle, [
-      ["0a", { prior_emissions: [moved, exact] }, HISTORY_CONTRADICTS_ITSELF, "ValueError"],
-      ["0b", { prior_emissions: [moved] }, HISTORY_CONTRADICTS_RECEIPT, "UsageError"],
-    ]);
+    const exact = parseStatefulPrior(represent.prior!)[0]!;
+    // Same receipt ID and digest, one coordinate moved: an issuer field, then two epoch fields.
+    const moved: [string, PriorEmission][] = [
+      ["issuer_seq", { ...exact, issuerSeq: exact.issuerSeq + 1 }],
+      ["epoch_owner_kid", { ...exact, epochOwnerKid: new Uint8Array(32) }],
+      ["epoch_seq", { ...exact, epochSeq: exact.epochSeq + 1 }],
+    ];
+    expectUsageError(represent.bundle, moved.flatMap(([field, entry]): UsageCase[] => [
+      [`0a ${field}`, priorJson(entry, exact), HISTORY_CONTRADICTS_ITSELF, "ValueError"],
+      [`0b ${field}`, priorJson(entry), HISTORY_CONTRADICTS_RECEIPT, "UsageError"],
+    ]));
+  });
+
+  test("rule 0(b) outranks a phase-A failure: m-01770 fails phase A on its own, and with history contradicting one carried receipt it is a usage error, never a verdict", () => {
+    const split = fixture("d86-fuzz-m-01770");
+    const bare = verifyBundle(split.bundle, { evaluationTime: AT });
+    expect(bare.ok ? null : [bare.reason, bare.step]).toEqual(["identity/coordinate-equivocation", 9]);
+    const carried = exactEntries(split.bundle)[0]!;
+    expectUsageError(split.bundle, [["0b over phase A", priorJson({ ...carried, issuerSeq: carried.issuerSeq + 1 }), HISTORY_CONTRADICTS_RECEIPT, "UsageError"]]);
+  });
+
+  test("a receipt whose issuer and epoch coordinates both equivocate fails on the issuer coordinate first (harness path), in phase A and in phase B", () => {
+    const source = fixture("d86-history-full-reobservation").bundle;
+    const entries = exactEntries(source);
+    const first = entries[0]!;
+    // A later receipt from the same signer in the same epoch takes both of receipts[0]'s coordinates.
+    const twin = entries.findIndex((entry, index) => index > 0 && equalBytes(entry.issuerKid, first.issuerKid) && equalBytes(entry.epochOwnerKid, first.epochOwnerKid) && entry.epochId === first.epochId);
+    expect(twin).toBeGreaterThan(0);
+    const both = mutated(source, twin, (value) => { (value.emission as Obj).issuer_seq = first.issuerSeq; (value.binding as Obj).epoch_seq = first.epochSeq; });
+    const phaseA = verifyBundle(both, { evaluationTime: AT });
+    expect(phaseA.ok ? null : [phaseA.reason, phaseA.path]).toEqual(["identity/coordinate-equivocation", "receipt.emission.issuer_seq"]);
+    const history = priorJson({ ...first, receiptId: deterministicId("prior:both-coordinates-receipt"), envelopeDigest: deterministicId("prior:both-coordinates-envelope") });
+    const phaseB = verifyBundle(source, { evaluationTime: AT, priorEmissions: parseStatefulPrior(history) });
+    expect(phaseB.ok ? null : [phaseB.reason, phaseB.path]).toEqual(["identity/coordinate-equivocation", "receipt.emission.issuer_seq"]);
   });
 
   test("a malformed prior-state entry is a usage error at every entry point, with one message (E-06: no bool-as-uint verdict in pyref)", () => {

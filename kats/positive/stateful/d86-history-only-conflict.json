@@ -1,0 +1,10 @@
+{
+  "name": "d86-history-only-conflict",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "expected_observations": [],
+  "absent_observations": [
+    "duplicate_exact"
+  ],
+  "mutation_description": "Two prior entries share one issuer coordinate and one epoch coordinate under different receipt IDs, and neither touches a carried receipt: entries that conflict only with each other do not fail the bundle."
+}
