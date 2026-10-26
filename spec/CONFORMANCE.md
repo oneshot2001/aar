@@ -1127,7 +1127,10 @@ The verdict digest preimages are frozen as follows:
   epoch_owner_kid, epoch_id, epoch_seq, receipt_id, envelope_digest]`.
   A supplied prior state that does not match this closed map is a usage error
   at every entry point, library or command line, checked before evaluation
-  begins: each `prior_emissions` entry has exactly the seven keys, the three
+  begins and before any digest is computed over it: the prior state is a JSON
+  object whose only keys are `prior_emissions` and `entries` (replay state,
+  checked on its own), `prior_emissions` is an array, each entry has exactly
+  the seven keys, the three
   sequence and epoch values are unsigned integers (a boolean is not one),
   compared by numeric value so that the JSON spelling (`1`, `1.0`, `1e0`) does
   not matter, and the four byte strings are 32 bytes (hexadecimal in a JSON

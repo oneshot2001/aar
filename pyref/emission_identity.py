@@ -59,6 +59,9 @@ def prior_entries(value: dict[str, Any]) -> list[dict[str, Any]]:
     D-86 rule 0(a). Any failure raises ValueError before evaluation begins."""
     if not isinstance(value, dict):
         raise ValueError("prior-state must be a JSON object")
+    unknown_keys = sorted(set(value) - {"prior_emissions", "entries"})
+    if unknown_keys:
+        raise ValueError(f"prior-state: unknown {', '.join(unknown_keys)}")
     source = value.get("prior_emissions", [])
     if not isinstance(source, list):
         raise ValueError("prior-state.prior_emissions must be an array")

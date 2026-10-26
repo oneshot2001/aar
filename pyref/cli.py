@@ -30,13 +30,17 @@ def _timestamp(value: str) -> int:
     return parsed
 
 
-def _read_json(path: Path, label: str) -> dict[str, Any]:
+def _load_json(path: Path, label: str) -> Any:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"))
     except OSError as exc:
         raise UsageError(f"cannot read {label} file {path}: {exc.strerror or exc}") from exc
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise UsageError(f"invalid JSON in {label} file {path}: {exc}") from exc
+
+
+def _read_json(path: Path, label: str) -> dict[str, Any]:
+    value = _load_json(path, label)
     if not isinstance(value, dict):
         raise UsageError(f"{label} file must contain one JSON object")
     return value
@@ -171,22 +175,17 @@ def _trust_policy(path: Path) -> dict[str, Any]:
 
 
 def _prior_state(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
-    source = _read_json(path, "prior-state")
-    unknown = set(source) - {"prior_emissions", "entries"}
-    if unknown:
-        raise UsageError(f"prior-state: unknown {', '.join(sorted(unknown))}")
-    emissions_source = source.get("prior_emissions", [])
-    entries_source = source.get("entries", [])
-    if not isinstance(emissions_source, list) or not isinstance(entries_source, list):
-        raise UsageError("prior-state.prior_emissions and prior-state.entries must be arrays")
-
-    # The library's own check (entry shape, D-76 order, D-86 rule 0(a)), so the
-    # CLI and evaluate() refuse the same history with the same message.
-    emissions = {"prior_emissions": emissions_source}
+    source = _load_json(path, "prior-state")
+    # The library's own check (closed top level, entry shape, D-76 order, D-86 rule
+    # 0(a)), so the CLI and evaluate() refuse the same prior state with one message.
     try:
-        _prior_emissions_map(emissions)
+        _prior_emissions_map(source)
     except ValueError as exc:
         raise UsageError(str(exc)) from exc
+    emissions = {"prior_emissions": source.get("prior_emissions", [])}
+    entries_source = source.get("entries", [])
+    if not isinstance(entries_source, list):
+        raise UsageError("prior-state.entries must be an array")
 
     entries = []
     for index, item in enumerate(entries_source):

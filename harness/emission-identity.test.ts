@@ -164,6 +164,23 @@ describe("D-86 emission identity", () => {
     expectUsageError(represent.bundle, cases);
   });
 
+  test("the prior-state top level is closed to prior_emissions and entries at every entry point, with one message (E-11)", () => {
+    const represent = fixture("d86-history-exact-represent");
+    expectUsageError(represent.bundle, [
+      ["prior_emissions null", { prior_emissions: null }, "prior-state.prior_emissions must be an array", "ValueError"],
+      ["prior_emissions object", { prior_emissions: {} }, "prior-state.prior_emissions must be an array", "ValueError"],
+      ["top-level array", [], "prior-state must be a JSON object", "ValueError"],
+      ["top-level unknown key", { ...represent.prior, note: 1 }, "prior-state: unknown note", "ValueError"],
+    ]);
+    // A whole prior-state file, replay entries included, is still a prior state.
+    const whole = { ...represent.prior, entries: [] };
+    expect(verifyBundle(represent.bundle, { evaluationTime: AT, priorEmissions: harnessPrior(whole) }).ok).toBe(true);
+    withBundle(represent.bundle, (directory, bundle) => {
+      expect(pyrefLibrary(directory, bundle, [whole])[0]!.slice(0, 2)).toEqual(["verdict", null]);
+      expect(pyrefCli(directory, bundle, whole).exitCode).toBe(0);
+    });
+  });
+
   test("uint fields are compared by numeric value: integral JSON spellings verify like the integer at every entry point, the others are refused with one message (E-11)", () => {
     const represent = fixture("d86-history-exact-represent");
     // One unrelated entry (conformant against this bundle) with issuer_seq spelled as raw JSON.
