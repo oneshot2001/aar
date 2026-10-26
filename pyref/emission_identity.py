@@ -37,6 +37,10 @@ def _epoch(item: dict[str, Any]) -> tuple[bytes, int, int]:
 
 def _field(value: Any, key: str, label: str) -> Any:
     if key in UINT_KEYS:
+        # Compared by numeric value, as JSON.parse in the harness compares it: an
+        # integral float in range (JSON 1.0, 1e0, -0.0) is that integer (E-11).
+        if isinstance(value, float) and value.is_integer() and 0 <= value <= verifier.MAX_U53:
+            value = int(value)
         if not verifier._uint(value):
             raise ValueError(f"{label} must be an unsigned integer <= 9007199254740991")
         return value

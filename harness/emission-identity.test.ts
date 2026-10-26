@@ -32,17 +32,25 @@ function withBundle(bytes: Uint8Array, run: (directory: string, bundle: string) 
   }
 }
 
-// The pyref library over several prior states in one process: [exception class, message]
-// for a ValueError (UsageError is a subclass), or ["verdict", reason].
-function pyrefLibrary(directory: string, bundle: string, priors: readonly unknown[]): [string, string | null][] {
+// A prior state as the exact JSON text of a file, for spellings JSON.stringify cannot
+// produce (1.0, 1e0); any other value is serialized.
+class RawJson { constructor(readonly text: string) {} }
+const jsonText = (prior: unknown): string => prior instanceof RawJson ? prior.text : JSON.stringify(prior);
+const harnessPrior = (prior: unknown) => parsePriorState(JSON.parse(jsonText(prior)));
+
+// The pyref library over several prior states in one process (json.loads of each text):
+// [exception class, message] for a ValueError (UsageError is a subclass), or
+// ["verdict", reason, prior_emissions_digest hex].
+function pyrefLibrary(directory: string, bundle: string, priors: readonly unknown[]): (string | null)[][] {
   const path = join(directory, "priors.json");
-  writeFileSync(path, JSON.stringify(priors));
+  writeFileSync(path, JSON.stringify(priors.map(jsonText)));
   const run = Bun.spawnSync(["python3", "-B", "-c", `
 import json, sys
 from pyref.verifier import evaluate
-for prior in json.load(open(sys.argv[2])):
+for text in json.load(open(sys.argv[2])):
     try:
-        print(json.dumps(["verdict", evaluate(open(sys.argv[1], "rb").read(), evaluated_at=int(sys.argv[3]), prior_state=prior).reason]))
+        result = evaluate(open(sys.argv[1], "rb").read(), evaluated_at=int(sys.argv[3]), prior_state=json.loads(text))
+        print(json.dumps(["verdict", result.reason, result.verdict["trust_policy"]["prior_emissions_digest"].hex()]))
     except ValueError as exc:
         print(json.dumps([type(exc).__name__, str(exc)]))
 `, bundle, path, String(AT)], { cwd: root });
@@ -52,7 +60,7 @@ for prior in json.load(open(sys.argv[2])):
 
 function pyrefCli(directory: string, bundle: string, prior: unknown): { exitCode: number; stdout: string; stderr: string } {
   const path = join(directory, "prior.json");
-  writeFileSync(path, JSON.stringify(prior));
+  writeFileSync(path, jsonText(prior));
   const run = Bun.spawnSync(["python3", "-B", "-m", "pyref", "verify", bundle, "--at", String(AT), "--prior-state", path], { cwd: root });
   return { exitCode: run.exitCode, stdout: run.stdout.toString(), stderr: run.stderr.toString() };
 }
@@ -63,7 +71,7 @@ type UsageCase = readonly [label: string, prior: unknown, message: string, libra
 function expectUsageError(bytes: Uint8Array, cases: readonly UsageCase[]): void {
   withBundle(bytes, (directory, bundle) => {
     for (const [label, prior, message] of cases) {
-      expect(() => verifyBundle(bytes, { evaluationTime: AT, priorEmissions: parsePriorState(prior) }), label).toThrow(message);
+      expect(() => verifyBundle(bytes, { evaluationTime: AT, priorEmissions: harnessPrior(prior) }), label).toThrow(message);
     }
     expect(pyrefLibrary(directory, bundle, cases.map(([, prior]) => prior))).toEqual(cases.map(([, , message, libraryClass]) => [libraryClass, message]));
     for (const [label, prior, message] of cases) {
@@ -155,6 +163,33 @@ describe("D-86 emission identity", () => {
     ];
     expectUsageError(represent.bundle, cases);
   });
+
+  test("uint fields are compared by numeric value: integral JSON spellings verify like the integer at every entry point, the others are refused with one message (E-11)", () => {
+    const represent = fixture("d86-history-exact-represent");
+    // One unrelated entry (conformant against this bundle) with issuer_seq spelled as raw JSON.
+    const text = (seq: string): RawJson => new RawJson(`{"prior_emissions": [{"issuer_kid": "${"ab".repeat(32)}", "issuer_seq": ${seq}, "epoch_owner_kid": "${"cd".repeat(32)}", "epoch_id": 1, "epoch_seq": 1, "receipt_id": "${"ef".repeat(32)}", "envelope_digest": "${"12".repeat(32)}"}]}`);
+    const accepted = [["1", "1.0"], ["1", "1e0"], ["0", "-0.0"], ["9007199254740991", "9007199254740991.0"]] as const;
+    withBundle(represent.bundle, (directory, bundle) => {
+      const spellings = accepted.flat();
+      const library = pyrefLibrary(directory, bundle, spellings.map(text));
+      // [harness, pyref library, pyref CLI] prior_emissions_digest for each spelling.
+      const digests = spellings.map((seq, index) => {
+        const harness = verifyBundle(represent.bundle, { evaluationTime: AT, priorEmissions: harnessPrior(text(seq)) });
+        if (!harness.ok) throw new Error(`${seq}: harness ${harness.reason}`);
+        expect(library[index]!.slice(0, 2), seq).toEqual(["verdict", null]);
+        const cli = pyrefCli(directory, bundle, text(seq));
+        expect(cli.exitCode, seq).toBe(0);
+        return [toHex((harness.verdict.trust_policy as Obj).prior_emissions_digest as Uint8Array), library[index]![2], /prior_emissions_digest: ([0-9a-f]{64})/.exec(cli.stdout)?.[1]];
+      });
+      accepted.forEach(([integer, spelling], index) => {
+        const [plain, spelled] = [digests[2 * index]!, digests[2 * index + 1]!];
+        expect(new Set(plain).size, integer).toBe(1);
+        expect(spelled, spelling).toEqual(plain);
+      });
+    });
+    expectUsageError(represent.bundle, ["1.5", "-1.0", "9007199254740992.0", "1e400"].map((seq): UsageCase =>
+      [seq, text(seq), "prior-state.prior_emissions[0].issuer_seq must be an unsigned integer <= 9007199254740991", "ValueError"]));
+  }, 60_000);
 
   test("the typed boundary (verifyBundle and every verdict digest) refuses what pyref refuses and never decodes a string (E-11)", () => {
     const represent = fixture("d86-history-exact-represent");

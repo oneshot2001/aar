@@ -1128,8 +1128,10 @@ The verdict digest preimages are frozen as follows:
   A supplied prior state that does not match this closed map is a usage error
   at every entry point, library or command line, checked before evaluation
   begins: each `prior_emissions` entry has exactly the seven keys, the three
-  sequence and epoch values are unsigned integers (a boolean is not one), and
-  the four byte strings are 32 bytes (hexadecimal in a JSON prior-state file).
+  sequence and epoch values are unsigned integers (a boolean is not one),
+  compared by numeric value so that the JSON spelling (`1`, `1.0`, `1e0`) does
+  not matter, and the four byte strings are 32 bytes (hexadecimal in a JSON
+  prior-state file).
   After that shape check, duplicate or unsorted `prior_emissions` is a
   usage error, as are two entries with the same `receipt_id` and
   `envelope_digest` but different coordinates and, detected at step 9 before

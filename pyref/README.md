@@ -137,8 +137,8 @@ must be strictly sorted and unique by deterministic CBOR of
 strictly sorted and unique by deterministic CBOR of `[issuer_kid, issuer_seq,
 epoch_owner_kid, epoch_id, epoch_seq, receipt_id, envelope_digest]` with hex
 strings decoded to byte strings. Each `prior_emissions` entry has exactly the
-seven keys below, three unsigned integers (a boolean is not one) and four
-32-byte hex strings (either case, no whitespace). Any other shape is a usage
+seven keys below, three unsigned integers compared by value (`1.0` and `1e0`
+read as 1; a boolean is not one) and four 32-byte hex strings (either case, no whitespace). Any other shape is a usage
 error, as are unsorted or duplicate entries, two entries with one `receipt_id`
 and `envelope_digest` but different coordinates, and an entry whose
 `receipt_id` and `envelope_digest` match a carried receipt's but whose
