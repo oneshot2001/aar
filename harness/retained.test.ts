@@ -130,8 +130,9 @@ describe("D-87 history phase: the supplied replay state", () => {
 });
 
 describe("D-87 fix round 1: retained input hardening", () => {
-  test("the harness decoder refuses an array or map count past the end before allocating; a retained entry with one is the same usage error everywhere", () => {
-    for (const header of ["9a01000000", "9affffffff", "9bffffffffffffffff", "b9ffff"]) expect(() => decodeCbor(fromHex(header)), header).toThrow("truncated CBOR item");
+  test("huge array or map headers are decode errors in the harness (a count past the end is truncation, a 64-bit count is out of range); a retained entry with one is the same usage error everywhere", () => {
+    for (const header of ["9a01000000", "9affffffff", "b9ffff"]) expect(() => decodeCbor(fromHex(header)), header).toThrow("truncated CBOR item");
+    expect(() => decodeCbor(fromHex("9bffffffffffffffff"))).toThrow("CBOR integer exceeds safe range");
     expectUsageError(zero, ["9a01000000", "9affffffff", "9bffffffffffffffff"].map((header) =>
       usage(header, { retained_epochs: [header] }, `${LABEL}[0] fails step 2 (cbor/malformed)`)));
   }, 60_000);

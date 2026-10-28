@@ -135,8 +135,7 @@ class Decoder {
     return byte;
   }
 
-  // A container count that is not a safe integer cannot fit in the input: truncation, like any count past the end.
-  private argument(additional: number, container = false): number {
+  private argument(additional: number): number {
     if (additional < 24) return additional;
     const count = additional === 24 ? 1 : additional === 25 ? 2 : additional === 26 ? 4 : additional === 27 ? 8 : 0;
     if (count === 0) {
@@ -145,7 +144,7 @@ class Decoder {
     }
     let value = 0;
     for (let i = 0; i < count; i += 1) value = value * 256 + this.take();
-    if (!Number.isSafeInteger(value)) throw new Error(container ? "truncated CBOR item" : "CBOR integer exceeds safe range");
+    if (!Number.isSafeInteger(value)) throw new Error("CBOR integer exceeds safe range");
     return value;
   }
 
@@ -172,10 +171,7 @@ class Decoder {
       }
       throw new Error("unsupported CBOR simple value");
     }
-    const argument = this.argument(additional, major === 4 || major === 5);
-    // Every array element and map entry takes at least one byte: refuse a declared count
-    // past the end before allocating for it.
-    if ((major === 4 || major === 5) && argument > this.bytes.length - this.offset) throw new Error("truncated CBOR item");
+    const argument = this.argument(additional);
     if (major === 0) return argument;
     if (major === 1) return -1 - argument;
     if (major === 2) return this.bytesOf(argument);
@@ -187,7 +183,11 @@ class Decoder {
       }
     }
     if (major === 4) {
-      return Array.from({ length: argument }, () => this.item(depth + 1));
+      // Grown element by element: a declared count is never allocated ahead of the bytes that
+      // back it (nested headers would otherwise each reserve their count, D-87 review).
+      const items: CborValue[] = [];
+      for (let i = 0; i < argument; i += 1) items.push(this.item(depth + 1));
+      return items;
     }
     if (major === 5) {
       const entries: [CborScalar, CborValue][] = [];
