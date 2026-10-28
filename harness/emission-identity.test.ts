@@ -11,13 +11,14 @@ import { equalBytes, toHex } from "./cbor";
 import { deterministicId } from "./crypto";
 import { HISTORY_CONTRADICTS_ITSELF, HISTORY_CONTRADICTS_RECEIPT } from "./emission-identity";
 import { expectUsageError, harnessPrior, pyrefCli, pyrefLibrary, RawJson, UsageCase, withBundle } from "./prior-state-probe";
+import { buildD87Fixtures } from "./d87-fixtures";
 import { buildStatefulFixtures, exactEntries, FUZZ_SPLITS, mutated, parseStatefulPrior, priorJson, StatefulFixture, statefulOptions } from "./stateful-fixtures";
 import { emitFailureVerdict } from "./verdict";
 import { failure, Obj, PriorEmission, verifyBundle } from "./verifier";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const AT = 1_735_689_800;
-const fixtures = buildStatefulFixtures();
+const fixtures = [...buildStatefulFixtures(), ...buildD87Fixtures()];
 const fixture = (name: string): StatefulFixture => fixtures.find((candidate) => candidate.name === name)!;
 const stem = (fixture: StatefulFixture): string => join(root, "kats", fixture.descriptor.expected_code === null ? "positive" : "negative", "stateful", fixture.name);
 

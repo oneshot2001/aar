@@ -2,6 +2,7 @@ import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildD82PositiveFixtures, buildClassBoundaryFixtures, buildNegativeFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
+import { buildD87Fixtures } from "./d87-fixtures";
 import { buildStatefulFixtures } from "./stateful-fixtures";
 import { buildFixtures } from "./fixtures";
 
@@ -29,7 +30,7 @@ for (const directory of [statefulDirectory(null), statefulDirectory("")]) {
   await mkdir(directory, { recursive: true });
   for (const entry of await readdir(directory)) if (entry.endsWith(".cbor") || entry.endsWith(".json")) await rm(join(directory, entry));
 }
-const stateful = buildStatefulFixtures();
+const stateful = [...buildStatefulFixtures(), ...buildD87Fixtures()];
 for (const fixture of stateful) {
   const directory = statefulDirectory(fixture.descriptor.expected_code);
   await writeFile(join(directory, `${fixture.name}.bundle.cbor`), fixture.bundle);

@@ -11,11 +11,12 @@ import { deterministicId, hash, id16 } from "./crypto";
 import { artifacts, keepReceipts, mutateReceiptWhere, payload } from "./mutate";
 import { expectUsageError, harnessPrior, pyrefCli, pyrefLibrary, UsageCase, withBundle } from "./prior-state-probe";
 import { RETAINED_COORDINATES, RETAINED_RECEIPT_CONTRADICTION, RETAINED_UNLISTED } from "./retained";
-import { buildStatefulFixtures, exactEntries, priorJson, StatefulFixture } from "./stateful-fixtures";
+import { buildD87Fixtures } from "./d87-fixtures";
+import { exactEntries, priorJson, StatefulFixture } from "./stateful-fixtures";
 import { Obj, verifyBundle } from "./verifier";
 
 const AT = 1_735_689_800;
-const fixtures = buildStatefulFixtures();
+const fixtures = buildD87Fixtures();
 const fixture = (name: string): StatefulFixture => fixtures.find((candidate) => candidate.name === name)!;
 const edit = (bytes: Uint8Array, mutation: (bundle: Obj) => void): Uint8Array => { const bundle = decodeCbor(bytes, { strict: true }) as Obj; mutation(bundle); return encodeCbor(bundle); };
 const carrier = (bytes: Uint8Array): Uint8Array => edit(bytes, (bundle) => keepReceipts(bundle, () => false));
