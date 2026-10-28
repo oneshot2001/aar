@@ -87,6 +87,11 @@ requiring all principals to share one counter.
 make distributed issuance brittle and convert administrative gaps into false
 integrity failures.
 
+**Amended by D-87.** Journal insertion is detected as manifest membership: a
+carried receipt absent from its own epoch's carried manifest (step 15), or
+from a retained manifest of its epoch (step 20); a sequence below supplied
+history is an observation, not a rollback.
+
 ## D-07 — Graph direction is parent to child, encoded on the child
 
 **Decision.** Every receipt carries incoming edges. `parent-edge` means
@@ -1349,7 +1354,8 @@ gap is backlogged. It keeps a receipt verifiable after its signing key
 expires, for keys that sign only receipts (agent, outcome observer), and
 within status freshness. Backdating is bounded by the EP-signed manifest
 index, which must commit the same `committed_at`, so a forged early time
-needs the EP's key. A receipt's `committed_at` is otherwise only as
+needs the EP's key (D-87: for an epoch whose manifest is carried or
+retained, which must list the receipt). A receipt's `committed_at` is otherwise only as
 trustworthy as its time class, which the verdict's `maximum_time_class`
 reports.
 
@@ -2319,3 +2325,154 @@ phase-A reuse pass and the coalesced in-bundle duplicate were unreachable in
 both verifiers; both are removed and step 3 stays as released.
 `duplicate_exact` now means only an exact re-observation of a prior-state
 entry (the D-05 duplicate, observed against history).
+
+**Amended by D-87.** Phase B moves to the step-20 history phase (classes a
+and b; rule 0(b) and phase A stay at step 9), and (iii) no longer rejects:
+a sequence below supplied history is the observation
+`sequence_below_observed_history`; both rollback codes are retired.
+
+## D-87 — History is what the relying party observed; membership is judged against retained manifests; every history comparison runs last
+
+**Decision.**
+
+0. **In-bundle membership (step 15, last rule).** For each carried receipt
+   whose `binding` names an owner and `epoch_id` whose primary manifest the
+   bundle carries, the receipt's `receipt_id` MUST appear in that manifest's
+   full `receipt_index` (not a D-55 slice); otherwise
+   `manifest/receipt-unindexed`. `late_for_epoch_id` never selects the
+   manifest. `epoch/late-insertion` keeps exactly its implemented predicates
+   (`committed_at` after the manifest's `closed_at`; a `late_for_epoch_id`
+   not lower than the receipt's own `epoch_id`) and its table text says so.
+1. **History phase (step 20, before the verdict is built).** Every
+   comparison against relying-party-supplied state runs after every
+   intrinsic check, in this class order, each class a full pass with D-86's
+   witness order: (a) `identity/reuse` against `prior_emissions`;
+   (b) `identity/coordinate-equivocation` against `prior_emissions`;
+   (c) external replay against the supplied replay state (moved from step 11;
+   replay inside the bundle stays at step 11); (d) retained-epoch fork;
+   (e) retained-epoch membership. Then the observations of rule 2. D-86
+   phase A (bundle-internal equivocation) and D-86 rule 0(b) (an entry that
+   contradicts a carried receipt is a usage error) stay at step 9; D-86
+   phase B moves here. Step 20 is renamed "History and verdict"; the report
+   marks it failed when a history class fails. The phase runs after the
+   step-20 signing-key resolution (`key/not-found`), which depends on the
+   bundle and configuration only.
+2. **`prior_emissions` is what the relying party observed.** A carried
+   receipt that exactly duplicates no entry and whose `issuer_seq` is
+   strictly lower than an entry's for the same signing kid, or whose
+   `epoch_seq` is strictly lower than an entry's for the same owner and
+   `epoch_id`, adds the signed observation `sequence_below_observed_history`,
+   emitted immediately after `duplicate_exact`, once per verdict. An exact
+   duplicate is exempt for itself only. Both observations are emitted in the
+   history phase, so they follow every observation of steps 10 to 19.
+   `identity/issuer-sequence-rollback` and
+   `identity/epoch-sequence-rollback` are retired (never emitted; table rows
+   marked retired).
+3. **Retained evidence.** Prior state gains the optional key
+   `retained_epochs`: an array of hex-encoded bundles, strictly sorted and
+   unique by the SHA-256 of their bytes, at most 16, at most 16 MiB in total,
+   both checked before any is decoded. Retained bundles are
+   relying-party-supplied historical evidence: validation establishes
+   structural validity at their embedded times, not when they were observed
+   or retained. Before evaluation begins, each MUST pass steps 1 to 19 at its
+   own `trust_inputs` evaluation time, with no prior or replay state, no
+   verdict construction and no synthetic verifier-signing use, under the
+   supplied relying-party policy's artifact-root ceiling if one was supplied
+   (otherwise its own declared roots). Its evaluation time MUST NOT be later
+   than the current one, and it MUST NOT be byte-identical to the bundle
+   being evaluated. Each closed epoch it carries (primary manifest with open
+   and close events) becomes a retained epoch keyed by owner and `epoch_id`,
+   holding its full index and event chain. Usage errors, no verdict: any of
+   the above failing; two retained epochs for one key with different
+   `manifest_id`s; retained event chains that disagree at an overlapping
+   position (compatible extensions merge into the longer chain); a
+   `prior_emissions` entry whose `receipt_id` and `envelope_digest` equal a
+   retained receipt's but whose coordinates differ; a `prior_emissions` entry
+   naming a retained epoch that its index does not list, or lists with
+   different coordinates. The `--trust-policy` pin applies to the current
+   bundle only.
+4. **Retained checks (history phase).** (d) A carried manifest for a
+   retained epoch with a different `manifest_id`, or a carried epoch event of
+   a retained epoch whose `event_id` differs from the retained event at the
+   same position, is `epoch/fork`; positions the retained chain lacks are an
+   extension, not a fork. (e) A carried receipt whose `binding` names a
+   retained epoch MUST appear in that retained index
+   (`manifest/receipt-unindexed`) and match its entry in the step-15 fields
+   (`manifest/index-receipt-mismatch`). A retained index establishes
+   membership within its owner and epoch only; its entries are never treated
+   as observed issuer or epoch coordinates. Class (d) is one pass over the
+   carried manifests, then one over the carried events; class (e) is one
+   pass for membership, then one for the step-15 fields, each in canonical
+   artifact order.
+5. **Signed limit `retained_manifest_membership`.** `all_receipts_listed`
+   when `retained_epochs` was supplied, the bundle carries at least one
+   receipt, and every carried receipt's `binding` names a retained epoch that
+   lists it; otherwise `not_established`. A failure verdict carries
+   `not_established`. A carried manifest never earns it.
+6. **Versioning.** Spec v0.4.0. Verdict `v: 6`; protected content type
+   `application/aar-verdict+cbor;v=0.4`. `verdict-trust-policy` gains
+   `retained_epochs_digest = SHA-256(deterministic-CBOR(["AAR-VERDICT-RETAINED-v1",
+   { bundles: [sorted unique SHA-256 of each retained bundle] }]))`: the
+   empty-list digest when prior state is supplied without `retained_epochs`,
+   32 zero bytes when no prior state is supplied, present on early failures
+   (D-51/D-76 absence discipline). `verdict-limits` gains
+   `retained_manifest_membership`; the observation enum gains
+   `sequence_below_observed_history`. The new size bounds are committed with
+   the existing normative limits (`retained_epoch_bundles` 16,
+   `retained_epoch_bundle_bytes` 16,777,216, so `limits_digest` changes on
+   every verdict). Bundle wire and every bundle content type unchanged;
+   `prior_emissions_digest` unchanged.
+
+**Why.** Rollback against history assumed the relying party's record was
+complete below its high-water mark. The spec never said so, and
+`valid_subset` bundles make partial records normal: an examiner who first
+verified a bundle holding only the newest receipt, and later received the
+full set, got rollback on every older receipt
+(`d86-partial-history-epoch-rollback`). Nothing in AAR establishes when an
+unseen receipt was emitted, so that failure was an admission policy
+presented as an integrity finding. What does establish an epoch's contents
+is the EP-signed closed-epoch manifest (D-18: the full ordered index, even in
+a subset bundle). Kept from an earlier verification, it lets a later receipt
+claiming that epoch be checked for membership, which catches
+post-compromise insertion (threat model T-I2, T-E3) within retained epochs
+without the relying party asserting completeness it can't prove. Nothing
+checked a carried receipt against its own epoch's carried manifest (a
+manifest omitting a carried receipt was conformant in both verifiers), so
+D-77's "backdating is bounded by the EP-signed manifest index" held only for
+indexed receipts; rule 0 closes that inside the bundle. D-86 promised that
+the code reported for the same bytes doesn't depend on the history a
+verifier holds, but kept that promise only inside step 9: a reuse entry in
+history turned `graph-dangling-parent` from `graph/dangling-parent`@12 into
+`identity/reuse`@9. Two examiners holding different histories should still
+agree on what is wrong with the bundle itself. Retained manifests are the
+EP's signed statement of an epoch's contents, so they decide membership in
+that epoch and nothing about any issuer's other emissions. D-86 rule 0(b)
+stays at step 9 because it refuses to sign any verdict over history the
+verifier can see is corrupt.
+
+**Alternatives considered.** Keep strict rollback and document that history
+must be complete (puts an unknowable burden on the examiner). A
+relying-party-asserted `complete_through` watermark (unauthenticated, and
+`coverage: complete` never establishes a signer's history across epochs). A
+bundle-level high-water mark (an old subset is not a rollback either).
+Strict high-water admission as an opt-in relying-party policy (BACKLOG until
+a relying party asks). Retaining a signed verdict instead of the bundle
+(trusts the relying party's past self; the bundle re-verifies). Counting
+retained index entries as observed coordinates (rejected: an EP's index is
+not an issuer's emission). A new step 21 for history (rejected: renumbers
+the verdict step and every reference for no added meaning). Reusing
+`epoch/late-insertion` for rule 0 (rejected: absence from an index does not
+prove late emission).
+
+**Residuals.** Omission with a sanitized manifest (T-H1) is untouched.
+Epochs never retained are uncovered, and epoch IDs need not be contiguous
+(D-06), so a fabricated receipt can claim an epoch the relying party never
+saw; the limit says `not_established` then. A manifest forged before
+retention is out of scope. Reuse is detectable only against
+`prior_emissions` entries, never against an index. Retained evidence proves
+structure at its embedded time, not that the relying party held it before
+any compromise. Closed padding epochs can't be carried conformant today (a
+D-17 nil span against the step-14 sequence equality; BACKLOG).
+
+The declared spec becomes v0.4.0. Every signed verdict re-pins; the decoded
+old/new delta is `docs/verifier-delta-audit-v0.4.0.md`.

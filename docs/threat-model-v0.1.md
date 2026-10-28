@@ -148,7 +148,7 @@ are split per gate finding 6.
 | ID | Threat | Caps | Status | Counter / hook |
 |---|---|---|---|---|
 | T-I1 | Principal minting under compromised/sloppy issuer root | C-trust | **residual** (root compromise) / partial (out-of-tenant detection) | §2.1 tenant binding; tenant-scoped root *acceptance* rules = planned (R-19); KAT: out-of-tenant credential → distinct failure code |
-| T-I2 | Post-compromise signing, backdating into unanchored history | C-key | partial | §2.1 status objects + pre/post-compromise verifier behavior; anchored epochs pin what existed; unanchored asserted-time history = **disclosed** via time class |
+| T-I2 | Post-compromise signing, backdating into unanchored history | C-key | partial | §2.1 status objects + pre/post-compromise verifier behavior; anchored epochs pin what existed; unanchored asserted-time history = **disclosed** via time class; D-87: a carried receipt must be listed by its epoch's carried manifest (step 15) and by the relying party's retained manifest of that epoch (step 20), so backdating into a retained epoch needs a forked manifest, which is `epoch/fork`; epochs never retained stay uncovered (limit `retained_manifest_membership`) |
 | T-I3 | Rotation-seam confusion / orphaned chains | C-key | partial | §2.1 successor-of continuity; D-80 binds the rotation signer to the predecessor's issuer and orders records within tenant/site; KATs `rotation-*`, `repair-d80-rotation-*` |
 | T-I4 | Stapled-status staleness gaming | C-key(EP) | **planned** | v0.1 names the mechanism but defines **no numeric profile maxima** (gate finding 13) — R-20 sets per-profile lease/staleness numbers; until then this cell is not a counter |
 | T-I5 | Path-construction ambiguity, key-usage confusion, algorithm downgrade | C-presign | planned | R-19: path/usage/algorithm rules + trust-store snapshot in bundle |
@@ -243,7 +243,7 @@ semantic identity elsewhere, omits A pre-anchor. No byte altered; both
 signatures valid. Status: **residual** until emission is defined. Hooks: R-26
 — content-derived IDs, issuer sequence coordinates, identity-reuse
 prohibition, duplicate/equivocation verdicts, fork-consistency fixtures.
-Pre-commit equivocation window remains **residual** (RR-13).
+Pre-commit equivocation window remains **residual** (RR-5).
 
 **T-E2 — Emission denial.** Caps: C-key. "We never emitted that receipt."
 Status: **residual** absent recipient acknowledgment, witness submission, or
@@ -256,7 +256,10 @@ manifests for one epoch, forked anchor targets, incident-straddling epoch
 sizing. Status: **planned** — R-27 epoch state machine (monotonic IDs,
 predecessor digest, first/last sequence, item count, open/close + late-arrival
 + max-duration rules, anchor deadline, fork handling); verifier distinguishes
-"valid prefix" from "complete through time T."
+"valid prefix" from "complete through time T." D-87 (v0.4.0): late insertion
+into a closed epoch is judged as manifest membership (step 15 against the
+carried manifest; step 20 against manifests the relying party retained), and
+a second manifest or a divergent event for a retained epoch is `epoch/fork`.
 
 **T-M1 — Merkle batching attacks (NEW, gate finding 16).** Caps: C-store.
 Duplicate leaves, ambiguous serialization, missing index/size binding,

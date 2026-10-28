@@ -26,6 +26,8 @@ the verdict's `limits_digest`.
 | Epoch manifest entries | 10,000 per manifest |
 | Merkle batch leaves | 1,048,576 |
 | Credential path length | 8 credentials |
+| Retained-epoch bundles (prior-state `retained_epochs`, D-87) | 16 |
+| Retained-epoch bundle bytes, total, checked before decoding (D-87) | 16,777,216 bytes |
 
 The verifier MUST enforce limits while decoding where possible and MUST NOT first
 materialize an unbounded object. Once step 7 validates content-derived receipt
@@ -238,9 +240,9 @@ normative as the step order itself (D-54).
    re-validates the token's signer for its role); revisit signer-in-preimage
    only if a multi-signer delegation model appears. Recompute every content-derived ID and every
    declared digest whose bytes are present. Recompute `delegation_id`,
-   `credential_id`, `snapshot_id`, `rotation_id`, `event_id`, `anchor_id`, and
-   `batch_id` from their domain-separated deterministic-CBOR claims with their
-   own ID field absent; a mismatch is `identity/artifact-id-mismatch` (a
+   `credential_id`, `snapshot_id`, `rotation_id`, `event_id`, `manifest_id`,
+   `anchor_id`, and `batch_id` from their domain-separated deterministic-CBOR
+   claims with their own ID field absent; a mismatch is `identity/artifact-id-mismatch` (a
    presentation's `presentation_id` included). For a
    referenced canonical manifest,
    first require a payload with the declared digest, media type, and byte
@@ -342,42 +344,19 @@ normative as the step order itself (D-54).
    issuer_seq)` and its epoch coordinate is `(epoch owner kid, epoch_id,
    epoch_seq)`. A `receipt_id` repeated within `artifacts.receipts` has already
    failed step 3 (`schema/duplicate-entry`), equal bytes or not, so carried
-   receipts meet each other here only by coordinate. A carried receipt that
-   exactly re-presents a supplied prior-state entry is a duplicate observation
-   (`duplicate_exact`, an informational verdict entry). The same `receipt_id`
-   as a prior-state entry with different envelope bytes is identity reuse. One
-   coordinate naming different IDs is equivocation
-   (`identity/coordinate-equivocation`, whichever coordinate repeats). A
-   strictly decreasing issuer or epoch sequence is rollback. A gap is not
-   itself a reject in a `valid_subset` bundle. The checks run in two phases,
-   and every phase-A failure outranks every phase-B failure (D-86):
-   1. **Phase A (always).** Over the carried receipts in canonical artifact
-      order, one full pass for `identity/coordinate-equivocation`, checking
-      each receipt's issuer coordinate before its epoch coordinate.
-   2. **Phase B (only when prior state is supplied).** Over every pair of a
-      carried receipt and a `prior_emissions` entry: (i) one full pass for
-      `identity/reuse` (same `receipt_id`, different `envelope_digest`); (ii) one
-      full pass for `identity/coordinate-equivocation` (same issuer coordinate
-      or same epoch coordinate, different `receipt_id`); (iii) over the
-      remaining receipts, one full pass for
-      `identity/issuer-sequence-rollback` (same signing kid, `issuer_seq`
-      strictly lower than the entry's), then one full pass for
-      `identity/epoch-sequence-rollback` (same epoch owner kid and `epoch_id`,
-      `epoch_seq` strictly lower than the entry's). A carried receipt equal to
-      an entry in `receipt_id`, `envelope_digest` and every coordinate is a
-      duplicate observation; it is exempt from (iii) but not from (i) or (ii).
-      An equal sequence naming a different ID is equivocation under (ii), never
-      rollback.
-
-   Within a class the reported witness is the first carried receipt in
-   canonical artifact order, then the first entry in committed order. The
-   signed verdict carries the class code only, so the witness is not
-   observable in it; an implementation may expose it as a diagnostic (the
-   harness's failure `path`). Entries that conflict only with each other do
-   not fail the bundle. Before phase A,
-   an entry whose `receipt_id` and `envelope_digest` equal a carried receipt's
-   but whose coordinates differ from that receipt's is a usage error (section
-   5), and no verdict is produced.
+   receipts meet each other here only by coordinate. One coordinate naming
+   different IDs is equivocation (`identity/coordinate-equivocation`,
+   whichever coordinate repeats). A gap is not itself a reject in a
+   `valid_subset` bundle. This step is bundle-internal (D-86 phase A, D-87):
+   over the carried receipts in canonical artifact order, one full pass for
+   `identity/coordinate-equivocation`, checking each receipt's issuer
+   coordinate before its epoch coordinate. Before that pass, an entry of the
+   supplied `prior_emissions` whose `receipt_id` and `envelope_digest` equal a
+   carried receipt's but whose coordinates differ from that receipt's is a
+   usage error (section 5), and no verdict is produced. Every other
+   comparison of a carried receipt with supplied history (identity reuse,
+   equivocation with an entry, a duplicate observation, a sequence below
+   history) runs in the step-20 history phase.
 10. **Receipt schema semantics.** Require `kind`/body and kind/signer-role
     agreement; required evidence label presence (a label absent from the kind
     that requires it, or present on a kind that forbids it, is that class's
@@ -432,11 +411,12 @@ normative as the step order itself (D-54).
     intended-parent equality, invocation-ID consistency within an action flow
     (the receipts that share one `correlation_id`; a receipt with no
     correlation binding is in no flow for this check, amendment z), unexpired
-    leases, and no prior different use of a one-time
-    `(replay_domain, invocation_id)`. An exact replay of identical bytes,
-    whether carried in the bundle or supplied in the replay state with the
-    same `content_digest`, is a duplicate; changed content under the same
-    one-time coordinate is rejected.
+    leases, and no earlier different use, within the bundle, of a one-time
+    `(replay_domain, invocation_id)`: carried receipts in artifact order, the
+    first use of a coordinate setting its content. An exact replay of
+    identical bytes is a duplicate; changed content under the same one-time
+    coordinate is rejected. The comparison with the supplied replay state
+    runs in the step-20 history phase (D-87).
 12. **Referential closure and graph.** Resolve every parent, require parent metadata
     to equal the resolved parent, enforce the edge matrix and root rules below,
     enforce cross-epoch rules, then enforce depth and width. Each listed check
@@ -527,14 +507,19 @@ normative as the step order itself (D-54).
 14. **Epoch state machine.** Validate owner/event chains, monotonic epoch IDs and
     event sequences, predecessor manifest digest, one open and one close, duration,
     sequence span/count, immutable close, late-arrival routing, anchor deadline,
-    and fork rules. Two distinct manifests for one owner/epoch are a fork, and a
-    carried `fork_declared` event is itself `epoch/fork`: its `handling` is
-    `reject_and_surface`, so the verifier rejects the epoch and surfaces the
-    declaration in its report; conflicting event chains fail `epoch/event-chain`
-    at chain linkage, before any fork rule (D-82). A receipt whose
-    `late_for_epoch_id` is not lower than its own `epoch_id` is
-    `epoch/late-insertion`, whether or not that epoch's manifest is carried
-    (D-82). Duration is judged on both the manifest's `opened_at`/`closed_at`
+    and fork rules. Two distinct carried manifests for one owner/epoch are a
+    fork, and a carried `fork_declared` event is itself `epoch/fork`: its
+    `handling` is `reject_and_surface`, so the verifier rejects the epoch and
+    surfaces the declaration in its report; conflicting carried event chains
+    fail `epoch/event-chain` at chain linkage, before any fork rule (D-82). A
+    carried manifest or event that conflicts with a retained epoch is a fork
+    judged in the step-20 history phase (D-87). `epoch/late-insertion` has
+    exactly two triggers: a receipt whose `emission.committed_at` is after the
+    `closed_at` of the carried primary manifest its `binding` names, and a
+    receipt whose `late_for_epoch_id` is not lower than its own `epoch_id`,
+    whether or not that epoch's manifest is carried (D-82). A receipt missing
+    from its epoch's index is not a late insertion; it is
+    `manifest/receipt-unindexed` at step 15 (D-87). Duration is judged on both the manifest's `opened_at`/`closed_at`
     and its paired open and close events' `occurred_at`: either pair more than
     86,400 seconds apart is `epoch/duration-exceeded`.
     D-73: a carried manifest whose owner/epoch has no event group, and an
@@ -562,7 +547,14 @@ normative as the step order itself (D-54).
     entries; a nil span pairs only with an empty padding index, amendment ad).
     Only after every entry-level requirement holds
     are the entry leaves and root recomputed and compared to the carried root;
-    `manifest/index-root-mismatch` fires last (D-54).
+    `manifest/index-root-mismatch` fires last among the per-manifest checks
+    (D-54). After every carried manifest passes them, in-bundle membership
+    is the last rule of this step (D-87 rule 0): for each carried receipt, in
+    artifact order, whose `binding` names an owner and `epoch_id` whose
+    primary manifest the bundle carries, the receipt's `receipt_id` MUST
+    appear in that manifest's full `receipt_index` (never a D-55 range
+    slice), else `manifest/receipt-unindexed`. `late_for_epoch_id` never
+    selects the manifest.
 16. **Merkle batches.** Recompute domain-separated leaf/node hashes with
     `batch_id` excluded from the leaf preimage; enforce proof batch ID against the
     signed batch's recomputed ID and enforce index, size, signer,
@@ -646,8 +638,48 @@ normative as the step order itself (D-54).
     `contradicted` if any receipt declares it; else `unknown` if any receipt
     declares it; else the highest-ranked declared level (`independently_sensed` >
     `device_acknowledged` > `dispatched` > `accepted`); else `not_evaluated`.
-20. **Verdict.** Construct, deterministically encode, and sign exactly one verdict
-    under section 5. The result is `conformant` only if every requested check
+20. **History and verdict.** First resolve the signing key (below), then run
+    the history phase (D-87), then construct, deterministically encode, and
+    sign exactly one verdict under section 5.
+
+    **History phase.** Every comparison against relying-party-supplied state
+    runs here, after every intrinsic check, in this class order; each class
+    is one full pass whose reported witness is the first carried artifact in
+    canonical artifact order, then the first supplied item in committed order
+    (D-86 rule 3), and the first failing class supplies the reason code:
+    (a) `identity/reuse`: a carried receipt and a `prior_emissions` entry with
+    the same `receipt_id` and different `envelope_digest`;
+    (b) `identity/coordinate-equivocation`: a carried receipt and an entry with
+    the same issuer coordinate or the same epoch coordinate and different
+    `receipt_id`s (an equal sequence naming a different ID is equivocation);
+    (c) `replay/one-time-reused`: a carried one-time receipt and a supplied
+    replay-state entry with the same `(replay_domain, invocation_id)` and a
+    different `content_digest` (an equal digest is a duplicate);
+    (d) `epoch/fork`: one pass over the carried manifests, a manifest for a
+    retained epoch whose `manifest_id` differs from the retained one; then one
+    pass over the carried epoch events, an event of a retained epoch whose
+    `event_id` differs from the retained event at the same `event_seq`
+    position (positions the retained chain lacks are an extension, not a
+    fork); (e) one pass for `manifest/receipt-unindexed`, a carried receipt
+    whose `binding` names a retained epoch whose index does not list its
+    `receipt_id`; then one pass for `manifest/index-receipt-mismatch`, a
+    listed receipt that differs from its retained entry in the step-15 fields
+    (`receipt_kind`, `issuer_kid`, `issuer_seq`, `epoch_seq`,
+    `committed_at`). A retained index establishes membership within its owner
+    and epoch only; its entries are never observed issuer or epoch
+    coordinates. Entries that conflict only with each other do not fail the
+    bundle. Then the observations: `duplicate_exact` when a carried receipt
+    equals an entry in `receipt_id`, `envelope_digest` and every coordinate;
+    then `sequence_below_observed_history` when a carried receipt that
+    exactly duplicates no entry has an `issuer_seq` strictly lower than an
+    entry's for the same signing kid, or an `epoch_seq` strictly lower than an
+    entry's for the same owner and `epoch_id` (an exact duplicate is exempt
+    for itself only). Each is emitted once per verdict, after every
+    observation of steps 10 to 19. Without supplied prior or replay state the
+    corresponding classes compare against nothing. The verifier report marks
+    this step failed when a history class fails.
+
+    The result is `conformant` only if every requested check
     succeeded. Missing external policy, key, expected head, or replay state yields
     `indeterminate`; a malformed or semantically invalid bundle yields
     `nonconformant` with the first reason code. Without a relying-party
@@ -788,11 +820,11 @@ one input has several defects, section 2 selects the first verifier code.
 | `manifest/payload-missing` | A referenced canonical manifest payload is absent from the bundle. |
 | `manifest/media-type-mismatch` | A manifest reference and supplied payload have different media types. |
 | `identity/receipt-id-mismatch` | Recomputed receipt ID differs from `receipt_id`. |
-| `identity/artifact-id-mismatch` | Recomputed delegation, credential, status, rotation, epoch-event, anchor, or Merkle-batch ID differs from its declared primary ID. |
-| `identity/reuse` | A carried receipt ID names envelope bytes different from a supplied prior-state entry's (step 9 phase B). A receipt ID repeated within the bundle fails earlier, at step 3 (`schema/duplicate-entry`). |
-| `identity/coordinate-equivocation` | One issuer or epoch coordinate names different receipt IDs within the bundle (phase A) or between a carried receipt and a supplied prior-state entry (phase B); entries that conflict only with each other do not fail the bundle. |
-| `identity/issuer-sequence-rollback` | A carried receipt that exactly duplicates no prior-state entry has an `issuer_seq` strictly lower than an entry's for the same signing kid (an equal coordinate naming a different ID is equivocation). |
-| `identity/epoch-sequence-rollback` | A carried receipt that exactly duplicates no prior-state entry has an `epoch_seq` strictly lower than an entry's within the same owner/epoch (a reused coordinate naming a different ID is equivocation). |
+| `identity/artifact-id-mismatch` | Recomputed delegation, credential, status, rotation, epoch-event, epoch-manifest, anchor, or Merkle-batch ID differs from its declared primary ID. |
+| `identity/reuse` | A carried receipt ID names envelope bytes different from a supplied prior-state entry's (step 20 history phase, D-87). A receipt ID repeated within the bundle fails earlier, at step 3 (`schema/duplicate-entry`). |
+| `identity/coordinate-equivocation` | One issuer or epoch coordinate names different receipt IDs within the bundle (step 9) or between a carried receipt and a supplied prior-state entry (step 20 history phase, D-87); entries that conflict only with each other do not fail the bundle, and a retained index entry is never an observed coordinate. |
+| `identity/issuer-sequence-rollback` | **Retired (D-87); never emitted.** A sequence below supplied history is the observation `sequence_below_observed_history`. |
+| `identity/epoch-sequence-rollback` | **Retired (D-87); never emitted.** A sequence below supplied history is the observation `sequence_below_observed_history`. |
 | `receipt/kind-body-mismatch` | Receipt `kind` does not select the supplied body production. |
 | `receipt/signer-role-mismatch` | Receipt kind, protected/payload role, or required credential key usage violates the closed signer matrix. |
 | `receipt/manifest-inconsistent` | Consumption, presentation, decision, or command manifest ordinals, counts, or cross-references disagree after direct byte/digest checks. |
@@ -825,7 +857,7 @@ one input has several defects, section 2 selects the first verifier code.
 | `replay/expired` | Receipt committed at or after `expires_at`. |
 | `replay/parent-binding` | `intended_parents` is not exactly the ordered parent-id list. |
 | `replay/invocation-mismatch` | Receipts in one action flow disagree on invocation ID or replay domain. |
-| `replay/one-time-reused` | A one-time replay-domain/invocation coordinate was previously used for different content. |
+| `replay/one-time-reused` | A one-time replay-domain/invocation coordinate was used for different content earlier in the bundle (step 11) or in the supplied replay state (step 20 history phase, D-87). |
 | `delegation/not-yet-valid` | Attempt precedes delegation `not_before`. |
 | `delegation/expired` | Attempt is at or after delegation `not_after`. |
 | `delegation/scope` | The delegation's subject is not the enforcement point that signed the attempt (D-79), or action, target, purpose, tenant, site, profile, or invocation is outside delegation scope. |
@@ -846,14 +878,15 @@ one input has several defects, section 2 selects the first verifier code.
 | `epoch/open-close` | Epoch lacks exactly one valid open followed by one valid close. |
 | `epoch/duration-exceeded` | Close is more than 86,400 seconds after open. |
 | `epoch/span-count-mismatch` | First/last sequence, item count, manifest count, or empty-padding rules disagree. |
-| `epoch/late-insertion` | A receipt is inserted into a closed epoch instead of the next epoch with `late_for_epoch_id`, or its `late_for_epoch_id` is not lower than its own `epoch_id` (D-82). |
+| `epoch/late-insertion` | A receipt's `committed_at` is after the `closed_at` of the carried primary manifest its `binding` names, or its `late_for_epoch_id` is not lower than its own `epoch_id` (D-82). Nothing else. |
 | `epoch/anchor-deadline` | Closed event does not set deadline to close+86,400, or its anchor-submitted event occurs after that declared deadline. |
-| `epoch/fork` | Distinct manifests exist for one owner/epoch, or a `fork_declared` event is carried; conflicting event chains are `epoch/event-chain` first (D-82). |
+| `epoch/fork` | Two distinct carried manifests exist for one owner/epoch, or a `fork_declared` event is carried (step 14; conflicting carried event chains are `epoch/event-chain` first, D-82); or a carried manifest's `manifest_id`, or a carried event's `event_id` at a position the retained chain holds, differs from a retained epoch's (step 20 history phase, D-87). |
 | `manifest/index-order` | Objective entries are not strictly ordered by committed time, epoch sequence, receipt ID. |
 | `manifest/index-gap` | Leaf indices are not contiguous from zero or epoch sequences have an unexplained gap in a complete manifest. |
 | `manifest/index-duplicate` | Index repeats receipt ID or epoch sequence. |
-| `manifest/index-receipt-mismatch` | Index metadata differs from its receipt. |
+| `manifest/index-receipt-mismatch` | Index metadata differs from its receipt: a carried index entry at step 15, or the retained index entry of a carried receipt at step 20 (D-87). |
 | `manifest/index-root-mismatch` | Recomputed objective index root differs from signed root. |
+| `manifest/receipt-unindexed` | A carried receipt's `receipt_id` is absent from the full index of the carried primary manifest its `binding` names (step 15), or of the retained epoch its `binding` names (step 20 history phase); D-87. |
 | `merkle/batch-binding` | Proof batch/tree/index/tenant/site/epoch differs from leaf or signed batch. |
 | `merkle/duplicate-leaf` | Two successful membership proofs carried in one bundle for one signed batch have different indices but the same `(tenant_id, site_id, epoch_id, item_digest)`. |
 | `merkle/path-length` | Sibling count is impossible for tree size or exceeds 20. |
@@ -897,7 +930,14 @@ These are signed verdict observations, not reason codes and never replace the
 first-failure reason:
 
 - `duplicate_exact`: a carried receipt exactly re-presents a supplied
-  prior-state entry (step 9 phase B);
+  prior-state entry (step 20 history phase, D-87);
+- `sequence_below_observed_history` (D-87): a carried receipt that exactly
+  re-presents no supplied prior-state entry has an `issuer_seq` or
+  `epoch_seq` strictly lower than an entry's in the same issuer or epoch
+  domain. Supplied history is what the relying party observed, not a
+  complete record, so a lower sequence is relayed, never a rollback. Emitted
+  immediately after `duplicate_exact` (both in the history phase, after every
+  observation of steps 10 to 19), once per verdict;
 - `valid_prefix`: epochs validate only through the newest fresh expected head;
 - `producer_declared_complete`: `complete` holds for selected signed indexes;
 - `ingress_completeness_not_established`: no independent census/reconciliation;
@@ -925,9 +965,10 @@ first-failure reason:
 - `empty_scope` (GATE3 F4): the bundle verified `conformant` over zero receipts
   matching the selector — the verdict asserts nothing about any receipt;
 - `stateful_not_evaluated` (GATE3 F6): no prior evaluated state was supplied, so
-  cross-evaluation sequence-rollback and one-time-reuse properties were NOT
-  evaluated — they did not "pass." The verdict's `replay_state_digest` and
-  `prior_emissions_digest` bind which state, if any, was used.
+  cross-evaluation identity, sequence-history, retained-epoch and
+  one-time-reuse properties were NOT evaluated — they did not "pass." The
+  verdict's `replay_state_digest`, `prior_emissions_digest` and
+  `retained_epochs_digest` bind which state, if any, was used.
 
 In v0.2, `empty_scope` and `stateful_not_evaluated` are REPORT-LAYER
 observations: verifier tools MUST surface them in human/machine reports, but
@@ -938,7 +979,7 @@ by D-76, are frozen). Promoting them into the signed verdict is a wire-version d
 
 The verdict is deterministic CBOR in an untagged detached COSE_Sign1 using the same
 ES256/P1363/low-S/RFC-6979 rules. Its protected map is exactly `{1:-7,
-3:"application/aar-verdict+cbor;v=0.3",4:kid}`. The verifier key MUST have
+3:"application/aar-verdict+cbor;v=0.4",4:kid}`. The verifier key MUST have
 `verifier_signing` usage; `kid` is the corpus verifier's kid, or the
 configured leaf's under a relying-party policy (section 6). The verdict ID is computed like a receipt ID: SHA-256 of
 deterministic CBOR `['AAR-VERDICT-ID-v1', exact-protected-bstr,
@@ -959,7 +1000,7 @@ verdict-cose-sign1 = [
 
 verdict-protected = {
   1: -7,
-  3: "application/aar-verdict+cbor;v=0.3",
+  3: "application/aar-verdict+cbor;v=0.4",
   4: bstr .size 32,
 }
 
@@ -971,7 +1012,7 @@ verdict = {
 verdict-id-input = { verdict-fields }
 
 verdict-fields = (
-  v: 5,
+  v: 6,
   evaluated_at: uint .le 9007199254740991,
   result: "conformant" / "nonconformant" / "indeterminate",
   ? reason: tstr .size (1..128),
@@ -983,6 +1024,7 @@ verdict-fields = (
   limits: verdict-limits,
   observations: [ 0*64 (
       "duplicate_exact"
+    / "sequence_below_observed_history"
     / "valid_prefix"
     / "producer_declared_complete"
     / "ingress_completeness_not_established"
@@ -1012,6 +1054,7 @@ verdict-trust-policy = {
   replay_state_digest: bstr .size 32,
   prior_emissions_digest: bstr .size 32,
   relying_party_policy_digest: bstr .size 32,
+  retained_epochs_digest: bstr .size 32,
 }
 
 verdict-scope = {
@@ -1046,6 +1089,7 @@ verdict-limits = {
   input_origin_ancestry:
       "not_evaluated" / "not_declared" / "partially_declared" / "declared_only",
   control_path_completeness: "not_established",
+  retained_manifest_membership: "not_established" / "all_receipts_listed",
 }
 ```
 
@@ -1077,6 +1121,16 @@ that went through the enforcement point and say nothing about this field. A
 positive value requires a future normative decision defining control-path
 evidence and its validation.
 
+`retained_manifest_membership` (D-87) is `all_receipts_listed` only when the
+prior state carried `retained_epochs`, the bundle carries at least one
+receipt, and every carried receipt's `binding` names a retained epoch whose
+index lists it; otherwise, and on every failure verdict, `not_established`.
+A manifest carried in the bundle never earns it: the producer signs both. The
+value says the relying party's own retained manifests list every carried
+receipt; it says nothing about receipts in epochs never retained, about
+omission from a retained manifest, or about when the relying party came to
+hold the retained bundles.
+
 The v0.2.1 verdict used `v: 3` because its closed trust-policy map gained a
 required key (D-76). The v0.2.3 verdict used `v: 4` because `verdict-limits`
 gained the required key `input_origin_ancestry` (D-78). The v0.3.0 verdict
@@ -1086,8 +1140,13 @@ uses `v: 5` because `verdict-trust-policy` gained
 v0.3 line because a policy-mode signer cannot be resolved from the bundle
 (section 6), while every bundle artifact keeps its v0.2 content type. A v2,
 v3 or v4 consumer must not silently accept this verdict. The v0.3.1 verdict
-keeps `v: 5` and this content type; v0.3.1 changes only step 9's precedence
-and history comparisons (D-86).
+kept `v: 5` and this content type; v0.3.1 changed only step 9's precedence
+and history comparisons (D-86). The v0.4.0 verdict uses `v: 6` and the
+content type `application/aar-verdict+cbor;v=0.4` because
+`verdict-trust-policy` gained `retained_epochs_digest`, `verdict-limits`
+gained `retained_manifest_membership` and the observation enum gained
+`sequence_below_observed_history` (D-87); every bundle artifact keeps its v0.2
+content type. A v5 consumer must not silently accept this verdict.
 
 `relying_party_policy_digest` is the SHA-256 of deterministic CBOR
 `["AAR-RP-POLICY-v1", relying-party-policy]` whenever a relying-party policy
@@ -1099,12 +1158,13 @@ absence discipline).
 The verdict digest preimages are frozen as follows:
 
 - `limits_digest = SHA-256(deterministic-CBOR(["AAR-VERDICT-LIMITS-v1",
-  limits-map]))`, where `limits-map` is the closed map containing the twelve
+  limits-map]))`, where `limits-map` is the closed map containing the fourteen
   section 1 values under these keys:
   `exact_encoded_bundle_bytes`, `cbor_container_nesting`, `receipt_nodes`,
   `directed_graph_edges`, `parents_per_receipt`, `dag_depth`, `dag_width`,
   `encoded_proof_bytes`, `aggregate_proof_bytes`, `epoch_manifest_entries`,
-  `merkle_batch_leaves`, and `credential_path_length`;
+  `merkle_batch_leaves`, `credential_path_length`, `retained_epoch_bundles`,
+  and `retained_epoch_bundle_bytes` (the last two D-87);
 - `anchor_heads_digest =
   SHA-256(deterministic-CBOR(["AAR-VERDICT-HEADS-v1",
   expected-anchor-heads]))`, using the exact decoded, already validated and
@@ -1128,9 +1188,9 @@ The verdict digest preimages are frozen as follows:
   A supplied prior state that does not match this closed map is a usage error,
   whether it arrives as a JSON prior-state file or as data passed to a library
   call, checked before evaluation begins and before any digest is computed over
-  it: the prior state is a JSON object whose only keys are `prior_emissions`
-  and `entries` (replay state, outside this check), `prior_emissions` is an
-  array, each entry has exactly
+  it: the prior state is a JSON object whose only keys are `prior_emissions`,
+  `retained_epochs` (D-87, below) and `entries` (replay state, outside this
+  check), `prior_emissions` is an array, each entry has exactly
   the seven keys, the three
   sequence and epoch values are unsigned integers (a boolean is not one),
   compared by numeric value so that the JSON spelling (`1`, `1.0`, `1e0`) does
@@ -1146,11 +1206,45 @@ The verdict digest preimages are frozen as follows:
   phase A, an entry whose `receipt_id` and `envelope_digest` equal a carried
   receipt's but whose coordinates differ from that receipt's (D-86); a usage
   error produces no verdict. The digest always covers the supplied entries
-  exactly as given, never a subset step 9 exempts or filters. Supplying a file
+  exactly as given, never a subset the history phase exempts or filters. Supplying a file
   whose `prior_emissions` is empty or absent binds
   the digest of `{ entries: [] }`. When no prior state was supplied,
   `prior_emissions_digest` is 32 zero bytes. No supplied prior state uses a zero
-  digest (the D-51 absence discipline, extended by D-76).
+  digest (the D-51 absence discipline, extended by D-76);
+- `retained_epochs_digest = SHA-256(deterministic-CBOR(["AAR-VERDICT-RETAINED-v1",
+  { bundles: [...] }]))` (D-87), where `bundles` is the strictly sorted list of
+  the SHA-256 of each supplied retained bundle's exact bytes: the digest of
+  `{ bundles: [] }` when prior state is supplied without `retained_epochs`, and
+  32 zero bytes only when no prior state was supplied.
+
+**Retained evidence (D-87).** `retained_epochs`, when present, holds bundles
+the relying party verified earlier, each as the hexadecimal string of its
+exact bytes (a byte array for a library caller). They are checked before
+evaluation begins, after the `prior_emissions` checks above, in this order,
+and every failure is a usage error with no verdict: (1) the value is an
+array of at most 16 such strings whose decoded lengths total at most
+16,777,216 bytes, checked before any of them is decoded as CBOR; (2) they
+are strictly sorted and unique by the SHA-256 of their bytes; (3) none is
+byte-identical to the bundle being evaluated; (4) each, in array order,
+passes steps 1 to 19 at its own `trust_inputs.evaluation_time` (a bundle that
+fails steps 1 to 3 fails them at any time) with no prior or replay state, no
+verdict construction and no synthetic verifier-signing use at step 8, under
+the supplied relying-party policy if any (its artifact-root ceiling and
+verifier kids; otherwise the bundle's own declared roots), and that time is
+not later than the current evaluation time; (5) each closed epoch a retained
+bundle carries (a manifest with its open and close events) is merged, in
+array order, into the retained epoch of its owner and `epoch_id`: a
+different `manifest_id` for one key, or an event whose `event_id` differs
+from the retained event at the same `event_seq` position, is a usage error,
+and a chain that extends the retained one replaces it; (6) a
+`prior_emissions` entry whose `receipt_id` and `envelope_digest` equal a
+receipt carried by a retained bundle but whose coordinates differ, then an
+entry naming a retained epoch (owner and `epoch_id`) whose index does not
+list its `receipt_id`, or lists it with a different `issuer_kid`,
+`issuer_seq` or `epoch_seq`. Validation establishes structural validity at
+each bundle's embedded time, not when the relying party observed or
+retained it. A retained bundle's own prior or replay state is never read.
+The `--trust-policy` exact pin applies to the bundle being evaluated only.
 
 `build_digest` and `config_digest` have implementation-defined preimages. An
 implementation MUST keep each value stable for one released build or effective
@@ -1169,11 +1263,13 @@ requested profile `AAR-1`.
 | `trust_policy.trust_store_digest`, `trust_store_snapshot_id`, `verifier_policy_digest`, `anchor_heads_digest` | The validated values once step 5 has succeeded as a whole; else the sentinel. |
 | `trust_policy.evaluation_time`, `evaluated_at` | Always the caller's explicitly supplied time. |
 | `trust_policy.replay_state_digest`, `prior_emissions_digest` | Always the digest of the supplied input (an empty supplied state binds the digest of an empty map); all-zero only when nothing was supplied. |
+| `trust_policy.retained_epochs_digest` | Always the digest of the supplied `retained_epochs` (the empty-list digest when prior state is supplied without them), at every step including steps 1 to 3; all-zero only when no prior state was supplied (D-87). |
 | `trust_policy.relying_party_policy_digest`, the protected `kid` | Always the supplied policy's digest and the configured leaf's kid when a policy was supplied, at every step; the zero digest and the corpus verifier's kid only when none was (D-83). |
 | `limits.control_path_completeness` | `not_established` (D-84). |
 | `limits.evaluated_profile` | `below_AAR-1`. |
 | `limits.technical_integrity` | `not_evaluated` when the failing step is 1 to 5; `not_satisfied` from step 6 on. |
 | `limits.discovery_completeness` | `not_established`. |
+| `limits.retained_manifest_membership` | `not_established` (D-87). |
 | `limits.maximum_time_class`, `maximum_provenance_class`, `maximum_outcome_level`, `input_origin_ancestry` | `not_evaluated`; aggregates computed at step 19 are discarded on a later failure. |
 | `observations` | Empty. |
 
