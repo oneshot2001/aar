@@ -48,7 +48,7 @@ export function parsePriorState(value: unknown): PriorEmission[] {
       const raw = entry[key];
       if (UINT_KEYS.includes(key)) return [field, uintField(raw, `${label}.${key}`)];
       if (typeof raw !== "string") throw new Error(`${label}.${key} must be a 32-byte lowercase or uppercase hex string`);
-      if (!/^(?:[0-9a-fA-F]{2})*$/.test(raw)) throw new Error(`${label}.${key} is not valid hex`);
+      if (raw.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(raw)) throw new Error(`${label}.${key} is not valid hex`);
       if (raw.length !== 64) throw new Error(`${label}.${key} must decode to exactly 32 bytes`);
       return [field, fromHex(raw)];
     })) as unknown as PriorEmission;

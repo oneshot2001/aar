@@ -51,7 +51,7 @@ function closed(value: unknown, keys: readonly string[], label: string): Record<
 }
 
 function hex(value: unknown, size: number | undefined, label: string): Uint8Array {
-  if (typeof value !== "string" || !/^(?:[0-9a-fA-F]{2})*$/u.test(value)) fail(`${label} must be a hex string`);
+  if (typeof value !== "string" || value.length % 2 !== 0 || !/^[0-9a-fA-F]*$/u.test(value)) fail(`${label} must be a hex string`);
   const decoded = fromHex(value as string);
   if (size !== undefined && decoded.length !== size) fail(`${label} must decode to exactly ${size} bytes`);
   return decoded;

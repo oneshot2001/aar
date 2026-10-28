@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
 import { deterministicId, hash, id16 } from "./crypto";
-import { artifacts, keepReceipts, mutateReceiptWhere, payload } from "./mutate";
+import { artifacts, keepReceipts, mutateReceiptWhere, payload, sortArtifacts } from "./mutate";
 import { expectUsageError, harnessPrior, pyrefCli, pyrefLibrary, UsageCase, withBundle } from "./prior-state-probe";
 import { RETAINED_COORDINATES, RETAINED_RECEIPT_CONTRADICTION, RETAINED_UNLISTED } from "./retained";
 import { buildD87Fixtures } from "./d87-fixtures";
@@ -134,4 +134,23 @@ describe("D-87 fix round 1: retained input hardening", () => {
     expectUsageError(zero, ["9a01000000", "9affffffff", "9bffffffffffffffff"].map((header) =>
       usage(header, { retained_epochs: [header] }, `${LABEL}[0] fails step 2 (cbor/malformed)`)));
   }, 60_000);
+
+  test("a valid retained bundle just under the 16 MiB cap verifies alike in the harness, pyref library and pyref CLI (linear fromHex)", () => {
+    // The superset's retained carrier plus fifteen distinct 1-MiB payloads, correct digests, digest order.
+    const big = edit(kept, (bundle) => {
+      for (let index = 0; index < 15; index += 1) { const bytes = new Uint8Array(1_048_576).fill(index + 1); (artifacts(bundle).manifest_payloads as Obj[]).push({ digest: hash(bytes), media_type: "application/octet-stream", canonical_bytes: bytes }); }
+      sortArtifacts(bundle, "manifest_payloads");
+    });
+    expect(big.length).toBeGreaterThan(15_000_000);
+    expect(big.length).toBeLessThan(16_777_216);
+    const value = { retained_epochs: [toHex(big)] };
+    const harness = verifyBundle(base, { evaluationTime: AT, ...harnessPrior(value) });
+    expect(harness.ok ? (harness.verdict.limits as Obj).retained_manifest_membership : harness.reason).toBe("all_receipts_listed");
+    withBundle(base, (directory, path) => {
+      expect(pyrefLibrary(directory, path, [value])[0]!.slice(0, 2)).toEqual(["verdict", null]);
+      const cli = pyrefCli(directory, path, value);
+      expect(cli.exitCode).toBe(0);
+      expect(cli.stdout).toContain("retained_manifest_membership: all_receipts_listed");
+    });
+  }, 300_000);
 });

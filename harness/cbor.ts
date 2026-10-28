@@ -239,7 +239,10 @@ export function toHex(bytes: Uint8Array): string {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+// Linear in the input: a grouped regex backtracks and gives up on multi-MiB strings (a retained bundle is up to 32 Mi digits).
 export function fromHex(hex: string): Uint8Array {
-  if (!/^(?:[0-9a-fA-F]{2})*$/.test(hex)) throw new TypeError("invalid hex");
-  return Uint8Array.from(hex.match(/../g)?.map((pair) => Number.parseInt(pair, 16)) ?? []);
+  if (hex.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(hex)) throw new TypeError("invalid hex");
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) bytes[index] = Number.parseInt(hex.slice(2 * index, 2 * index + 2), 16);
+  return bytes;
 }
