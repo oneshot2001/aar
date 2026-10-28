@@ -135,7 +135,8 @@ class Decoder {
     return byte;
   }
 
-  private argument(additional: number): number {
+  // A container count that is not a safe integer cannot fit in the input: truncation, like any count past the end.
+  private argument(additional: number, container = false): number {
     if (additional < 24) return additional;
     const count = additional === 24 ? 1 : additional === 25 ? 2 : additional === 26 ? 4 : additional === 27 ? 8 : 0;
     if (count === 0) {
@@ -144,7 +145,7 @@ class Decoder {
     }
     let value = 0;
     for (let i = 0; i < count; i += 1) value = value * 256 + this.take();
-    if (!Number.isSafeInteger(value)) throw new Error("CBOR integer exceeds safe range");
+    if (!Number.isSafeInteger(value)) throw new Error(container ? "truncated CBOR item" : "CBOR integer exceeds safe range");
     return value;
   }
 
@@ -171,7 +172,10 @@ class Decoder {
       }
       throw new Error("unsupported CBOR simple value");
     }
-    const argument = this.argument(additional);
+    const argument = this.argument(additional, major === 4 || major === 5);
+    // Every array element and map entry takes at least one byte: refuse a declared count
+    // past the end before allocating for it.
+    if ((major === 4 || major === 5) && argument > this.bytes.length - this.offset) throw new Error("truncated CBOR item");
     if (major === 0) return argument;
     if (major === 1) return -1 - argument;
     if (major === 2) return this.bytesOf(argument);
