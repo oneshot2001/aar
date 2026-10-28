@@ -182,7 +182,8 @@ def _prior_state(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         _prior_emissions_map(source)
     except ValueError as exc:
         raise UsageError(str(exc)) from exc
-    emissions = {"prior_emissions": source.get("prior_emissions", [])}
+    emissions = {"prior_emissions": source.get("prior_emissions", []),
+                 **({"retained_epochs": source["retained_epochs"]} if "retained_epochs" in source else {})}
     entries_source = source.get("entries", [])
     if not isinstance(entries_source, list):
         raise UsageError("prior-state.entries must be an array")
@@ -287,7 +288,7 @@ def _print_evaluation(bundle_path: Path, at: int, evaluation: Evaluation, policy
     print(f"    evaluated_profile: {limits['evaluated_profile']}")
     for name in ("maximum_time_class", "maximum_provenance_class", "maximum_outcome_level", "technical_integrity",
                  "source_authenticity", "custody_continuity", "discovery_completeness", "legal_admissibility",
-                 "input_origin_ancestry", "control_path_completeness"):
+                 "input_origin_ancestry", "control_path_completeness", "retained_manifest_membership"):
         print(f"    {name}: {limits[name]}")
     print(f"    ingress_completeness: {scope['ingress_completeness']}")
     for name, value in verdict["trust_policy"].items():
@@ -347,8 +348,8 @@ def build_parser() -> argparse.ArgumentParser:
             "    expected_anchor_heads:[{target_id,observed_at,tree_size,root}],\n"
             "    verifier_policy_digest}\n"
             "  PRIOR.json = {prior_emissions:[{issuer_kid,issuer_seq,epoch_owner_kid,\n"
-            "    epoch_id,epoch_seq,receipt_id,envelope_digest}], entries:[\n"
-            "    {replay_domain,invocation_id,content_digest}]}\n"
+            "    epoch_id,epoch_seq,receipt_id,envelope_digest}], retained_epochs:[hex of\n"
+            "    each retained bundle], entries:[{replay_domain,invocation_id,content_digest}]}\n"
             "  RP-POLICY.json = {v:1, artifact_roots:[{root_kid,tenant_id,allowed_sites,\n"
             "    allowed_key_usages}], verifier_root_kid, verifier_credentials:[hex of each\n"
             "    credential-envelope CBOR]}; KEY = 64 lowercase hex chars (P-256 scalar d)\n"

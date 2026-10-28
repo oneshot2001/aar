@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import hashes, relying_party, verifier
+from . import hashes, history, relying_party, retained, verifier
 from .cbor import dumps
 from .crypto import sign_es256
 
@@ -18,7 +18,7 @@ def _limits_digest() -> bytes:
     return hashes.domain_hash("AAR-VERDICT-LIMITS-v1", verifier.LIMITS)
 
 
-BUILD_DIGEST = hashes.sha256(b"pyref-aar-v0.3.1-d86-emission-identity-build-v1")
+BUILD_DIGEST = hashes.sha256(b"pyref-aar-v0.4.0-d87-history-build-v1")
 CONFIG_DIGEST = hashes.sha256(b"pyref-aar-v0.2-gate4-c2-fixed-conformance-config-v1")
 
 
@@ -81,6 +81,7 @@ def _verdict_fields(state: verifier.State, result: str, reason: str | None, step
         "prior_emissions_digest": _prior_emissions_digest(state.prior_state),
         # D-83 part 7: the policy digest at every step, zero only without a policy.
         "relying_party_policy_digest": verifier.ZERO32 if state.configuration is None else state.configuration.policy_digest,
+        "retained_epochs_digest": retained.digest(state.prior_state),  # D-87
     }
 
     if conformant:
@@ -100,15 +101,16 @@ def _verdict_fields(state: verifier.State, result: str, reason: str | None, step
         "legal_admissibility": "not_established",
         "input_origin_ancestry": state.input_origin_ancestry if conformant else "not_evaluated",
         "control_path_completeness": "not_established",  # D-84: on every result
+        "retained_manifest_membership": history.membership(state) if conformant else "not_established",  # D-87
     }
     fields: dict[str, Any] = {
-        "v": 5,
+        "v": 6,
         "evaluated_at": state.evaluated_at,
         "result": result,
         "bundle_digest": hashes.sha256(state.raw),
         "selector_commitment": selector_commitment,
         "verifier": {
-            "product": "pyref", "version": "v0.3.1",
+            "product": "pyref", "version": "v0.4.0",
             "build_digest": BUILD_DIGEST, "config_digest": CONFIG_DIGEST,
             "limits_digest": _limits_digest(),
         },
@@ -125,7 +127,7 @@ def _verdict_fields(state: verifier.State, result: str, reason: str | None, step
 
 def _sign_verdict(fields: dict[str, Any], configuration: relying_party.Configuration | None) -> tuple[dict[str, Any], bytes]:
     scalar, verifier_kid = relying_party.signer(configuration)
-    protected_bytes = dumps({1: -7, 3: "application/aar-verdict+cbor;v=0.3", 4: verifier_kid})
+    protected_bytes = dumps({1: -7, 3: "application/aar-verdict+cbor;v=0.4", 4: verifier_kid})
     verdict_id = hashes.domain_hash("AAR-VERDICT-ID-v1", protected_bytes, fields)
     verdict = {"verdict_id": verdict_id, **fields}
     payload_bytes = dumps(verdict)

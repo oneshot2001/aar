@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { fromHex, toHex } from "./cbor";
 import { Identity, Inputs, root } from "./difffuzz-pyref";
 import { rpOptions } from "./relying-party-inputs";
-import { parseStatefulPrior } from "./stateful-fixtures";
+import { statefulOptions } from "./stateful-fixtures";
 import { B1Verification, VerifyB1Options, verifyBundle } from "./verifier";
 
 export const AT = 1_735_689_800;
@@ -56,7 +56,7 @@ export function loadSeeds(): Seed[] {
     let inputs: Inputs; let options: VerifyB1Options;
     if (row.inputs === null) {
       inputs = { evaluated_at: AT, prior_state: row.prior, replay_state: { entries: [] }, policy: null, signing_key: null, trust_policy: null };
-      options = { evaluationTime: AT, replayState: [], ...(row.prior ? { priorEmissions: parseStatefulPrior(row.prior) } : {}) };
+      options = { evaluationTime: AT, replayState: [], ...(row.prior ? statefulOptions(row.prior) : {}) };
     } else {
       const directory = dirname(row.inputs);
       const sidecar = JSON.parse(readFileSync(row.inputs, "utf8"));

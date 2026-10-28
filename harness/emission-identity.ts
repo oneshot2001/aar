@@ -1,11 +1,11 @@
-// CONFORMANCE step 9, emission identity (D-86): supplied prior state is checked
-// first (entry shape, D-76 order, rule 0(a)), then phase A over the carried
-// receipts alone, then phase B against the prior state, one reason class per full
-// pass. pyref/emission_identity.py mirrors this module. Malformed or contradictory
-// history is a usage error (a throw, no verdict).
+// CONFORMANCE step 9, emission identity (D-86, D-87): supplied prior state is
+// checked first (entry shape, D-76 order, rule 0(a)), then rule 0(b), then phase A
+// over the carried receipts alone. Every other history comparison is the step-20
+// history phase (history.ts). pyref/emission_identity.py mirrors this module.
+// Malformed or contradictory history is a usage error (a throw, no verdict).
 import { CborValue, encodeCbor, fromHex, toHex } from "./cbor";
 import { hash } from "./crypto";
-import { B1Failure, bytes, failure, observe, Obj, Parsed, PriorEmission, uint } from "./verifier";
+import { B1Failure, bytes, failure, Obj, Parsed, ParsedEnvelope, PriorEmission, uint } from "./verifier";
 
 export const HISTORY_CONTRADICTS_ITSELF = "prior-state.prior_emissions entries with one receipt_id and envelope_digest must have the same coordinates";
 export const HISTORY_CONTRADICTS_RECEIPT = "prior-state.prior_emissions entry matches a carried receipt's receipt_id and envelope_digest but not its coordinates";
@@ -37,7 +37,7 @@ function closedEntry(item: unknown, label: string, typed: boolean): Record<strin
 // closed seven-key entries; hex strings are decoded here and nowhere else.
 export function parsePriorState(value: unknown): PriorEmission[] {
   if (!plain(value)) throw new Error("prior-state must be a JSON object");
-  const unknown = Object.keys(value).filter((key) => key !== "prior_emissions" && key !== "entries").sort();
+  const unknown = Object.keys(value).filter((key) => !["prior_emissions", "retained_epochs", "entries"].includes(key)).sort();
   if (unknown.length > 0) throw new Error(`prior-state: unknown ${unknown.join(", ")}`);
   const source = Object.hasOwn(value, "prior_emissions") ? value.prior_emissions : [];
   if (!Array.isArray(source)) throw new Error("prior-state.prior_emissions must be an array");
@@ -55,14 +55,19 @@ export function parsePriorState(value: unknown): PriorEmission[] {
   });
 }
 
-interface Emission { id: string; digest: string; kid: string; seq: number; owner: string; epochId: number; epochSeq: number; issuer: string; epoch: string }
+export interface Emission { id: string; digest: string; kid: string; seq: number; owner: string; epochId: number; epochSeq: number; issuer: string; epoch: string }
 
 function emission(id: Uint8Array, digest: Uint8Array, kid: Uint8Array, seq: number, owner: Uint8Array, epochId: number, epochSeq: number): Emission {
   return { id: toHex(id), digest: toHex(digest), kid: toHex(kid), seq, owner: toHex(owner), epochId, epochSeq, issuer: `${toHex(kid)}:${seq}`, epoch: `${toHex(owner)}:${epochId}:${epochSeq}` };
 }
 
-const fromPrior = (entry: PriorEmission): Emission => emission(entry.receiptId, entry.envelopeDigest, entry.issuerKid, entry.issuerSeq, entry.epochOwnerKid, entry.epochId, entry.epochSeq);
-const sameCoordinates = (left: Emission, right: Emission): boolean => left.issuer === right.issuer && left.epoch === right.epoch;
+export const fromPrior = (entry: PriorEmission): Emission => emission(entry.receiptId, entry.envelopeDigest, entry.issuerKid, entry.issuerSeq, entry.epochOwnerKid, entry.epochId, entry.epochSeq);
+export const sameCoordinates = (left: Emission, right: Emission): boolean => left.issuer === right.issuer && left.epoch === right.epoch;
+// A carried receipt's emission; its coordinate types are pinned at step 9 before any use.
+export function emissionOf(receipt: ParsedEnvelope): Emission {
+  const binding = receipt.payload.binding as Obj;
+  return emission(receipt.payload.receipt_id as Uint8Array, hash(receipt.envelopeBytes), receipt.kid, (receipt.payload.emission as Obj).issuer_seq as number, binding.epoch_owner_kid as Uint8Array, binding.epoch_id as number, binding.epoch_seq as number);
+}
 
 // The typed prior-state boundary, run by verifyBundle before evaluation begins and by
 // the verdict digest before hashing (pyref emission_identity.prior_entries): an array
@@ -90,17 +95,16 @@ export function checkPriorEmissions(prior: readonly PriorEmission[]): void {
   }
 }
 
-export function validateEmission(parsed: Parsed, prior: readonly PriorEmission[] | undefined, observations: string[]): B1Failure | undefined {
+export function validateEmission(parsed: Parsed, prior: readonly PriorEmission[] | undefined): B1Failure | undefined {
   const carried: Emission[] = [];
   for (const receipt of parsed.receipt) {
     const binding = receipt.payload.binding as Obj;
-    const emissionMap = receipt.payload.emission as Obj;
     // Identity coordinates are used as map keys below; pin their types first so
     // malformed input yields a signed verdict instead of a silent array-typed
     // coordinate collision (pyref emission_identity parity).
-    if (!uint(emissionMap.issuer_seq)) return failure(9, "schema/bad-type", "receipt.emission.issuer_seq");
+    if (!uint((receipt.payload.emission as Obj).issuer_seq)) return failure(9, "schema/bad-type", "receipt.emission.issuer_seq");
     if (!bytes(binding.epoch_owner_kid, 32) || !uint(binding.epoch_id) || !uint(binding.epoch_seq)) return failure(9, "schema/bad-type", "receipt.binding");
-    carried.push(emission(receipt.payload.receipt_id as Uint8Array, hash(receipt.envelopeBytes), receipt.kid, emissionMap.issuer_seq, binding.epoch_owner_kid, binding.epoch_id, binding.epoch_seq));
+    carried.push(emissionOf(receipt));
   }
   const history = (prior ?? []).map(fromPrior);
   // Rule 0(b), before phase A: history that contradicts a carried receipt is a usage error.
@@ -117,19 +121,5 @@ export function validateEmission(parsed: Parsed, prior: readonly PriorEmission[]
     if ((epochs.get(receipt.epoch) ?? receipt.id) !== receipt.id) return failure(9, "identity/coordinate-equivocation", "receipt.binding.epoch_seq");
     issuers.set(receipt.issuer, receipt.id); epochs.set(receipt.epoch, receipt.id);
   }
-
-  // Phase B: every carried receipt against every entry, one class per pass. After
-  // (i) and rule 0(b), an equal ID is an exact duplicate: exempt from rollback only.
-  for (const receipt of carried) for (const entry of history) if (entry.id === receipt.id && entry.digest !== receipt.digest) return failure(9, "identity/reuse", "receipts");
-  for (const receipt of carried) {
-    for (const entry of history) {
-      if (entry.id === receipt.id) observe(observations, "duplicate_exact");
-      else if (entry.issuer === receipt.issuer) return failure(9, "identity/coordinate-equivocation", "receipt.emission.issuer_seq");
-      else if (entry.epoch === receipt.epoch) return failure(9, "identity/coordinate-equivocation", "receipt.binding.epoch_seq");
-    }
-  }
-  const remaining = carried.filter((receipt) => !history.some((entry) => entry.id === receipt.id));
-  for (const receipt of remaining) for (const entry of history) if (entry.kid === receipt.kid && receipt.seq < entry.seq) return failure(9, "identity/issuer-sequence-rollback", "receipt.emission.issuer_seq");
-  for (const receipt of remaining) for (const entry of history) if (entry.owner === receipt.owner && entry.epochId === receipt.epochId && receipt.epochSeq < entry.epochSeq) return failure(9, "identity/epoch-sequence-rollback", "receipt.binding.epoch_seq");
   return undefined;
 }

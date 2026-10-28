@@ -53,7 +53,7 @@ console.log(`Signed verdict CBOR hex: ${toHex(result.verdictEnvelope!)}`);
 console.log(`  v: ${verdict.v}`);
 const limits = verdict.limits as Record<string, string>;
 for (const name of ["maximum_time_class", "maximum_provenance_class", "maximum_outcome_level", "technical_integrity",
-  "source_authenticity", "custody_continuity", "discovery_completeness", "legal_admissibility", "input_origin_ancestry", "control_path_completeness"]) {
+  "source_authenticity", "custody_continuity", "discovery_completeness", "legal_admissibility", "input_origin_ancestry", "control_path_completeness", "retained_manifest_membership"]) {
   console.log(`  ${name}: ${limits[name]}`);
 }
 console.log(`  ingress_completeness: ${(verdict.scope as Record<string, string>).ingress_completeness}`);

@@ -172,8 +172,9 @@ export function signerKey(configuration: Configuration | undefined): Pick<Config
 
 // D-81: every step-6 envelope uses its signer's key at its signing time; the
 // step-6 signer set is captured before the verifier's own evaluation-time use
-// (step 20) is added under the signing kid (D-83 part 5).
-export function signerUses(parsed: Parsed, evaluation: number, configuration: Configuration | undefined): { uses: Map<string, number[]>; usedKids: Set<string> } {
+// (step 20) is added under the signing kid (D-83 part 5), which a D-87 retained
+// bundle never gets (no verdict is signed over it).
+export function signerUses(parsed: Parsed, evaluation: number, configuration: Configuration | undefined, verifierUse: boolean): { uses: Map<string, number[]>; usedKids: Set<string> } {
   const uses = new Map<string, number[]>();
   for (const item of Object.values(parsed).flat()) {
     const entry = "delegation" in item ? item.delegation : item;
@@ -182,7 +183,7 @@ export function signerUses(parsed: Parsed, evaluation: number, configuration: Co
   }
   const usedKids = new Set(uses.keys());
   const verifierKid = toHex(signerKey(configuration).kid);
-  uses.set(verifierKid, [...(uses.get(verifierKid) ?? []), evaluation]);
+  if (verifierUse) uses.set(verifierKid, [...(uses.get(verifierKid) ?? []), evaluation]);
   return { uses, usedKids };
 }
 

@@ -2,6 +2,7 @@ import { CborScalar, CborValue, encodeCbor, toHex } from "./cbor";
 import { deterministicId, domainHash, hash, signDetachedWithKey } from "./crypto";
 import { checkPriorEmissions } from "./emission-identity";
 import { Configuration, signerKey } from "./relying-party";
+import { retainedEpochsDigest } from "./retained";
 import { bytes, compareEncoded, entryMatchesSelector, same } from "./verifier";
 import type { B1Failure, B1Success, EvidenceLimits, Obj, Parsed, PriorEmission, ReplayUse, validateInputOrigins, VerifyB1Options } from "./verifier";
 
@@ -18,12 +19,14 @@ const VERDICT_LIMITS: Obj = {
   epoch_manifest_entries: 10_000,
   merkle_batch_leaves: 1_048_576,
   credential_path_length: 8,
+  retained_epoch_bundles: 16, // D-87
+  retained_epoch_bundle_bytes: 16_777_216,
 };
 
 // D-81 build identity hashes the literal UTF-8 preimage; config identity is unchanged.
-const DEFAULT_VERSION = "v0.3.1";
-const DEFAULT_BUILD_DIGEST = hash(new TextEncoder().encode("harness-aar-v0.3.1-d86-emission-identity-build-v1"));
-const VERDICT_CONTENT_TYPE = "application/aar-verdict+cbor;v=0.3";
+const DEFAULT_VERSION = "v0.4.0";
+const DEFAULT_BUILD_DIGEST = hash(new TextEncoder().encode("harness-aar-v0.4.0-d87-history-build-v1"));
+const VERDICT_CONTENT_TYPE = "application/aar-verdict+cbor;v=0.4";
 const DEFAULT_CONFIG_DIGEST = deterministicId("verifier-config:aar-reference-verifier@0.2.0-default");
 const ZERO_DIGEST = new Uint8Array(32);
 
@@ -70,10 +73,10 @@ function policyDigest(configuration: Configuration | undefined): Uint8Array {
   return configuration?.policyDigest ?? ZERO_DIGEST; // D-83 part 7: zero only without a policy
 }
 
-export function emitVerdict(input: Uint8Array, bundle: Obj, parsed: Parsed, options: VerifyB1Options, observations: string[], evidence: EvidenceLimits, inputOrigins: ReturnType<typeof validateInputOrigins>): B1Success {
+export function emitVerdict(input: Uint8Array, bundle: Obj, parsed: Parsed, options: VerifyB1Options, observations: string[], evidence: EvidenceLimits, inputOrigins: ReturnType<typeof validateInputOrigins>, membership: string): B1Success {
   const selector = bundle.selector as Obj; const trust = bundle.trust_inputs as Obj; const store = trust.trust_store as Obj;
   const fields: Obj = {
-    v: 5,
+    v: 6,
     evaluated_at: trust.evaluation_time!,
     result: "conformant",
     bundle_digest: hash(input),
@@ -94,6 +97,7 @@ export function emitVerdict(input: Uint8Array, bundle: Obj, parsed: Parsed, opti
       replay_state_digest: replayStateDigest(options.replayState),
       prior_emissions_digest: priorEmissionsDigest(options.priorEmissions),
       relying_party_policy_digest: policyDigest(options.configuration),
+      retained_epochs_digest: retainedEpochsDigest(options),
     },
     scope: {
       tenant_id: selector.tenant_id!, site_id: selector.site_id!, committed_from: selector.committed_from!, committed_until: selector.committed_until!,
@@ -108,6 +112,7 @@ export function emitVerdict(input: Uint8Array, bundle: Obj, parsed: Parsed, opti
       legal_admissibility: "not_established",
       input_origin_ancestry: inputOrigins.limit,
       control_path_completeness: "not_established", // D-84: on every result
+      retained_manifest_membership: membership, // D-87
     },
     observations,
   };
@@ -135,7 +140,7 @@ export function emitFailureVerdict(input: Uint8Array, issue: B1Failure, options:
   // Failure verdicts bind the caller's time, including time-mismatch failures.
   const evaluationTime = options.evaluationTime;
   const fields: Obj = {
-    v: 5, evaluated_at: evaluationTime, result: issue.result, reason: issue.reason,
+    v: 6, evaluated_at: evaluationTime, result: issue.result, reason: issue.reason,
     bundle_digest: hash(input), selector_commitment: bundle?.selector_commitment ?? zero32,
     verifier: {
       product: options.product ?? "aar-reference-verifier", version: options.version ?? DEFAULT_VERSION,
@@ -150,6 +155,7 @@ export function emitFailureVerdict(input: Uint8Array, issue: B1Failure, options:
       replay_state_digest: replayStateDigest(options.replayState),
       prior_emissions_digest: priorEmissionsDigest(options.priorEmissions),
       relying_party_policy_digest: policyDigest(options.configuration),
+      retained_epochs_digest: retainedEpochsDigest(options),
     },
     scope: selector === undefined ? {
       tenant_id: zero16, site_id: zero16, committed_from: 0, committed_until: 0, receipt_kinds: ["observation"],
@@ -162,7 +168,7 @@ export function emitFailureVerdict(input: Uint8Array, issue: B1Failure, options:
       requested_profile: bundle?.claimed_profile ?? "AAR-1",
       evaluated_profile: "below_AAR-1", maximum_time_class: "not_evaluated", maximum_provenance_class: "not_evaluated", maximum_outcome_level: "not_evaluated",
       technical_integrity: issue.step <= 5 ? "not_evaluated" : "not_satisfied", source_authenticity: "not_established", custody_continuity: "not_established", discovery_completeness: "not_established", legal_admissibility: "not_established", input_origin_ancestry: "not_evaluated",
-      control_path_completeness: "not_established",
+      control_path_completeness: "not_established", retained_manifest_membership: "not_established",
     },
     observations: [],
   };

@@ -2,7 +2,10 @@ import { p256 } from "@noble/curves/nist.js";
 import { CborScalar, CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
 import { domainHash, hash, P256_HALF_ORDER, signatureScalars } from "./crypto";
 import { checkPriorEmissions, validateEmission } from "./emission-identity";
-import { promotedRoot, rfc6962Leaf, verifyPromotedProof, verifyRfc6962Consistency, verifyRfc6962Inclusion } from "./merkle";
+import { retainedMembership, validateHistory } from "./history";
+import { validateManifestIndexes } from "./manifest-index";
+import { loadRetained, Retained } from "./retained";
+import { rfc6962Leaf, verifyPromotedProof, verifyRfc6962Consistency, verifyRfc6962Inclusion } from "./merkle";
 import { acceptRoots, Configuration, signerUses, verifierIdentity } from "./relying-party";
 import { emitFailureVerdict, emitVerdict } from "./verdict";
 
@@ -57,6 +60,8 @@ export interface PriorEmission {
 export interface VerifyB1Options {
   replayState?: readonly ReplayUse[];
   priorEmissions?: readonly PriorEmission[];
+  // D-87: the prior state's retained_epochs, each a bundle's exact bytes.
+  retainedEpochs?: readonly Uint8Array[];
   /**
    * Required: evaluation time is always caller-supplied (pyref --at symmetry).
    * The wall clock is never read. The bundle's trust_inputs.evaluation_time
@@ -1190,11 +1195,11 @@ function receiptHashes(payload: Obj): B1Failure | undefined {
   return undefined;
 }
 
-function validateCredentialLifecycle(bundle: Obj, parsed: Parsed, configuration: Configuration | undefined): B1Failure | undefined {
+function validateCredentialLifecycle(bundle: Obj, parsed: Parsed, configuration: Configuration | undefined, verifierUse: boolean): B1Failure | undefined {
   const credentials = new Map(parsed.credential.map((entry) => [toHex(entry.payload.credential_id as Uint8Array), entry]));
   const mediatorKids = new Set(parsed.mediator_countersignature.map((entry) => toHex(entry.kid)));
   const evaluation = (bundle.trust_inputs as Obj).evaluation_time as number;
-  const { uses, usedKids } = signerUses(parsed, evaluation, configuration);
+  const { uses, usedKids } = signerUses(parsed, evaluation, configuration, verifierUse);
   const roots = ((bundle.trust_inputs as Obj).trust_store as Obj).roots as Obj[];
   const roleKids = new Map<string, string>();
   for (const entry of parsed.credential) {
@@ -1397,8 +1402,8 @@ function validateReceiptSemantics(bundle: Obj, parsed: Parsed): B1Failure | unde
   return undefined;
 }
 
-function validateReplay(parsed: Parsed, replayState: readonly ReplayUse[]): B1Failure | undefined {
-  const uses = new Map(replayState.map((use) => [`${toHex(use.replayDomain)}:${toHex(use.invocationId)}`, use.contentDigest]));
+function validateReplay(parsed: Parsed): B1Failure | undefined {
+  const uses = new Map<string, Uint8Array>(); // in-bundle only; the supplied replay state is step 20 (D-87)
   const flow = new Map<string, string>();
   for (const receipt of parsed.receipt) {
     const payload = receipt.payload;
@@ -1445,7 +1450,7 @@ const EDGE_MATRIX: Readonly<Record<string, readonly [readonly string[], readonly
   supports: [["observation", "inference", "outcome_observation"], ["inference", "authorization", "outcome_observation"]],
 };
 
-function receiptsById(parsed: Parsed): Map<string, ParsedEnvelope> {
+export function receiptsById(parsed: Parsed): Map<string, ParsedEnvelope> {
   return new Map(parsed.receipt.map((entry) => [toHex(entry.payload.receipt_id as Uint8Array), entry]));
 }
 
@@ -1806,42 +1811,6 @@ function validateEpochs(parsed: Parsed): B1Failure | undefined {
   return undefined;
 }
 
-function compareIndexEntries(left: Obj, right: Obj): number {
-  const time = (left.committed_at as number) - (right.committed_at as number);
-  const sequence = (left.epoch_seq as number) - (right.epoch_seq as number);
-  return time || sequence || compareEncoded(left.receipt_id!, right.receipt_id!);
-}
-
-function validateManifestIndexes(parsed: Parsed): B1Failure | undefined {
-  const receipts = receiptsById(parsed);
-  for (const manifest of parsed.epoch_manifest) {
-    const index = manifest.payload.receipt_index as Obj;
-    const entries = index.entries as Obj[];
-    for (let position = 1; position < entries.length; position += 1) if (compareIndexEntries(entries[position - 1]!, entries[position]!) >= 0) return failure(15, "manifest/index-order", "epoch_manifest.receipt_index.entries");
-    for (let position = 0; position < entries.length; position += 1) if (entries[position]!.leaf_index !== position) return failure(15, "manifest/index-gap", "epoch_manifest.receipt_index.entries.leaf_index");
-    const ids = new Set<string>(); const sequences = new Set<number>();
-    for (const entry of entries) {
-      const id = toHex(entry.receipt_id as Uint8Array); const sequence = entry.epoch_seq as number;
-      if (ids.has(id) || sequences.has(sequence)) return failure(15, "manifest/index-duplicate", "epoch_manifest.receipt_index.entries");
-      ids.add(id); sequences.add(sequence);
-    }
-    for (const entry of entries) {
-      const id = toHex(entry.receipt_id as Uint8Array);
-      const receipt = receipts.get(id);
-      const binding = receipt?.payload.binding as Obj | undefined;
-      const emission = receipt?.payload.emission as Obj | undefined;
-      if (receipt !== undefined && (entry.receipt_kind !== receipt.payload.kind || !same(entry.issuer_kid, receipt.kid) || entry.issuer_seq !== emission!.issuer_seq || entry.epoch_seq !== binding!.epoch_seq || entry.committed_at !== emission!.committed_at)) return failure(15, "manifest/index-receipt-mismatch", "epoch_manifest.receipt_index.entries");
-    }
-    // Amendment (ad): the span is the minimum and maximum epoch_seq over the
-    // entries; a nil span pairs only with an empty padding index (counts are step 14).
-    const span = manifest.payload.sequence_span as Obj;
-    const epochSequences = entries.map((entry) => entry.epoch_seq as number);
-    if (entries.length > 0 ? (span.first !== Math.min(...epochSequences) || span.last !== Math.max(...epochSequences)) : (span.first !== null || span.last !== null || manifest.payload.close_reason !== "padding")) return failure(15, "epoch/span-count-mismatch", "epoch_manifest.receipt_index");
-    if (entries.length > 0 && !equalBytes(index.root as Uint8Array, promotedRoot(entries.map((entry) => domainHash("AAR-MANIFEST-INDEX-LEAF-v1", entry)), "AAR-MANIFEST-INDEX-NODE-v1"))) return failure(15, "manifest/index-root-mismatch", "epoch_manifest.receipt_index.root");
-  }
-  return undefined;
-}
-
 function expectedPromotedSiblings(index: number, treeSize: number): number {
   let count = 0; let position = index; let width = treeSize;
   while (width > 1) { if (position % 2 === 1 || position + 1 < width) count += 1; position = Math.floor(position / 2); width = Math.ceil(width / 2); }
@@ -2050,55 +2019,40 @@ function validateEvidence(bundle: Obj, parsed: Parsed): EvidenceLimits | B1Failu
   return { time, provenance, outcome };
 }
 
-// A failure after step 3 carries the schema-valid bundle so the failure verdict
-// may bind its scope (D-82 part 1); earlier failures carry nothing.
-function validateBundle(input: Uint8Array, options: VerifyB1Options): B1Verification {
-  if (input.length > LIMITS.bundleBytes) return emitFailureVerdict(input, failure(1, "resource/bundle-too-large", "bundle"), options);
+type Evaluated = { bundle: Obj; parsed: Parsed; observations: string[]; evidence: EvidenceLimits; inputOrigins: ReturnType<typeof validateInputOrigins> };
+
+// Steps 1 to 19. A failure after step 3 carries the schema-valid bundle so the
+// failure verdict may bind its scope (D-82 part 1); earlier failures carry nothing.
+// A D-87 retained bundle stops here, with no synthetic verifier-signing use at step 8.
+export function evaluateSteps(input: Uint8Array, options: VerifyB1Options, verifierUse = true): Evaluated | { issue: B1Failure; bundle?: Obj } {
+  if (input.length > LIMITS.bundleBytes) return { issue: failure(1, "resource/bundle-too-large", "bundle") };
   const decoded = profileDecode(input, 2, "bundle");
-  if (isFailure(decoded)) return emitFailureVerdict(input, decoded, options);
+  if (isFailure(decoded)) return { issue: decoded };
   const schemaIssue = validateBundleSchema(decoded);
-  if (schemaIssue) return emitFailureVerdict(input, schemaIssue, options);
+  if (schemaIssue) return { issue: schemaIssue };
   const bundle = decoded as Obj;
-  const fail = (issue: B1Failure): B1Failure => emitFailureVerdict(input, issue, options, bundle);
-  const resourceIssue = validateResourceCounts(bundle);
-  if (resourceIssue) return fail(resourceIssue);
-  const trustIssue = validateTrustInputs(bundle, options.evaluationTime, options.configuration);
-  if (trustIssue) return fail(trustIssue);
+  const early = validateResourceCounts(bundle) ?? validateTrustInputs(bundle, options.evaluationTime, options.configuration);
+  if (early) return { issue: early, bundle };
   const parsed = validateEnvelopes(bundle);
-  if (isFailure(parsed)) return fail(parsed);
-  const contentIssue = validateContent(bundle, parsed);
-  if (contentIssue) return fail(contentIssue);
-  const lifecycleIssue = validateCredentialLifecycle(bundle, parsed, options.configuration);
-  if (lifecycleIssue) return fail(lifecycleIssue);
+  if (isFailure(parsed)) return { issue: parsed, bundle };
   const observations: string[] = [];
-  const emissionIssue = validateEmission(parsed, options.priorEmissions, observations);
-  if (emissionIssue) return fail(emissionIssue);
-  const receiptIssue = validateReceiptSemantics(bundle, parsed);
-  if (receiptIssue) return fail(receiptIssue);
-  const countersignatureIssue = validateMediatorCountersignatures(parsed, observations);
-  if (countersignatureIssue) return fail(countersignatureIssue);
-  const replayIssue = validateReplay(parsed, options.replayState ?? []);
-  if (replayIssue) return fail(replayIssue);
-  const graphIssue = validateGraph(parsed);
-  if (graphIssue) return fail(graphIssue);
-  const dominanceIssue = validateDominance(bundle, parsed, observations);
-  if (dominanceIssue) return fail(dominanceIssue);
-  const inputOrigins = validateInputOrigins(parsed, observations);
-  const epochIssue = validateEpochs(parsed);
-  if (epochIssue) return fail(epochIssue);
-  const indexIssue = validateManifestIndexes(parsed);
-  if (indexIssue) return fail(indexIssue);
-  const merkleIssue = validateMerkle(bundle, parsed, observations);
-  if (merkleIssue) return fail(merkleIssue);
-  const anchorIssue = validateAnchors(bundle, parsed, observations);
-  if (anchorIssue) return fail(anchorIssue);
-  const rangeIssue = validateRanges(bundle, parsed, observations);
-  if (rangeIssue) return fail(rangeIssue);
+  let inputOrigins!: ReturnType<typeof validateInputOrigins>;
+  const issue = validateContent(bundle, parsed) ?? validateCredentialLifecycle(bundle, parsed, options.configuration, verifierUse) ?? validateEmission(parsed, options.priorEmissions)
+    ?? validateReceiptSemantics(bundle, parsed) ?? validateMediatorCountersignatures(parsed, observations) ?? validateReplay(parsed) ?? validateGraph(parsed)
+    ?? validateDominance(bundle, parsed, observations) ?? (inputOrigins = validateInputOrigins(parsed, observations), validateEpochs(parsed)) ?? validateManifestIndexes(parsed)
+    ?? validateMerkle(bundle, parsed, observations) ?? validateAnchors(bundle, parsed, observations) ?? validateRanges(bundle, parsed, observations);
+  if (issue) return { issue, bundle };
   const evidence = validateEvidence(bundle, parsed);
-  if (isFailure(evidence)) return fail(evidence);
-  const identityIssue = verifierIdentity(parsed, options.configuration);
-  if (identityIssue) return fail(identityIssue);
-  return emitVerdict(input, bundle, parsed, options, observations, evidence, inputOrigins);
+  return isFailure(evidence) ? { issue: evidence, bundle } : { bundle, parsed, observations, evidence, inputOrigins };
+}
+
+// Step 20: the signing key, then the D-87 history phase, then the verdict.
+function validateBundle(input: Uint8Array, options: VerifyB1Options, retained: Retained | undefined): B1Verification {
+  const steps = evaluateSteps(input, options);
+  if ("issue" in steps) return emitFailureVerdict(input, steps.issue, options, steps.bundle);
+  const issue = verifierIdentity(steps.parsed, options.configuration) ?? validateHistory(steps.parsed, options, retained, steps.observations);
+  if (issue) return emitFailureVerdict(input, issue, options, steps.bundle);
+  return emitVerdict(input, steps.bundle, steps.parsed, options, steps.observations, steps.evidence, steps.inputOrigins, retainedMembership(steps.parsed, retained));
 }
 
 export function verifyBundle(input: Uint8Array, options: VerifyB1Options): B1Verification {
@@ -2107,7 +2061,7 @@ export function verifyBundle(input: Uint8Array, options: VerifyB1Options): B1Ver
   // covers untyped callers.
   if (!uint(options?.evaluationTime)) throw new Error("verifyBundle requires options.evaluationTime as a uint <= 2^53-1; wall-clock fallback is forbidden");
   checkPriorEmissions(options.priorEmissions ?? []);
-  return validateBundle(input, options);
+  return validateBundle(input, options, loadRetained(input, options));
 }
 
 export const verifyBundleB1 = verifyBundle;

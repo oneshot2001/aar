@@ -226,7 +226,8 @@ def signer(configuration: Configuration | None) -> tuple[int, bytes]:
 def signer_uses(state: verifier.State) -> tuple[dict[bytes, list[int]], set[bytes]]:
     """D-81: every step-6 envelope uses its signer's key at its signing time; the
     step-6 signer set is captured before the verifier's own evaluation-time use
-    (step 20) is added under the signing kid (D-83 part 5)."""
+    (step 20) is added under the signing kid (D-83 part 5), which a D-87 retained
+    bundle never gets (no verdict is signed over it)."""
     uses: dict[bytes, list[int]] = defaultdict(list)
     for category in verifier.ARTIFACT_ORDER + ("presentations",):
         for envelope in state.envelopes[category]:
@@ -234,7 +235,8 @@ def signer_uses(state: verifier.State) -> tuple[dict[bytes, list[int]], set[byte
     for envelope in state.embedded_delegations.values():
         uses[envelope.protected[4]].append(state.evaluated_at)
     used_kids = set(uses)
-    uses[signer(state.configuration)[1]].append(state.evaluated_at)
+    if state.verifier_use:
+        uses[signer(state.configuration)[1]].append(state.evaluated_at)
     return uses, used_kids
 
 

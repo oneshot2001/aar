@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fromHex } from "./cbor";
 import { loadConfiguration } from "./relying-party";
-import { parseStatefulPrior } from "./stateful-fixtures";
+import { statefulOptions } from "./stateful-fixtures";
 import { Obj, VerifyB1Options } from "./verifier";
 
 // null = not supplied; bundle = path of the bundle bytes relative to the sidecar (default <name>.cbor beside it).
@@ -31,7 +31,7 @@ export function rpOptions(directory: string, inputs: RpInputs): VerifyB1Options 
     evaluationTime: inputs.at,
     configuration: loadConfiguration(file(inputs.policy), file(inputs.signing_key), inputs.at),
     configuredTrustPolicy: inputs.trust_policy === null ? undefined : parsePin(json(inputs.trust_policy)),
-    priorEmissions: inputs.prior_state === null ? undefined : parseStatefulPrior(json(inputs.prior_state)),
+    ...(inputs.prior_state === null ? {} : statefulOptions(json(inputs.prior_state))),
     replayState: inputs.replay_state === null ? undefined : (json(inputs.replay_state).entries ?? []).map((entry: Record<string, string>) => ({ replayDomain: fromHex(entry.replay_domain!), invocationId: fromHex(entry.invocation_id!), contentDigest: fromHex(entry.content_digest!) })),
   };
 }

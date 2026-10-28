@@ -22,7 +22,8 @@ from .cli import _trust_policy
 from .relying_party import load_configuration
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCES = ("pyref/verifier.py", "pyref/cbor.py", "pyref/relying_party.py", "pyref/emission_identity.py", "pyref/verdict.py", "pyref/batch.py")
+SOURCES = ("pyref/verifier.py", "pyref/cbor.py", "pyref/relying_party.py", "pyref/emission_identity.py", "pyref/manifest_index.py",
+           "pyref/history.py", "pyref/retained.py", "pyref/verdict.py", "pyref/batch.py")
 IDENTITY_FIELDS = ("product", "version", "build_digest", "config_digest")
 
 _sites: list[list[Any]] = []

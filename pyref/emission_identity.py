@@ -1,9 +1,9 @@
-"""CONFORMANCE step 9, emission identity (D-86).
+"""CONFORMANCE step 9, emission identity (D-86, D-87).
 
 Supplied prior state is checked first (entry shape, D-76 order, rule 0(a)),
-then phase A over the carried receipts alone, then phase B against the prior
-state, one reason class per full pass. ``harness/emission-identity.ts``
-mirrors this module. Rejections go through ``verifier._fail`` by attribute so
+then rule 0(b), then phase A over the carried receipts alone. Every other
+history comparison is the step-20 history phase (``history.py``).
+``harness/emission-identity.ts`` mirrors this module. Rejections go through ``verifier._fail`` by attribute so
 the premise recorder sees them; malformed or contradictory history is a usage
 error (no verdict), like the D-76 duplicate/unsorted rule.
 """
@@ -59,7 +59,7 @@ def prior_entries(value: dict[str, Any]) -> list[dict[str, Any]]:
     D-86 rule 0(a). Any failure raises ValueError before evaluation begins."""
     if not isinstance(value, dict):
         raise ValueError("prior-state must be a JSON object")
-    unknown_keys = sorted(set(value) - {"prior_emissions", "entries"})
+    unknown_keys = sorted(set(value) - {"prior_emissions", "retained_epochs", "entries"})
     if unknown_keys:
         raise ValueError(f"prior-state: unknown {', '.join(unknown_keys)}")
     source = value.get("prior_emissions", [])
@@ -80,10 +80,27 @@ def prior_entries(value: dict[str, Any]) -> list[dict[str, Any]]:
         raise ValueError("prior-state.prior_emissions must be strictly sorted and unique")
     seen: dict[tuple[bytes, bytes], tuple[Any, ...]] = {}
     for entry in entries:
-        coordinates = _issuer(entry) + _epoch(entry)
-        if seen.setdefault((entry["receipt_id"], entry["envelope_digest"]), coordinates) != coordinates:
+        if seen.setdefault((entry["receipt_id"], entry["envelope_digest"]), coordinates(entry)) != coordinates(entry):
             raise ValueError(HISTORY_CONTRADICTS_ITSELF)
     return entries
+
+
+def emission_of(envelope: verifier.Envelope) -> dict[str, Any]:
+    """A carried receipt's emission; its coordinate types are pinned at step 9 before any use."""
+    receipt = envelope.payload
+    return {
+        "issuer_kid": envelope.protected[4],
+        "issuer_seq": receipt["emission"]["issuer_seq"],
+        "epoch_owner_kid": receipt["binding"]["epoch_owner_kid"],
+        "epoch_id": receipt["binding"]["epoch_id"],
+        "epoch_seq": receipt["binding"]["epoch_seq"],
+        "receipt_id": receipt["receipt_id"],
+        "envelope_digest": hashes.sha256(envelope.envelope_bytes),
+    }
+
+
+def coordinates(item: dict[str, Any]) -> tuple[Any, ...]:
+    return _issuer(item) + _epoch(item)
 
 
 def emission_identity(state: verifier.State) -> None:
@@ -99,19 +116,11 @@ def emission_identity(state: verifier.State) -> None:
                 and verifier._uint(receipt["binding"].get("epoch_id"))
                 and verifier._uint(receipt["binding"].get("epoch_seq"))):
             verifier._fail("schema/bad-type", 9)
-        carried.append({
-            "issuer_kid": envelope.protected[4],
-            "issuer_seq": receipt["emission"]["issuer_seq"],
-            "epoch_owner_kid": receipt["binding"]["epoch_owner_kid"],
-            "epoch_id": receipt["binding"]["epoch_id"],
-            "epoch_seq": receipt["binding"]["epoch_seq"],
-            "receipt_id": receipt["receipt_id"],
-            "envelope_digest": hashes.sha256(envelope.envelope_bytes),
-        })
+        carried.append(emission_of(envelope))
     history = [] if state.prior_state is None else verifier._prior_emissions_map(state.prior_state)["entries"]
     # Rule 0(b), before phase A: history that contradicts a carried receipt is a usage error.
     if any(entry["receipt_id"] == item["receipt_id"] and entry["envelope_digest"] == item["envelope_digest"]
-           and _issuer(entry) + _epoch(entry) != _issuer(item) + _epoch(item)
+           and coordinates(entry) != coordinates(item)
            for item in carried for entry in history):
         raise relying_party.UsageError(HISTORY_CONTRADICTS_RECEIPT)
 
@@ -124,27 +133,3 @@ def emission_identity(state: verifier.State) -> None:
             verifier._fail("identity/coordinate-equivocation", 9)
         if by_epoch_coordinate.setdefault(_epoch(item), item["receipt_id"]) != item["receipt_id"]:
             verifier._fail("identity/coordinate-equivocation", 9)  # amendment (ah)
-
-    if state.prior_state is None:
-        state.stateful_checks = "not_evaluated"
-        return
-    state.stateful_checks = "evaluated"
-    # Phase B: every carried receipt against every entry, one class per pass. After
-    # (i) and rule 0(b), an equal ID is an exact duplicate: exempt from rollback only.
-    if any(item["receipt_id"] == entry["receipt_id"] and item["envelope_digest"] != entry["envelope_digest"]
-           for item in carried for entry in history):
-        verifier._fail("identity/reuse", 9)
-    for item in carried:
-        for entry in history:
-            if item["receipt_id"] == entry["receipt_id"]:
-                state.observations.append("duplicate_exact")
-            elif _issuer(item) == _issuer(entry) or _epoch(item) == _epoch(entry):
-                verifier._fail("identity/coordinate-equivocation", 9)
-    known = {entry["receipt_id"] for entry in history}
-    remaining = [item for item in carried if item["receipt_id"] not in known]
-    if any(item["issuer_kid"] == entry["issuer_kid"] and item["issuer_seq"] < entry["issuer_seq"]
-           for item in remaining for entry in history):
-        verifier._fail("identity/issuer-sequence-rollback", 9)
-    if any(item["epoch_owner_kid"] == entry["epoch_owner_kid"] and item["epoch_id"] == entry["epoch_id"]
-           and item["epoch_seq"] < entry["epoch_seq"] for item in remaining for entry in history):
-        verifier._fail("identity/epoch-sequence-rollback", 9)

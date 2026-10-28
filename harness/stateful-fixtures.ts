@@ -1,13 +1,15 @@
 import { CborValue, decodeCbor, encodeCbor, toHex } from "./cbor";
 import { deterministicId, hash } from "./crypto";
-import { parsePriorState } from "./emission-identity";
+import { checkPriorEmissions, parsePriorState } from "./emission-identity";
 import { buildFixtures } from "./fixtures";
 import { mutateReceiptWhere, payload, protectedMap, receiptList, same } from "./mutate";
-import { PriorEmission } from "./verifier";
+import { parseRetainedJson } from "./retained";
+import { PriorEmission, VerifyB1Options } from "./verifier";
 
 type Obj = Record<string, CborValue>;
 
 export interface StatefulPriorJson {
+  retained_epochs?: string[];
   prior_emissions?: Array<{
     issuer_kid: string;
     issuer_seq: number;
@@ -70,6 +72,14 @@ export function priorJson(...values: PriorEmission[]): StatefulPriorJson {
 // The JSON prior state, validated as pyref's library and CLI validate it (E-06).
 export function parseStatefulPrior(value: StatefulPriorJson): PriorEmission[] {
   return parsePriorState(value);
+}
+
+// The whole JSON prior state as verifyBundle options, checked in pyref's order:
+// prior_emissions (shape, D-76 order, rule 0(a)), then the retained_epochs shape (D-87).
+export function statefulOptions(value: StatefulPriorJson): Pick<VerifyB1Options, "priorEmissions" | "retainedEpochs"> {
+  const priorEmissions = parsePriorState(value);
+  checkPriorEmissions(priorEmissions);
+  return Object.hasOwn(value, "retained_epochs") ? { priorEmissions, retainedEpochs: parseRetainedJson(value.retained_epochs) } : { priorEmissions };
 }
 
 // One carried receipt mutated through the harness/mutate.ts path (re-id + re-sign + sort).

@@ -12,7 +12,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from . import emission_identity, hashes, relying_party, verdict
+from . import emission_identity, hashes, history, manifest_index, relying_party, retained, verdict
 from .cbor import CBORError, dumps, loads
 from .crypto import N, is_der_ecdsa_signature, parse_p256_spki, verify_es256
 
@@ -34,6 +34,8 @@ LIMITS = {
     "epoch_manifest_entries": 10_000,
     "merkle_batch_leaves": 1_048_576,
     "credential_path_length": 8,
+    "retained_epoch_bundles": 16,  # D-87
+    "retained_epoch_bundle_bytes": 16_777_216,
 }
 
 PROFILES = ("AAR-1", "AAR-2", "AAR-2A", "AAR-3")
@@ -66,7 +68,7 @@ STEP_NAMES = (
     "Anchors",
     "Bundle ranges and coverage",
     "Evidence-class qualification",
-    "Verdict",
+    "History and verdict",
 )
 PRINCIPAL_TYPES = ("human", "service", "workload_instance", "model_endpoint")
 PRINCIPAL_ROLES = (
@@ -286,6 +288,9 @@ class State:
     stateful_checks: str = "not_evaluated"
     input_origin_ancestry: str = "not_evaluated"
     input_origin_attempts: list[dict[str, Any]] = field(default_factory=list)
+    retained: dict[tuple[bytes, int], dict[str, Any]] | None = None  # D-87 retained epochs
+    verifier_use: bool = True  # False for a D-87 retained bundle: no synthetic verifier-signing use
+    history_phase: bool = False
 
 
 def _schema_bundle(bundle: Any) -> dict[str, Any]:
@@ -1654,16 +1659,7 @@ def _replay_freshness(state: State) -> None:
             content = hashes.sha256(envelope.envelope_bytes)  # the replay state's content_digest
             if coordinate in replay_seen and replay_seen[coordinate] != content:
                 _fail("replay/one-time-reused", 11)
-            replay_seen[coordinate] = content
-
-    if state.replay_state is None:
-        # The caller did not supply external replay state. Stateful replay is not
-        # claimed as passed; the KAT report exposes this as not_evaluated.
-        return
-    for entry in state.replay_state.get("entries", []):
-        coordinate = entry["replay_domain"], entry["invocation_id"]
-        if coordinate in replay_seen and replay_seen[coordinate] != entry["content_digest"]:
-            _fail("replay/one-time-reused", 11)
+            replay_seen[coordinate] = content  # in-bundle only; the supplied replay state is step 20 (D-87)
 
 
 EDGE_MATRIX = {
@@ -2138,46 +2134,6 @@ def _epoch_state_machine(state: State) -> None:
         _fail("epoch/fork", 14)
 
 
-def _manifest_index_checks(state: State) -> None:
-    for envelope in state.envelopes["epoch_manifests"]:
-        manifest = envelope.payload
-        index = manifest["receipt_index"]
-        entries = index["entries"]
-        ordering = [(item["committed_at"], item["epoch_seq"], item["receipt_id"]) for item in entries]
-        if ordering != sorted(ordering) or len(set(ordering)) != len(ordering):
-            _fail("manifest/index-order", 15)
-        leaf_indices = [item["leaf_index"] for item in entries]
-        if leaf_indices != list(range(len(entries))):
-            _fail("manifest/index-gap", 15)
-        receipt_ids = [item["receipt_id"] for item in entries]
-        epoch_sequences = [item["epoch_seq"] for item in entries]
-        if len(set(receipt_ids)) != len(receipt_ids) or len(set(epoch_sequences)) != len(epoch_sequences):
-            _fail("manifest/index-duplicate", 15)
-        for entry in entries:
-            receipt = state.receipts_by_id.get(entry["receipt_id"])
-            if receipt is None:
-                continue
-            payload = receipt.payload
-            if entry["receipt_kind"] != payload["kind"] \
-                    or entry["issuer_kid"] != receipt.protected[4] \
-                    or entry["issuer_seq"] != payload["emission"]["issuer_seq"] \
-                    or entry["epoch_seq"] != payload["binding"]["epoch_seq"] \
-                    or entry["committed_at"] != payload["emission"]["committed_at"]:
-                _fail("manifest/index-receipt-mismatch", 15)
-        span = manifest["sequence_span"]
-        if entries:
-            if span != {"first": min(epoch_sequences), "last": max(epoch_sequences)}:
-                _fail("epoch/span-count-mismatch", 15)
-        elif span != {"first": None, "last": None} or manifest["close_reason"] != "padding":
-            _fail("epoch/span-count-mismatch", 15)
-        if entries:
-            computed = hashes.promoted_root(
-                (hashes.manifest_index_leaf(entry) for entry in entries), hashes.manifest_index_node
-            )
-            if computed != index["root"]:
-                _fail("manifest/index-root-mismatch", 15)
-
-
 def _audit_path_length(index: int, size: int) -> int:
     length = 0
     while size > 1:
@@ -2538,6 +2494,47 @@ def _contains_value(container: Any, target_bytes: bytes) -> bool:
     return False
 
 
+def _steps(state: State, context_bundle_raw: bytes | None = None) -> None:
+    """Steps 1 to 19; a D-87 retained bundle stops here."""
+    raw = state.raw
+    if len(raw) > LIMITS["exact_encoded_bundle_bytes"]:
+        _fail("resource/bundle-too-large", 1)
+    try:
+        decoded = loads(raw, max_depth=LIMITS["cbor_container_nesting"])
+    except CBORError as exc:
+        _fail(exc.code, 2)
+    # Amendment (j): a map is a bundle unless a standalone context was supplied
+    # for a map-shaped wire object (a Merkle proof); the closed-map check
+    # then reports a missing top-level member.
+    if isinstance(decoded, dict) and (context_bundle_raw is None or set(decoded) >= {"selector", "artifacts", "trust_inputs"}):
+        state.bundle = _schema_bundle(decoded)
+    elif context_bundle_raw is not None:
+        context = loads(context_bundle_raw)
+        if not _contains_value(context, raw):
+            _fail("bundle/dependency-missing", 3)
+        state.bundle = _schema_bundle(context)
+    else:
+        _fail("schema/bad-type", 3)
+    _resource_checks(state.bundle)
+    _trust_policy_checks(state)
+    _envelope_checks(state)
+    _content_commitments(state)
+    _credential_lifecycle(state)
+    emission_identity.emission_identity(state)
+    _receipt_semantics(state)
+    _mediator_countersignature_checks(state)
+    _replay_freshness(state)
+    graph = _graph_checks(state)
+    _authorization_dominance(state, graph)
+    _input_origin_ancestry(state, graph)
+    _epoch_state_machine(state)
+    manifest_index.manifest_index(state)
+    _merkle_checks(state)
+    _anchor_checks(state)
+    _bundle_ranges(state)
+    _evidence_classes(state)
+
+
 def evaluate(
     raw: bytes,
     *,
@@ -2566,48 +2563,16 @@ def evaluate(
         replay_state=replay_state,
         configured_trust_policy=configured_trust_policy,
         configuration=configuration,
+        retained=retained.load(raw, prior_state, evaluated_at, configuration),
     )
     result = "conformant"
     reason: str | None = None
     step = 20
     try:
-        if len(raw) > LIMITS["exact_encoded_bundle_bytes"]:
-            _fail("resource/bundle-too-large", 1)
-        try:
-            decoded = loads(raw, max_depth=LIMITS["cbor_container_nesting"])
-        except CBORError as exc:
-            _fail(exc.code, 2)
-        # Amendment (j): a map is a bundle unless a standalone context was supplied
-        # for a map-shaped wire object (a Merkle proof); the closed-map check
-        # then reports a missing top-level member.
-        if isinstance(decoded, dict) and (context_bundle_raw is None or set(decoded) >= {"selector", "artifacts", "trust_inputs"}):
-            state.bundle = _schema_bundle(decoded)
-        elif context_bundle_raw is not None:
-            context = loads(context_bundle_raw)
-            if not _contains_value(context, raw):
-                _fail("bundle/dependency-missing", 3)
-            state.bundle = _schema_bundle(context)
-        else:
-            _fail("schema/bad-type", 3)
-        _resource_checks(state.bundle)
-        _trust_policy_checks(state)
-        _envelope_checks(state)
-        _content_commitments(state)
-        _credential_lifecycle(state)
-        emission_identity.emission_identity(state)
-        _receipt_semantics(state)
-        _mediator_countersignature_checks(state)
-        _replay_freshness(state)
-        graph = _graph_checks(state)
-        _authorization_dominance(state, graph)
-        _input_origin_ancestry(state, graph)
-        _epoch_state_machine(state)
-        _manifest_index_checks(state)
-        _merkle_checks(state)
-        _anchor_checks(state)
-        _bundle_ranges(state)
-        _evidence_classes(state)
+        _steps(state, context_bundle_raw)
+        # Step 20: the signing key, then the D-87 history phase, then the verdict.
         relying_party.verifier_identity(state)
+        history.history(state)
     except ValidationError as exc:
         result = "indeterminate" if exc.indeterminate else "nonconformant"
         reason = exc.code
@@ -2622,7 +2587,7 @@ def evaluate(
 
     steps = []
     for number, name in enumerate(STEP_NAMES, 1):
-        if result == "conformant" or number < step or number == 20:
+        if result == "conformant" or number < step or (number == 20 and not state.history_phase):
             status = "pass"
         elif number == step:
             status = "fail"

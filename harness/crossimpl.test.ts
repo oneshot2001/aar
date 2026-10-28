@@ -9,7 +9,7 @@ import { decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
 import { buildD78ItemVariants, buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildD82PositiveFixtures, buildEvidenceCommitFixtures, buildNegativeFixtures, buildPresentationEnumVariants } from "./negative-fixtures";
 import { verifyBundle } from "./verifier";
 import { rpOptions } from "./relying-party-inputs";
-import { parseStatefulPrior } from "./stateful-fixtures";
+import { statefulOptions } from "./stateful-fixtures";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const AT = 1_735_689_800;
@@ -123,7 +123,7 @@ test("every corpus fixture has identical result, reason, step, and signed verdic
   expect(rows).toHaveLength(count);
   for (const row of rows) {
     // D-83 part 11: an rp-* row's inputs sidecar names policy, key, pin and state; the harness decodes the policy itself.
-    const inputs = row.inputs ? rpOptions(dirname(row.inputs), JSON.parse(readFileSync(row.inputs, "utf8"))) : { evaluationTime: AT, replayState: [], priorEmissions: row.prior ? parseStatefulPrior(row.prior) : undefined };
+    const inputs = row.inputs ? rpOptions(dirname(row.inputs), JSON.parse(readFileSync(row.inputs, "utf8"))) : { evaluationTime: AT, replayState: [], ...(row.prior ? statefulOptions(row.prior) : {}) };
     const ts = verifyBundle(row.context ? fromHex(row.context) : readFileSync(row.bundle), {
       ...inputs, product: row.product, version: row.version, buildDigest: fromHex(row.build), configDigest: fromHex(row.config),
     });
