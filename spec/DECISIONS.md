@@ -2401,9 +2401,11 @@ a sequence below supplied history is the observation
    (`manifest/index-receipt-mismatch`). A retained index establishes
    membership within its owner and epoch only; its entries are never treated
    as observed issuer or epoch coordinates. Class (d) is one pass over the
-   carried manifests, then one over the carried events; class (e) is one
-   pass for membership, then one for the step-15 fields, each in canonical
-   artifact order.
+   carried manifests, then one over the carried events (one code either way:
+   a manifest that forks a retained one also forks its close event, which
+   carries `manifest_id`, so the pass order is not observable); class (e) is
+   one pass for membership, then one for the step-15 fields, each in
+   canonical artifact order.
 5. **Signed limit `retained_manifest_membership`.** `all_receipts_listed`
    when `retained_epochs` was supplied, the bundle carries at least one
    receipt, and every carried receipt's `binding` names a retained epoch that
@@ -2447,8 +2449,13 @@ history turned `graph-dangling-parent` from `graph/dangling-parent`@12 into
 agree on what is wrong with the bundle itself. Retained manifests are the
 EP's signed statement of an epoch's contents, so they decide membership in
 that epoch and nothing about any issuer's other emissions. D-86 rule 0(b)
-stays at step 9 because it refuses to sign any verdict over history the
-verifier can see is corrupt.
+stays at step 9 because, from step 9 on, it refuses to sign a verdict over
+history the verifier can see contradicts a carried receipt; a bundle that
+fails steps 1 to 8 gets its intrinsic verdict with that history bound in
+`prior_emissions_digest` (the receipts it would compare against have not
+passed step 6). The signing-key resolution precedes the history phase for
+the same reason the phase is last: `key/not-found` depends on the bundle and
+configuration only.
 
 **Alternatives considered.** Keep strict rollback and document that history
 must be complete (puts an unknowable burden on the examiner). A
@@ -2472,7 +2479,12 @@ retention is out of scope. Reuse is detectable only against
 `prior_emissions` entries, never against an index. Retained evidence proves
 structure at its embedded time, not that the relying party held it before
 any compromise. Closed padding epochs can't be carried conformant today (a
-D-17 nil span against the step-14 sequence equality; BACKLOG).
+D-17 nil span against the step-14 sequence equality; BACKLOG). History that
+contradicts a carried receipt (D-86 rule 0(b)) is refused only from step 9
+on; a bundle failing steps 1 to 8 is signed with that history bound in
+`prior_emissions_digest`. A bundle whose verifier key does not resolve
+reports `key/not-found` even when the supplied history shows reuse (v0.3.1
+reported `identity/reuse` at step 9; row `d87-history-after-key-not-found`).
 
 The declared spec becomes v0.4.0. Every signed verdict re-pins; the decoded
 old/new delta is `docs/verifier-delta-audit-v0.4.0.md`.

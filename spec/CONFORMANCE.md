@@ -660,7 +660,9 @@ normative as the step order itself (D-54).
     pass over the carried epoch events, an event of a retained epoch whose
     `event_id` differs from the retained event at the same `event_seq`
     position (positions the retained chain lacks are an extension, not a
-    fork); (e) one pass for `manifest/receipt-unindexed`, a carried receipt
+    fork). A carried manifest that differs from a retained one always comes
+    with a differing close event, which carries `manifest_id`, so the order
+    of (d)'s two passes is not observable in the result; (e) one pass for `manifest/receipt-unindexed`, a carried receipt
     whose `binding` names a retained epoch whose index does not list its
     `receipt_id`; then one pass for `manifest/index-receipt-mismatch`, a
     listed receipt that differs from its retained entry in the step-15 fields
@@ -1221,7 +1223,8 @@ The verdict digest preimages are frozen as follows:
 the relying party verified earlier, each as the hexadecimal string of its
 exact bytes (a byte array for a library caller). They are checked before
 evaluation begins, after the `prior_emissions` checks above, in this order,
-and every failure is a usage error with no verdict: (1) the value is an
+and every failure is a usage error with no verdict; each numbered check
+completes for every bundle or entry before the next begins: (1) the value is an
 array of at most 16 such strings whose decoded lengths total at most
 16,777,216 bytes, checked before any of them is decoded as CBOR; (2) they
 are strictly sorted and unique by the SHA-256 of their bytes; (3) none is
@@ -1236,12 +1239,13 @@ bundle carries (a manifest with its open and close events) is merged, in
 array order, into the retained epoch of its owner and `epoch_id`: a
 different `manifest_id` for one key, or an event whose `event_id` differs
 from the retained event at the same `event_seq` position, is a usage error,
-and a chain that extends the retained one replaces it; (6) a
-`prior_emissions` entry whose `receipt_id` and `envelope_digest` equal a
-receipt carried by a retained bundle but whose coordinates differ, then an
-entry naming a retained epoch (owner and `epoch_id`) whose index does not
-list its `receipt_id`, or lists it with a different `issuer_kid`,
-`issuer_seq` or `epoch_seq`. Validation establishes structural validity at
+and a chain that extends the retained one replaces it; (6) no
+`prior_emissions` entry has the `receipt_id` and `envelope_digest` of a
+receipt carried by a retained bundle with different coordinates; (7) then,
+entry by entry in committed order, an entry naming a retained epoch (owner
+and `epoch_id`) must be listed by that epoch's index (else a usage error),
+with the same `issuer_kid`, `issuer_seq` and `epoch_seq` (else a usage
+error). Validation establishes structural validity at
 each bundle's embedded time, not when the relying party observed or
 retained it. A retained bundle's own prior or replay state is never read.
 The `--trust-policy` exact pin applies to the bundle being evaluated only.
