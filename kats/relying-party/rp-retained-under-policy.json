@@ -1,0 +1,7 @@
+{
+  "name": "rp-retained-under-policy",
+  "expected_code": null,
+  "expected_result": "conformant",
+  "expected_step": null,
+  "mutation_description": "retained_epochs holds the bundle's epoch-42 carrier (no receipts), which passes steps 1-19 under the policy's root ceiling: conformant, all_receipts_listed (D-87)."
+}

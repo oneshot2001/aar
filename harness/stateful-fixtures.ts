@@ -114,8 +114,8 @@ export function buildStatefulFixtures(): StatefulFixture[] {
   // D-87: phase A stays at step 9; every comparison with supplied state is the step-20 history phase.
   const negative = (name: string, bundle: Uint8Array, prior: StatefulPriorJson | undefined, expected_code: string, mutation_description: string, expected_step = 20): StatefulFixture =>
     ({ name, bundle, ...(prior ? { prior } : {}), descriptor: { name, expected_code, expected_step, mutation_description } });
-  const positive = (name: string, prior: StatefulPriorJson, mutation_description: string, observations = ["duplicate_exact"]): StatefulFixture =>
-    ({ name, bundle: source.bytes, prior, descriptor: { name, expected_result: "conformant", expected_code: null, expected_observations: observations, ...(observations.length > 0 ? {} : { absent_observations: ["duplicate_exact"] }), mutation_description } });
+  const positive = (name: string, prior: StatefulPriorJson, mutation_description: string, observations = ["duplicate_exact"], absent = observations.length > 0 ? [] : ["duplicate_exact"]): StatefulFixture =>
+    ({ name, bundle: source.bytes, prior, descriptor: { name, expected_result: "conformant", expected_code: null, expected_observations: observations, ...(absent.length > 0 ? { absent_observations: absent } : {}), mutation_description } });
   const below = ["sequence_below_observed_history"];
   const phaseOrder = mutated(source.bytes, 1, (value) => { (value.binding as Obj).epoch_seq = common.epochSeq; });
   return [
@@ -123,30 +123,30 @@ export function buildStatefulFixtures(): StatefulFixture[] {
     positive("identity-issuer-sequence-rollback", issuerRollback, "Prior evaluated state has a greater sequence for the carried issuer kid: what the relying party observed, not a complete record, so the lower sequence is the observation sequence_below_observed_history (D-87; was identity/issuer-sequence-rollback).", below),
     positive("identity-epoch-sequence-rollback", epochRollback, "Prior evaluated state has a greater sequence for the carried epoch owner and epoch: the observation sequence_below_observed_history (D-87; was identity/epoch-sequence-rollback).", below),
     ...FUZZ_SPLITS.map(([run, id, seed, index, seq]) => negative(`d86-fuzz-${id}`, mutated(source.bytes, index, (value) => { (value.emission as Obj).issuer_seq = seq; }), seed === "issuer" ? issuerRollback : epochRollback, "identity/coordinate-equivocation",
-      `Fuzz split docs/fuzz-runs/${run}/${id} rebuilt: receipts[${index}].emission.issuer_seq = ${seq} repeats a sibling's issuer coordinate on the ${seed}-sequence-rollback seed and prior; the in-bundle collision (phase A) outranks the history rollback (D-86).`, 9)),
+      `Fuzz split docs/fuzz-runs/${run}/${id} rebuilt: receipts[${index}].emission.issuer_seq = ${seq} repeats a sibling's issuer coordinate on the ${seed}-sequence-rollback seed and prior; the in-bundle collision (phase A) outranks the history rollback (D-86). Since D-87 the history comparison is step 20 and a lower sequence only an observation.`, 9)),
     negative("d86-history-issuer-coordinate", source.bytes, priorJson({ ...lowestIssuer, ...other, epochOwnerKid: deterministicId("prior:other-epoch-owner") }), "identity/coordinate-equivocation",
       "Q1: a prior entry names a carried receipt's issuer coordinate (its issuer's lowest issuer_seq) under a different receipt ID, in an unrelated epoch."),
     negative("d86-history-epoch-coordinate", source.bytes, priorJson({ ...lowestEpoch, ...other, issuerKid: deterministicId("prior:other-issuer"), issuerSeq: 0 }), "identity/coordinate-equivocation",
       "Q2: a prior entry names a carried receipt's epoch coordinate under a different receipt ID; an equal epoch_seq is equivocation, not rollback."),
     negative("d86-history-reuse-outranks-rollback", source.bytes, priorJson(epochAbove, { ...common, envelopeDigest: deterministicId("prior:nonidentical-envelope") }), "identity/reuse",
-      "Phase B class order: receipts[0] is an epoch rollback against the first committed entry and an ID reuse against a later one; the reuse pass runs first."),
+      "History class order: receipts[0] is below the first committed entry's epoch_seq (a rollback in v0.3.1, only an observation since D-87) and an ID reuse against a later one; reuse fails at step 20."),
     negative("d86-phase-order-with-prior", phaseOrder, issuerRollback, "identity/coordinate-equivocation",
-      "Phase order: receipts[1].binding.epoch_seq repeats receipts[0]'s epoch coordinate, and the prior is an issuer rollback; the in-bundle collision (phase A) outranks it.", 9),
+      "Phase order: receipts[1].binding.epoch_seq repeats receipts[0]'s epoch coordinate, and the prior holds a higher issuer_seq (a rollback in v0.3.1, an observation since D-87); the in-bundle collision (phase A, step 9) is reported.", 9),
     negative("d86-phase-order-without-prior", phaseOrder, undefined, "identity/coordinate-equivocation",
       "Phase order: the d86-phase-order-with-prior bundle evaluated without prior state reports the same code.", 9),
     positive("d86-history-exact-represent", priorJson(lowestEpoch),
-      "Q3: the prior entry exactly re-presents one carried receipt; it is a duplicate observation, exempt from rollback against its own sequence."),
+      "Q3: the prior entry exactly re-presents one carried receipt; it is a duplicate observation, exempt from the sequence comparison against its own sequence.", ["duplicate_exact"], ["sequence_below_observed_history"]),
     positive("d86-history-full-reobservation", priorJson(...source.entries),
-      "Every carried receipt exactly re-presented in prior state; the receipt-wide duplicate exemption keeps a lower sequence from reading as rollback against a later copy."),
+      "Every carried receipt exactly re-presented in prior state; the receipt-wide duplicate exemption keeps a lower sequence from reading as below history against a later copy.", ["duplicate_exact"], ["sequence_below_observed_history"]),
     // D-86 review (E-06 C): the phase-B class order, the limits of the duplicate exemption, history-only conflicts, partial history.
     positive("d86-phase-b-issuer-outranks-epoch-rollback", priorJson(epochAbove, { ...common, ...ids("issuer-above"), issuerSeq: 9_999_999, epochOwnerKid: deterministicId("prior:other-epoch-owner") }),
       "receipts[0] is below the first committed entry's epoch_seq and the second's issuer_seq; both are the one observation sequence_below_observed_history, not a rollback class (D-87; was identity/issuer-sequence-rollback).", below),
     negative("d86-phase-b-equivocation-outranks-rollback", source.bytes, priorJson(epochAbove, { ...source.entries.at(-1)!, ...ids("issuer-coordinate"), epochOwnerKid: deterministicId("prior:other-epoch-owner") }), "identity/coordinate-equivocation",
-      "Phase B class order: receipts[0] is an epoch rollback against the first committed entry, and the second names the last carried receipt's issuer coordinate under another receipt ID; the equivocation pass runs before both rollback passes."),
+      "History class order: receipts[0] is below the first committed entry's epoch_seq (only an observation since D-87), and the second names the last carried receipt's issuer coordinate under another receipt ID: equivocation fails at step 20."),
     negative("d86-duplicate-not-exempt-from-equivocation", source.bytes, priorJson(lowestEpoch, { ...lowestEpoch, ...other, issuerKid: new Uint8Array(32), issuerSeq: 0 }), "identity/coordinate-equivocation",
-      "An exact copy of one carried receipt plus an entry naming that receipt's epoch coordinate under another receipt ID: the duplicate is exempt from rollback only, so the equivocation pass still fails it."),
+      "An exact copy of one carried receipt plus an entry naming that receipt's epoch coordinate under another receipt ID: the duplicate is exempt only from the sequence comparison (rollback in v0.3.1, the D-87 observation), so the equivocation pass still fails it."),
     negative("d86-duplicate-not-exempt-from-reuse", source.bytes, priorJson(lowestEpoch, { ...lowestEpoch, envelopeDigest: deterministicId("prior:nonidentical-envelope") }), "identity/reuse",
-      "An exact copy of one carried receipt plus an entry giving that receipt ID other envelope bytes: the duplicate is exempt from rollback only, so the reuse pass still fails it."),
+      "An exact copy of one carried receipt plus an entry giving that receipt ID other envelope bytes: the duplicate is exempt only from the sequence comparison (rollback in v0.3.1, the D-87 observation), so the reuse pass still fails it."),
     positive("d86-history-only-conflict", priorJson({ ...unrelated, ...ids("history-only-a") }, { ...unrelated, ...ids("history-only-b") }),
       "Two prior entries share one issuer coordinate and one epoch coordinate under different receipt IDs, and neither touches a carried receipt: entries that conflict only with each other do not fail the bundle.", []),
     positive("d86-partial-history-epoch-rollback", priorJson(highestEpoch),

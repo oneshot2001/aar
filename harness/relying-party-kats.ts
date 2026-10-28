@@ -5,6 +5,7 @@ import { CborValue, decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
 import { deterministicId, domainHash, hash, id16, signDetachedWithKey } from "./crypto";
 import { buildFixtures } from "./fixtures";
 import { buildD77PositiveFixtures, buildNegativeFixtures } from "./negative-fixtures";
+import { keepReceipts, mutateReceiptWhere } from "./mutate";
 import { AT, PolicyJson, PolicyRoot, rootRecord, rpChain, rpPolicy } from "./relying-party-fixtures";
 import { TEST_KEYS, TestKey } from "./testkeys";
 import { Obj } from "./verifier";
@@ -177,5 +178,22 @@ export function buildRelyingPartyFixtures(): RpRow[] {
     "Separation rejection (a producer root is a verifier kid) combined with a wrong trust-store digest; the digest check precedes separation at step 5.");
   row("order-separation-before-step8-path", mutated((b) => addCredential(b, rpLeaf, TEST_KEYS.credential_issuing, [deterministicId("rp-missing-issuer")], "agent_signing")), "credential/path-invalid", 8,
     "Separation rejection (a carried credential is the leaf kid) combined with a path naming no carried credential; path construction precedes separation at step 8.");
+  // D-87: supplied replay state (step 20) and retained evidence under a policy.
+  const oneTime = (mutate: (receipt: Obj) => void = () => {}): Obj => mutated((b) => {
+    for (const field of ["epoch_events", "epoch_manifests", "anchors", "merkle_batches", "merkle_proofs"]) artifacts(b)[field] = [];
+    b.ranges = []; keepReceipts(b, (p) => p.kind === "observation" && typeof p.root === "object" && p.root !== null);
+    mutateReceiptWhere(b, () => true, (p) => { (p.freshness as Obj).use = "one_time"; mutate(p); });
+  });
+  const replay = (bundle: Obj, digests: (own: Uint8Array) => Uint8Array[]): Record<string, unknown> => {
+    const receipt = (artifacts(bundle).receipts as CborValue[])[0]!; const freshness = payload(receipt).freshness as Obj;
+    return { entries: digests(hash(encodeCbor(receipt))).map((digest) => ({ replay_domain: toHex(freshness.replay_domain as Uint8Array), invocation_id: toHex(freshness.invocation_id as Uint8Array), content_digest: toHex(digest) })) };
+  };
+  const zero = new Uint8Array(32);
+  for (const [name, bundle, digests, code, step, description] of [
+    ["replay-two-entries", oneTime(), (own: Uint8Array) => [zero, own], "replay/one-time-reused", 20, "A one-time root observation; replay state holds two entries for its coordinate, other content first, its own second: every entry is compared, so reuse (history phase, D-87)."],
+    ["history-independence-replay", oneTime((p) => { delete p.root; }), () => [zero], "graph/root-missing", 12, "The one-time observation without its root descriptor, and replay state with other content for its coordinate: the intrinsic code wins (D-87)."],
+  ] as const) row(name, bundle, code, step, description, undefined, { replay_state: `rp-${name}.replay.json` }, { [`rp-${name}.replay.json`]: replay(bundle, digests) });
+  row("retained-under-policy", base(), null, null, "retained_epochs holds the bundle's epoch-42 carrier (no receipts), which passes steps 1-19 under the policy's root ceiling: conformant, all_receipts_listed (D-87).", undefined,
+    { prior_state: "rp-retained-under-policy.prior.json" }, { "rp-retained-under-policy.prior.json": { retained_epochs: [toHex(encodeCbor(mutated((b) => keepReceipts(b, () => false))))] } });
   return rows;
 }

@@ -1,0 +1,6 @@
+{
+  "name": "d87-history-independence-fork",
+  "expected_code": "graph/dangling-parent",
+  "expected_step": 12,
+  "mutation_description": "Pin: the d87-retained-competing-manifest bundle plus a derived observation whose parent nobody carries; the retained epoch would make it epoch/fork (class d) at step 20, the intrinsic defect is reported first."
+}

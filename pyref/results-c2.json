@@ -1,6 +1,6 @@
 {
   "deterministic": true,
-  "deterministic_fixtures": 540,
+  "deterministic_fixtures": 548,
   "divergence_count": 0,
   "divergences": [],
   "entry_point_findings": 1,
@@ -6260,6 +6260,20 @@
     {
       "deterministic": true,
       "expected_class": null,
+      "expected_code": "key/not-found",
+      "expected_result": "indeterminate",
+      "first_failure_step": 20,
+      "fixture": "kats/negative/stateful/d87-history-after-key-not-found.bundle.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "key/not-found",
+      "produced_result": "indeterminate",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "93dc68ed4e8bd36548e1086375fac95ac8fb2d67bd83cd8265b4eeb8f5b938d4"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
       "expected_code": "graph/dangling-parent",
       "expected_result": "nonconformant",
       "first_failure_step": 12,
@@ -6270,6 +6284,34 @@
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
       "verdict_sha256": "03964b62811a2f7a49446eb1751e3f382a294823fdab348fd388a45fcd46965a"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "graph/dangling-parent",
+      "expected_result": "nonconformant",
+      "first_failure_step": 12,
+      "fixture": "kats/negative/stateful/d87-history-independence-equivocation-membership.bundle.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "graph/dangling-parent",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "18f7f438cc023f259d503d7b726e674a74e31f747e9f7051adc5ee9fb44f47be"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "graph/dangling-parent",
+      "expected_result": "nonconformant",
+      "first_failure_step": 12,
+      "fixture": "kats/negative/stateful/d87-history-independence-fork.bundle.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "graph/dangling-parent",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "a4209108ef843db53584cb15c749f08e2e82c45519398b87945b6067da64fdb5"
     },
     {
       "deterministic": true,
@@ -6326,6 +6368,20 @@
       "produced_result": "nonconformant",
       "stateful_properties": "evaluated",
       "verdict_sha256": "029d814828dcb4efd7433fb2ef5fdc6145d1205d63fd8a36557ca736d91bbe7a"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "manifest/index-receipt-mismatch",
+      "expected_result": "nonconformant",
+      "first_failure_step": 20,
+      "fixture": "kats/negative/stateful/d87-retained-index-mismatch.bundle.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "manifest/index-receipt-mismatch",
+      "produced_result": "nonconformant",
+      "stateful_properties": "evaluated",
+      "verdict_sha256": "69c65764140f001dc6630256f86887f9a0f13f8cad87aff2810f7d48bcd5edb1"
     },
     {
       "deterministic": true,
@@ -7064,7 +7120,9 @@
       "verdict_sha256": "98bd3a8ca5c54016b0971e0e091e95139bba87fa9ac24bca8389f59337c68a06"
     },
     {
-      "absent_observations": [],
+      "absent_observations": [
+        "sequence_below_observed_history"
+      ],
       "deterministic": true,
       "expected_class": null,
       "expected_code": null,
@@ -7088,7 +7146,9 @@
       "verdict_sha256": "d580529ad89740359bcc9d5d2fe8f642e757bfd90f9daa477edd63b34c70d7bb"
     },
     {
-      "absent_observations": [],
+      "absent_observations": [
+        "sequence_below_observed_history"
+      ],
       "deterministic": true,
       "expected_class": null,
       "expected_code": null,
@@ -7183,6 +7243,29 @@
       "produced_result": "conformant",
       "stateful_properties": "evaluated",
       "verdict_sha256": "3b8c6dc3c125a47e00395064b58ad4a46b6d57e7ad7b549ef74139a39cf943a7"
+    },
+    {
+      "absent_observations": [
+        "duplicate_exact"
+      ],
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": null,
+      "expected_observations": [],
+      "expected_result": "conformant",
+      "first_failure_step": null,
+      "fixture": "kats/positive/stateful/d87-late-for-epoch-not-selecting.bundle.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": null,
+      "produced_observations": [
+        "membership_only",
+        "anchor_existence_order_only",
+        "ingress_completeness_not_established"
+      ],
+      "produced_result": "conformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "70fad7c80be23d1816a9338c240196b69165a61951b1f73d9bd936e38b261a33"
     },
     {
       "absent_observations": [
@@ -7456,6 +7539,20 @@
     {
       "deterministic": true,
       "expected_class": null,
+      "expected_code": "graph/root-missing",
+      "expected_result": "nonconformant",
+      "first_failure_step": 12,
+      "fixture": "kats/relying-party/rp-history-independence-replay.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "graph/root-missing",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "62839b2fbdbc7d557d5237ab6cff8c1f215be4a2e4acc2e0aa427b09c5d4353d"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
       "expected_code": "countersign/credential-invalid",
       "expected_result": "nonconformant",
       "first_failure_step": 8,
@@ -7578,6 +7675,34 @@
       "produced_result": "conformant",
       "stateful_properties": "not_evaluated",
       "verdict_sha256": "08a5910bdf11ad6b26243e8fafd0982e5a249741bd0c3c2659b9edfc059c4a65"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "replay/one-time-reused",
+      "expected_result": "nonconformant",
+      "first_failure_step": 20,
+      "fixture": "kats/relying-party/rp-replay-two-entries.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "replay/one-time-reused",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "cb3966550ee757a4f7fe7c0a5a9dc3765d2fb3ab294a0dadf25c3ab8e021c855"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": null,
+      "expected_result": "conformant",
+      "first_failure_step": null,
+      "fixture": "kats/relying-party/rp-retained-under-policy.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": null,
+      "produced_result": "conformant",
+      "stateful_properties": "evaluated",
+      "verdict_sha256": "eee31a42fec41531d1a57772b17de6a15abbe261d6f42f477fdc66e4195d75c1"
     },
     {
       "deterministic": true,
@@ -7846,8 +7971,8 @@
       "verdict_sha256": "081f485ad962cf8c2e79b48a3e77c36e3df6bbb4368bacb677a76a5275951aad"
     }
   ],
-  "fixtures_evaluated": 540,
-  "matches": 540,
+  "fixtures_evaluated": 548,
+  "matches": 548,
   "mismatches": 0,
   "schema_version": 1,
   "slice": "C2"

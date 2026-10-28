@@ -2,5 +2,5 @@
   "name": "d86-fuzz-m-01906",
   "expected_code": "identity/coordinate-equivocation",
   "expected_step": 9,
-  "mutation_description": "Fuzz split docs/fuzz-runs/2026-10-24/m-01906 rebuilt: receipts[0].emission.issuer_seq = 102 repeats a sibling's issuer coordinate on the issuer-sequence-rollback seed and prior; the in-bundle collision (phase A) outranks the history rollback (D-86)."
+  "mutation_description": "Fuzz split docs/fuzz-runs/2026-10-24/m-01906 rebuilt: receipts[0].emission.issuer_seq = 102 repeats a sibling's issuer coordinate on the issuer-sequence-rollback seed and prior; the in-bundle collision (phase A) outranks the history rollback (D-86). Since D-87 the history comparison is step 20 and a lower sequence only an observation."
 }

@@ -1,0 +1,6 @@
+{
+  "name": "d87-history-independence-equivocation-membership",
+  "expected_code": "graph/dangling-parent",
+  "expected_step": 12,
+  "mutation_description": "Pin: the graph-dangling-parent bytes with history that trips class (b) (an entry naming a carried receipt's issuer coordinate under another ID, outside any retained epoch) and class (e) (the re-identified child is not in the retained index): the intrinsic defect is reported as without history."
+}

@@ -2,5 +2,5 @@
   "name": "d86-duplicate-not-exempt-from-equivocation",
   "expected_code": "identity/coordinate-equivocation",
   "expected_step": 20,
-  "mutation_description": "An exact copy of one carried receipt plus an entry naming that receipt's epoch coordinate under another receipt ID: the duplicate is exempt from rollback only, so the equivocation pass still fails it."
+  "mutation_description": "An exact copy of one carried receipt plus an entry naming that receipt's epoch coordinate under another receipt ID: the duplicate is exempt only from the sequence comparison (rollback in v0.3.1, the D-87 observation), so the equivocation pass still fails it."
 }

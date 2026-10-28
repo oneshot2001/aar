@@ -1,0 +1,13 @@
+{
+  "name": "d87-late-for-epoch-not-selecting",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "expected_observations": [],
+  "absent_observations": [
+    "duplicate_exact"
+  ],
+  "expected_limits": {
+    "retained_manifest_membership": "not_established"
+  },
+  "mutation_description": "Rule 0: beside the epoch-42 receipts, a root observation bound to epoch 43 with late_for_epoch_id 42; no epoch-43 manifest is carried, and late_for_epoch_id never selects the epoch-42 manifest, so the receipt is not judged against its index: conformant."
+}

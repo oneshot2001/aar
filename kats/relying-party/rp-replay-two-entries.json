@@ -1,0 +1,7 @@
+{
+  "name": "rp-replay-two-entries",
+  "expected_code": "replay/one-time-reused",
+  "expected_result": "nonconformant",
+  "expected_step": 20,
+  "mutation_description": "A one-time root observation; replay state holds two entries for its coordinate, other content first, its own second: every entry is compared, so reuse (history phase, D-87)."
+}

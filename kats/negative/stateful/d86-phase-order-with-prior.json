@@ -2,5 +2,5 @@
   "name": "d86-phase-order-with-prior",
   "expected_code": "identity/coordinate-equivocation",
   "expected_step": 9,
-  "mutation_description": "Phase order: receipts[1].binding.epoch_seq repeats receipts[0]'s epoch coordinate, and the prior is an issuer rollback; the in-bundle collision (phase A) outranks it."
+  "mutation_description": "Phase order: receipts[1].binding.epoch_seq repeats receipts[0]'s epoch coordinate, and the prior holds a higher issuer_seq (a rollback in v0.3.1, an observation since D-87); the in-bundle collision (phase A, step 9) is reported."
 }

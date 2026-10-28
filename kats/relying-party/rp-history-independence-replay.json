@@ -1,0 +1,7 @@
+{
+  "name": "rp-history-independence-replay",
+  "expected_code": "graph/root-missing",
+  "expected_result": "nonconformant",
+  "expected_step": 12,
+  "mutation_description": "The one-time observation without its root descriptor, and replay state with other content for its coordinate: the intrinsic code wins (D-87)."
+}

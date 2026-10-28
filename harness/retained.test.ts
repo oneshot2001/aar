@@ -3,13 +3,14 @@
 // the pyref CLI (section 5 order), the compatible-extension merge, no recursion into
 // prior or replay state, and the supplied replay state judged at step 20.
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
 import { deterministicId, hash, id16 } from "./crypto";
 import { artifacts, keepReceipts, mutateReceiptWhere, payload, sortArtifacts } from "./mutate";
 import { expectUsageError, harnessPrior, pyrefCli, pyrefLibrary, UsageCase, withBundle } from "./prior-state-probe";
+import { rpOptions } from "./relying-party-inputs";
 import { RETAINED_COORDINATES, RETAINED_RECEIPT_CONTRADICTION, RETAINED_UNLISTED } from "./retained";
 import { buildD87Fixtures } from "./d87-fixtures";
 import { exactEntries, priorJson, StatefulFixture } from "./stateful-fixtures";
@@ -166,4 +167,44 @@ describe("D-87 fix round 1: retained input hardening", () => {
     expect(retained(fork, kept, fromHex(bad)).at(-1)).toBe(bad);
     expect(retained(event, kept, fromHex(bad)).at(-1)).toBe(bad);
   }, 120_000);
+
+  test("under a relying-party policy a retained bundle outside the policy's root ceiling is a usage error in the harness, pyref library and pyref CLI", () => {
+    const rp = join(dirname(fileURLToPath(import.meta.url)), "..", "kats", "relying-party");
+    const inputs = JSON.parse(readFileSync(join(rp, "rp-root-not-accepted.inputs.json"), "utf8")); // the policy lists only a root nothing here chains to
+    const value = { retained_epochs: [toHex(kept)] };
+    const message = `${LABEL}[0] fails step 8 (credential/root-not-accepted)`;
+    expect(() => verifyBundle(zero, { ...rpOptions(rp, inputs), ...harnessPrior(value) })).toThrow(message);
+    withBundle(zero, (directory, path) => {
+      writeFileSync(join(directory, "prior.json"), JSON.stringify(value));
+      const policy = join(rp, inputs.policy); const key = join(rp, inputs.signing_key);
+      const library = Bun.spawnSync(["python3", "-B", "-c", `
+import json, sys
+from pathlib import Path
+from pyref.relying_party import load_configuration
+from pyref.verifier import evaluate
+try:
+    evaluate(open(sys.argv[1], "rb").read(), evaluated_at=${AT}, prior_state=json.load(open(sys.argv[2])), configuration=load_configuration(Path(sys.argv[3]), Path(sys.argv[4]), ${AT}))
+except ValueError as exc:
+    print(type(exc).__name__, exc)
+`, path, join(directory, "prior.json"), policy, key], { cwd: join(rp, "..", "..") });
+      expect(library.stdout.toString().trim()).toBe(`UsageError ${message}`);
+      const cli = Bun.spawnSync(["python3", "-B", "-m", "pyref", "verify", path, "--at", String(AT), "--prior-state", join(directory, "prior.json"), "--policy", policy, "--signing-key", key], { cwd: join(rp, "..", "..") });
+      expect(cli.exitCode).toBe(2);
+      expect(cli.stderr.toString()).toContain(`error: ${message}\n`);
+    });
+  }, 60_000);
+
+  test("each history-independence pin's history trips its class when the intrinsic defect is absent; the key-not-found row is the repair-d82 bytes", () => {
+    const root = join(dirname(fileURLToPath(import.meta.url)), "..", "kats");
+    expect(toHex(fixture("d87-history-after-key-not-found").bundle)).toBe(toHex(readFileSync(join(root, "negative", "repair-d82-verifier-key-not-found.cbor"))));
+    const code = (bytes: Uint8Array, prior: Parameters<typeof harnessPrior>[0]): string => { const r = verifyBundle(bytes, { evaluationTime: AT, ...harnessPrior(prior) }); return r.ok ? "conformant" : `${r.reason}@${r.step}`; };
+    // graph-dangling-parent's base (journal cleared, the observations kept) without the dangling parent; then with the child re-identified by a nonce only.
+    const clean = edit(base, (bundle) => { for (const field of ["epoch_events", "epoch_manifests", "anchors", "merkle_batches", "merkle_proofs"]) artifacts(bundle)[field] = []; bundle.ranges = []; keepReceipts(bundle, (value) => value.kind === "observation"); });
+    const reidentified = edit(clean, (bundle) => mutateReceiptWhere(bundle, (value) => typeof value.root !== "object", (value) => { (value.freshness as Obj).nonce = id16("d87:reidentified"); }));
+    const pin = fixture("d87-history-independence-equivocation-membership").prior!;
+    expect(code(clean, { prior_emissions: pin.prior_emissions })).toBe("identity/coordinate-equivocation@20");
+    expect(code(reidentified, { retained_epochs: pin.retained_epochs })).toBe("manifest/receipt-unindexed@20");
+    expect(code(fixture("d87-retained-competing-manifest").bundle, fixture("d87-history-independence-fork").prior!)).toBe("epoch/fork@20");
+    expect(code(base, fixture("d87-history-after-key-not-found").prior!)).toBe("identity/reuse@20");
+  }, 60_000);
 });

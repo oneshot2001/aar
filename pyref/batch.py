@@ -19,6 +19,7 @@ from typing import Any
 
 from . import cbor, verifier
 from .cli import _trust_policy
+from .kat_inputs import replay_bytes
 from .relying_party import load_configuration
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -71,7 +72,7 @@ def _arguments(inputs: dict[str, Any]) -> dict[str, Any]:
     policy, key, pin = inputs["policy"], inputs["signing_key"], inputs["trust_policy"]
     return {
         "evaluated_at": at,
-        "prior_state": inputs["prior_state"], "replay_state": inputs["replay_state"],
+        "prior_state": inputs["prior_state"], "replay_state": None if inputs["replay_state"] is None else replay_bytes(inputs["replay_state"]),
         "configuration": load_configuration(Path(policy), Path(key), at) if policy is not None else None,
         "configured_trust_policy": None if pin is None else _trust_policy(Path(pin)),
     }

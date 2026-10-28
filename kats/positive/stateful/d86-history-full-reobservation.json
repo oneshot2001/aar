@@ -5,5 +5,8 @@
   "expected_observations": [
     "duplicate_exact"
   ],
-  "mutation_description": "Every carried receipt exactly re-presented in prior state; the receipt-wide duplicate exemption keeps a lower sequence from reading as rollback against a later copy."
+  "absent_observations": [
+    "sequence_below_observed_history"
+  ],
+  "mutation_description": "Every carried receipt exactly re-presented in prior state; the receipt-wide duplicate exemption keeps a lower sequence from reading as below history against a later copy."
 }

@@ -1,0 +1,8 @@
+{
+  "policy": "rp-history-independence-replay.policy.json",
+  "signing_key": "rp-verifier.key",
+  "trust_policy": null,
+  "prior_state": null,
+  "replay_state": "rp-history-independence-replay.replay.json",
+  "at": 1735689800
+}

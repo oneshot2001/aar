@@ -37,12 +37,18 @@ def _rp_inputs(path: Path) -> dict[str, Any] | None:
     inputs = json.loads(inputs_path.read_text(encoding="utf-8"))
     sibling = lambda name: None if name is None else path.with_name(name)  # noqa: E731
     state = lambda name: None if name is None else json.loads(sibling(name).read_text(encoding="utf-8"))  # noqa: E731
+    replay = state(inputs["replay_state"])
     return {
         "evaluated_at": inputs["at"],
         "configuration": load_configuration(sibling(inputs["policy"]), sibling(inputs["signing_key"]), inputs["at"]),
         "configured_trust_policy": None if inputs["trust_policy"] is None else _trust_policy(sibling(inputs["trust_policy"])),
-        "prior_state": state(inputs["prior_state"]), "replay_state": state(inputs["replay_state"]),
+        "prior_state": state(inputs["prior_state"]), "replay_state": None if replay is None else replay_bytes(replay),
     }
+
+
+def replay_bytes(value: dict[str, Any]) -> dict[str, Any]:
+    """A replay-state JSON mirror with its hex fields decoded, as the CLI and the harness read it."""
+    return {"entries": [{key: bytes.fromhex(item) for key, item in entry.items()} for entry in value.get("entries", [])]}
 
 
 def _sidecar_path(path: Path) -> Path:

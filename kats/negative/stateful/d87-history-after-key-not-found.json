@@ -1,0 +1,6 @@
+{
+  "name": "d87-history-after-key-not-found",
+  "expected_code": "key/not-found",
+  "expected_step": 20,
+  "mutation_description": "The repair-d82-verifier-key-not-found bytes (no verifier_signing credential) with a prior entry reusing a carried receipt ID: the step-20 key resolution runs before the history phase, so the result is indeterminate key/not-found as without history (v0.3.1: identity/reuse at step 9)."
+}

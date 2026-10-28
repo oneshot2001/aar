@@ -1,0 +1,6 @@
+{
+  "name": "d87-retained-index-mismatch",
+  "expected_code": "manifest/index-receipt-mismatch",
+  "expected_step": 20,
+  "mutation_description": "The retained epoch-42 index lists every carried receipt, but its first entry's issuer_seq is one higher than the receipt's (index root, manifest, events and anchor rebuilt); the bundle carries no journal, so no fork: class (e), step-15 fields pass."
+}

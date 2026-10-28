@@ -2,5 +2,5 @@
   "name": "d86-phase-b-equivocation-outranks-rollback",
   "expected_code": "identity/coordinate-equivocation",
   "expected_step": 20,
-  "mutation_description": "Phase B class order: receipts[0] is an epoch rollback against the first committed entry, and the second names the last carried receipt's issuer coordinate under another receipt ID; the equivocation pass runs before both rollback passes."
+  "mutation_description": "History class order: receipts[0] is below the first committed entry's epoch_seq (only an observation since D-87), and the second names the last carried receipt's issuer coordinate under another receipt ID: equivocation fails at step 20."
 }

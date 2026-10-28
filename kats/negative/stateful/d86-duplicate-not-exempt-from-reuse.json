@@ -2,5 +2,5 @@
   "name": "d86-duplicate-not-exempt-from-reuse",
   "expected_code": "identity/reuse",
   "expected_step": 20,
-  "mutation_description": "An exact copy of one carried receipt plus an entry giving that receipt ID other envelope bytes: the duplicate is exempt from rollback only, so the reuse pass still fails it."
+  "mutation_description": "An exact copy of one carried receipt plus an entry giving that receipt ID other envelope bytes: the duplicate is exempt only from the sequence comparison (rollback in v0.3.1, the D-87 observation), so the reuse pass still fails it."
 }
