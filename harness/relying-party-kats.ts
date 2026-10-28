@@ -190,7 +190,7 @@ export function buildRelyingPartyFixtures(): RpRow[] {
   };
   const zero = new Uint8Array(32);
   for (const [name, bundle, digests, code, step, description] of [
-    ["replay-two-entries", oneTime(), (own: Uint8Array) => [zero, own], "replay/one-time-reused", 20, "A one-time root observation; replay state holds two entries for its coordinate, other content first, its own second: every entry is compared, so reuse (history phase, D-87)."],
+    ["replay-two-entries", oneTime(), (own: Uint8Array) => [zero, own], "replay/one-time-reused", 20, "A one-time root observation; replay state holds two entries for its coordinate, other content first, its own second: not only the last entry is compared (history phase, D-87)."],
     ["history-independence-replay", oneTime((p) => { delete p.root; }), () => [zero], "graph/root-missing", 12, "The one-time observation without its root descriptor, and replay state with other content for its coordinate: the intrinsic code wins (D-87)."],
   ] as const) row(name, bundle, code, step, description, undefined, { replay_state: `rp-${name}.replay.json` }, { [`rp-${name}.replay.json`]: replay(bundle, digests) });
   row("retained-under-policy", base(), null, null, "retained_epochs holds the bundle's epoch-42 carrier (no receipts), which passes steps 1-19 under the policy's root ceiling: conformant, all_receipts_listed (D-87).", undefined,
