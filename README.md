@@ -9,7 +9,7 @@
 <p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/code-Apache--2.0-blue.svg" alt="Code: Apache-2.0"></a>
   <a href="LICENSE-SPEC"><img src="https://img.shields.io/badge/spec-CC%20BY%204.0-blue.svg" alt="Spec: CC BY 4.0"></a>
-  <a href="spec/aar-core.cddl"><img src="https://img.shields.io/badge/release-v0.3.1-3ec9a7.svg" alt="Release: v0.3.1 (bundle wire v0.2, verdict v0.3)"></a>
+  <a href="spec/aar-core.cddl"><img src="https://img.shields.io/badge/release-v0.4.0-3ec9a7.svg" alt="Release: v0.4.0 (bundle wire v0.2, verdict v0.4)"></a>
   <a href="pyref/"><img src="https://img.shields.io/badge/verifier-offline%20%C2%B7%20stdlib--only-3ec9a7.svg" alt="Verifier: offline, stdlib-only"></a>
   <a href="kats/"><img src="https://img.shields.io/badge/KATs-byte--pinned-1d3648.svg" alt="KATs: byte-pinned"></a>
   <a href="#status"><img src="https://img.shields.io/badge/status-stable%20experimental%20spec-d98e3b.svg" alt="Status: stable experimental spec"></a>
@@ -35,7 +35,7 @@ authorized to do, what it attempted, whether the command was dispatched, and
 what an observer saw happen. Anyone holding that bundle can check it offline,
 with no vendor service, account, or network, and get a signed verdict. AAR is
 the wire format, the conformance rules, and a free verifier for that record.
-It is a **stable experimental spec** (`v0.3.1`: bundle wire v0.2 unchanged, verdict v0.3), implemented twice by one
+It is a **stable experimental spec** (`v0.4.0`: bundle wire v0.2 unchanged, verdict v0.4), implemented twice by one
 operator, run against real cameras, and not yet adopted by anyone else.
 
 ## Verify a receipt bundle in 60 seconds
@@ -63,6 +63,7 @@ TypeScript harness: `bun run harness/verify.ts BUNDLE --at UNIX_SECONDS`.
 | The verdict bytes are reproducible by a second, clean-room implementation | Custody continuity or legal admissibility (D-71) |
 | A relying party can check a bundle under its own root list and sign the verdict with its own key; the verdict binds that policy (D-83, v0.3) | That anything happened outside the instrumented enforcement point: a VMS console, a vendor app, or hands on the device leave no receipt, and the verdict says so (`control_path_completeness: not_established`, D-84) |
 | A delegation names the enforcement point that attempted under it, a rotation is signed by the retiring key's issuer, and revocation is judged at each signature's own time: receipts signed before `revoked_at` keep verifying, nothing signed at or after it passes (D-79..D-81) | That the status authority's `revoked_at` instant is accurate (it is that authority's assertion) |
+| A carried receipt is listed by its own epoch's carried manifest; given epoch manifests the relying party kept from earlier bundles, every carried receipt of a kept epoch is listed there and a competing manifest or event is a fork (`retained_manifest_membership: all_receipts_listed` when every carried receipt is so listed, D-87) | That the relying party held those bundles before any compromise, anything about an epoch it never kept, or that a manifest omits nothing; a sequence below the history it supplied is relayed (`sequence_below_observed_history`), not judged a rollback, because that history is what it observed, not a complete record |
 
 "Evidence-grade" in this repo means exactly the left column: attribution,
 post-emission tamper evidence, and anchored completeness over declared
@@ -83,9 +84,9 @@ choice, stated so nobody has to discover it.
 
 | Artifact | State |
 |---|---|
-| Wire | **v0.3.1** — bundle wire v0.2 (unchanged since v0.2.5; normative CDDL at `spec/aar-core.cddl`), verdict v0.3 (`v: 5`: a relying party's own root ceiling and signing key, D-83; the control-path non-claim, D-84; step-9 emission-identity precedence and history comparisons, D-86, no wire change); five rc gates closed, exit bar re-run live against real cameras; delta since rc7 in `spec/AUDIT-rc7-to-v0.2.0.md` |
+| Wire | **v0.4.0** — bundle wire v0.2 (unchanged since v0.2.5; normative CDDL at `spec/aar-core.cddl`), verdict v0.4 (`v: 6`: retained-epoch evidence, in-bundle manifest membership and one history phase after every intrinsic check, D-87; on v0.3's relying-party root ceiling and signing key, D-83, the control-path non-claim, D-84, and step-9 emission-identity precedence, D-86); five rc gates closed, exit bar re-run live against real cameras; delta since rc7 in `spec/AUDIT-rc7-to-v0.2.0.md` |
 | Offline verifier | **pyref** — clean-room, Python stdlib only, no network, no wall clock |
-| Second implementation | TypeScript harness (`harness/`) — generates the KAT corpus; byte-identical verdicts with pyref on the cross-implementation gate: every corpus row (532 after D-86: 478 plus 35 relying-party rows plus 19 D-86 stateful rows) and every fixture-pinned shape agree in both verifiers; shapes no fixture pins are not claimed (the full-corpus test in `harness/crossimpl.test.ts` runs un-skipped since D-82). The round-8 structural sweep (every member the kit can construct — 74 of 82 map productions, 2,184 effective shapes; the 51 skipped and the 3 kit-rewritten members are listed in the sweep table — mutated to null, list, int, text and bool) agreed in both; the two shapes verified by probe only (test-infrastructure gaps) and the members both verifiers tolerate are listed in the `BACKLOG.md` step-6 design item. History: [parity audit](docs/verifier-parity-audit-2026-10-08.md) |
+| Second implementation | TypeScript harness (`harness/`) — generates the KAT corpus; byte-identical verdicts with pyref on the cross-implementation gate: every corpus row (540 after D-87: 478 plus 35 relying-party rows plus 19 D-86 and 8 D-87 stateful rows) and every fixture-pinned shape agree in both verifiers; shapes no fixture pins are not claimed (the full-corpus test in `harness/crossimpl.test.ts` runs un-skipped since D-82). The round-8 structural sweep (every member the kit can construct — 74 of 82 map productions, 2,184 effective shapes; the 51 skipped and the 3 kit-rewritten members are listed in the sweep table — mutated to null, list, int, text and bool) agreed in both; the two shapes verified by probe only (test-infrastructure gaps) and the members both verifiers tolerate are listed in the `BACKLOG.md` step-6 design item. History: [parity audit](docs/verifier-parity-audit-2026-10-08.md) |
 | Conformance KATs | byte-pinned positive / negative / class-boundary / terminal-state fixtures in `kats/` |
 | Threat model | **v0.1** — `docs/threat-model-v0.1.md` (30-finding adversarially challenged, gated) |
 | Adapters | VAPIX live leg + one VMS control leg exercised at gate 5 (`adapters/`) |

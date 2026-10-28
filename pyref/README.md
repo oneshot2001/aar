@@ -130,8 +130,9 @@ nothing about an operator's key.
 
 ## Prior-state JSON
 
-The closed top-level keys are `prior_emissions` and `entries`; either may be
-omitted and defaults to an empty array. All byte strings are hex. `entries`
+The closed top-level keys are `prior_emissions`, `retained_epochs` (D-87,
+below) and `entries`; `prior_emissions` and `entries` may be omitted and
+default to an empty array. All byte strings are hex. `entries`
 must be strictly sorted and unique by deterministic CBOR of
 `[replay_domain, invocation_id, content_digest]`. `prior_emissions` must also be
 strictly sorted and unique by deterministic CBOR of `[issuer_kid, issuer_seq,
@@ -148,8 +149,28 @@ but different coordinates, and an entry whose `receipt_id` and
 with the same message. The `entries` (replay state) shape and JSON syntax are
 checked by the command line only.
 
+`retained_epochs` (D-87) holds bundles the relying party verified earlier,
+each the hex of its exact bytes, strictly sorted and unique by the SHA-256 of
+those bytes: at most 16, at most 16 MiB in total, both checked before any is
+decoded. Before evaluation begins each must pass steps 1 to 19 at its own
+`trust_inputs.evaluation_time` (no prior or replay state, no verdict, no
+synthetic verifier-signing use, under `--policy` if given), that time must not
+be later than `--at`, and none may be the bundle being verified. Every closed
+epoch they carry is retained by owner and `epoch_id`; two different manifests
+for one epoch, event chains that disagree (a longer compatible chain merges),
+a `prior_emissions` entry that contradicts a retained receipt, or an entry in
+a retained epoch that its index does not list with the same coordinates is a
+usage error (exit 2, no verdict; `evaluate` raises `UsageError`, a
+`ValueError`). Retained bundles show structure at their own embedded times,
+not when the relying party came to hold them. In the history phase (step 20)
+a carried manifest or event of a retained epoch that differs from the
+retained one is `epoch/fork`, and a carried receipt of a retained epoch must
+be listed by its index (`manifest/receipt-unindexed`) with the same fields
+(`manifest/index-receipt-mismatch`).
+
 ```json
 {
+  "retained_epochs": ["hex of a retained bundle's exact bytes"],
   "prior_emissions": [
     {
       "issuer_kid": "32-byte hex",
@@ -171,8 +192,9 @@ checked by the command line only.
 }
 ```
 
-`prior_emissions` supplies cross-evaluation receipt identity and sequence
-state, bound into the signed verdict by `prior_emissions_digest` (D-76):
+`prior_emissions` supplies what the relying party observed earlier (D-87:
+not a complete record), bound into the signed verdict by
+`prior_emissions_digest` (D-76):
 `SHA-256(deterministic-CBOR(["AAR-VERDICT-PRIOR-v1", { entries: [...] }]))`,
 with the seven entry fields above and hex strings decoded to byte strings.
 `entries` supplies previously accepted one-time replay coordinates, bound by
@@ -180,8 +202,17 @@ with the seven entry fields above and hex strings decoded to byte strings.
 bytes and the report includes `stateful_not_evaluated`: those cross-evaluation
 properties were not evaluated and did not pass. Supplying even an empty file
 binds the canonical empty entries map under each digest's separate domain;
-omitted arrays also mean empty arrays. Verdicts use `v: 5` under the protected
-content type `application/aar-verdict+cbor;v=0.3` (D-83, D-84); every bundle
+omitted arrays also mean empty arrays. `retained_epochs_digest` binds the
+sorted SHA-256 of each retained bundle (the empty list when the key is
+omitted; 32 zero bytes without `--prior-state`), and the signed limit
+`retained_manifest_membership` is `all_receipts_listed` only when every
+carried receipt (at least one) is listed by a retained epoch. Every
+comparison with supplied state (reuse, equivocation, replay, retained fork
+and membership) runs in step 20 after every intrinsic check, so the code for
+a bundle's own defect does not depend on the history supplied; a sequence
+below that history adds the signed observation
+`sequence_below_observed_history`. Verdicts use `v: 6` under the protected
+content type `application/aar-verdict+cbor;v=0.4` (D-87); every bundle
 artifact keeps its `v=0.2` content type.
 
 ## Schema oracle (release test, D-74)
@@ -218,8 +249,12 @@ legal admissibility, complete discovery, or control-path completeness. In partic
   TPM, provider, or predicate format.
 - `empty_scope` means a conformant evaluation matched zero receipts, so the
   verdict asserts nothing about any receipt.
-- `stateful_not_evaluated` means no prior state was supplied, so sequence
-  rollback and cross-evaluation one-time reuse were not evaluated.
+- `stateful_not_evaluated` means no prior state was supplied, so
+  cross-evaluation identity, sequence history, retained-epoch membership and
+  one-time reuse were not evaluated.
+- `retained_manifest_membership: all_receipts_listed` (D-87) says only that
+  manifests the relying party supplied list every carried receipt; it says
+  nothing about epochs never retained or receipts a manifest omits.
 - `control_path_completeness: not_established` (D-84) is signed on every
   result: an action dispatched around the enforcement point (a VMS console, a
   vendor application, physical access) produces no receipt, and nothing in a
@@ -237,9 +272,9 @@ neither signature must be treated as third-party assurance or used as a
 deployment credential.
 
 The implementation-defined verifier identity preimages are stable constants:
-`pyref-aar-v0.3.1-d86-emission-identity-build-v1` for `build_digest` and
+`pyref-aar-v0.4.0-d87-history-build-v1` for `build_digest` and
 `pyref-aar-v0.2-gate4-c2-fixed-conformance-config-v1` for `config_digest`.
 
-Both verifiers report version `v0.3.1`. The harness build digest is SHA-256 of
-UTF-8 `harness-aar-v0.3.1-d86-emission-identity-build-v1`; its config digest keeps
+Both verifiers report version `v0.4.0`. The harness build digest is SHA-256 of
+UTF-8 `harness-aar-v0.4.0-d87-history-build-v1`; its config digest keeps
 the preimage `AAR-KAT-OPAQUE-ID:verifier-config:aar-reference-verifier@0.2.0-default`.
