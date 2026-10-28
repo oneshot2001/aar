@@ -1,0 +1,13 @@
+{
+  "name": "d87-retained-zero-receipts",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "expected_observations": [],
+  "absent_observations": [
+    "duplicate_exact"
+  ],
+  "expected_limits": {
+    "retained_manifest_membership": "not_established"
+  },
+  "mutation_description": "A bundle with no receipts and no journal, with retained epochs supplied: the limit needs at least one carried receipt, so it stays not_established."
+}

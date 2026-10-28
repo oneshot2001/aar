@@ -691,7 +691,7 @@ def _boundary_class(sidecar: dict[str, Any], evaluation: Evaluation) -> tuple[st
 def _prior_digest_checks() -> None:
     from .cli import UsageError, _prior_state
 
-    stem = ROOT / "kats" / "negative" / "stateful" / "identity-issuer-sequence-rollback"
+    stem = ROOT / "kats" / "positive" / "stateful" / "identity-issuer-sequence-rollback"
     raw = stem.with_suffix(".bundle.cbor").read_bytes()
     rollback = json.loads(stem.with_suffix(".prior.json").read_text())
     unrelated = {"prior_emissions": [
@@ -707,8 +707,8 @@ def _prior_digest_checks() -> None:
             prior, replay = _prior_state(path)
             result = evaluate(raw, evaluated_at=KAT_EVALUATION_TIME,
                               prior_state=prior, replay_state=replay)
-            assert result.reason == ("identity/issuer-sequence-rollback" if label == "rollback" else None)
-            assert result.verdict["v"] == 5
+            assert result.reason is None  # D-87: a lower sequence is an observation
+            assert result.verdict["v"] == 6
             digest = result.verdict["trust_policy"]["prior_emissions_digest"]
             digests.append(digest)
             verdicts.append(result.verdict_bytes)

@@ -1,0 +1,6 @@
+{
+  "name": "d87-retained-forged-insertion",
+  "expected_code": "manifest/receipt-unindexed",
+  "expected_step": 20,
+  "mutation_description": "The bundle drops its journal (so rule 0 has no carried manifest) and adds a root observation bound to epoch 42 that the retained index does not list: class (e) membership."
+}

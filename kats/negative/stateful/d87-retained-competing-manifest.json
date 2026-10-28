@@ -1,0 +1,6 @@
+{
+  "name": "d87-retained-competing-manifest",
+  "expected_code": "epoch/fork",
+  "expected_step": 20,
+  "mutation_description": "The bundle carries an internally valid epoch-42 manifest with another manifest_id (an uncarried predecessor named): class (d), manifest pass."
+}

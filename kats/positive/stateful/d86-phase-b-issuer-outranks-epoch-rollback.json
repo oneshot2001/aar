@@ -1,0 +1,9 @@
+{
+  "name": "d86-phase-b-issuer-outranks-epoch-rollback",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "expected_observations": [
+    "sequence_below_observed_history"
+  ],
+  "mutation_description": "receipts[0] is below the first committed entry's epoch_seq and the second's issuer_seq; both are the one observation sequence_below_observed_history, not a rollback class (D-87; was identity/issuer-sequence-rollback)."
+}

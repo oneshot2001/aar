@@ -1,0 +1,13 @@
+{
+  "name": "d87-retained-superset",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "expected_observations": [],
+  "absent_observations": [
+    "duplicate_exact"
+  ],
+  "expected_limits": {
+    "retained_manifest_membership": "all_receipts_listed"
+  },
+  "mutation_description": "The retained bundle carries epoch 42 with no receipts; the bundle carries every receipt that index lists, so each carried receipt is listed by a retained epoch."
+}

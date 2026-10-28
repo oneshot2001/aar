@@ -1,0 +1,13 @@
+{
+  "prior_emissions": [
+    {
+      "issuer_kid": "5cd252fb0ce8932436faf8ccd1040981b89ee4ad6b9fe9e2a2b7e71aacb27cd3",
+      "issuer_seq": 100,
+      "epoch_owner_kid": "dc0ce633dbcc913dafafa4b89ac44d8ce683fdfc3f60c8bdf21213b9f2b534ba",
+      "epoch_id": 42,
+      "epoch_seq": 0,
+      "receipt_id": "54a466a449e64bf0d6e1f2cd92752da9261f656c0903ad1607426c0813a9cd3f",
+      "envelope_digest": "85bcb3ce10567177d4a47a6c58c8a126a8846401ee2dbfe94372f937c9c0870a"
+    }
+  ]
+}

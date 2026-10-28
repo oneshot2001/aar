@@ -21,7 +21,7 @@ RETAINED_RECEIPT_CONTRADICTION = (
 RETAINED_UNLISTED = "prior-state.prior_emissions entry names a retained epoch whose index does not list its receipt_id"
 RETAINED_COORDINATES = "prior-state.prior_emissions entry names a retained epoch whose index lists it with other coordinates"
 LABEL = "prior-state.retained_epochs"
-HEX = re.compile(r"(?:[0-9a-fA-F]{2})*")
+HEX = re.compile(r"[0-9a-fA-F]*")  # with an even length; linear for up to 32 Mi hex digits
 
 
 def bundles(prior_state: dict[str, Any]) -> list[bytes]:
@@ -35,7 +35,7 @@ def bundles(prior_state: dict[str, Any]) -> list[bytes]:
     for index, item in enumerate(value):
         if not isinstance(item, str):
             raise relying_party.UsageError(f"{LABEL}[{index}] must be a hex string")
-        if not HEX.fullmatch(item):
+        if len(item) % 2 or not HEX.fullmatch(item):
             raise relying_party.UsageError(f"{LABEL}[{index}] is not valid hex")
     if sum(len(item) // 2 for item in value) > RETAINED_BYTES:
         raise relying_party.UsageError(f"{LABEL} must total at most {RETAINED_BYTES} bytes")

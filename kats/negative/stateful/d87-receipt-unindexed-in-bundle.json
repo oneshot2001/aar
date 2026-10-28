@@ -1,0 +1,6 @@
+{
+  "name": "d87-receipt-unindexed-in-bundle",
+  "expected_code": "manifest/receipt-unindexed",
+  "expected_step": 15,
+  "mutation_description": "Rule 0: the pre-D-87 bytes of kats/positive/d82-chain-two-levels (the embedded delegation re-signed, so the authorization and its descendants carry new receipt IDs) while the carried epoch-42 manifest still indexes the old ones."
+}

@@ -5,7 +5,7 @@ import { buildCountersignFixtures } from "./countersign-fixtures";
 import { promotedProofWithDomain, promotedRoot, rfc6962Leaf } from "./merkle";
 import { TEST_KEYS, TestKeyName } from "./testkeys";
 import { object, clone, same, artifacts, payload, cose, protectedMap, signerFor, contentType, resign, mutateArtifact, mutateReceipt, mutateReceiptWhere, sortArtifacts, compare, recalcSelector, recalcTrust, modifyCose, receiptList, keepReceipts, withoutField, rebuildEventChain, rfcRootFromProof, rebuildManifest, addSecondEpoch, flipSignature, relinkEventChain, mutateLastEvent, mutateMerkleBatch, addManifestWithAnchor, crossEpochChild, addTopLevelDelegation } from "./mutate";
-import { mutateEmbeddedDelegation, receiptBy, replaceReceipt } from "./mutate-graph";
+import { mutateEmbeddedDelegation, receiptBy, reindexCarried, replaceReceipt } from "./mutate-graph";
 
 type Obj = Record<string, CborValue>;
 
@@ -808,9 +808,9 @@ const TRANSFORM: Obj = {
 };
 
 // D-82 part 6: conformant subsets whose maximum classes start at not_evaluated.
-export function buildD82PositiveFixtures() {
+export function buildD82PositiveFixtures(d87 = true) {
   const make = (filename: string, description: string, mutate: (bundle: Obj) => void) => {
-    const bundle = baseBundle(); mutate(bundle);
+    const bundle = baseBundle(); mutate(bundle); if (d87) reindexCarried(bundle);
     return { filename, bytes: encodeCbor(bundle), descriptor: { name: filename, object_type: "bundle" as const,
       expectation: "conformant" as const, expected_result: "conformant" as const, expected_code: null, mutation_description: description } };
   };
@@ -1338,7 +1338,7 @@ export function buildNegativeFixtures(): NegativeFixture[] {
     }],
     ["repair-d82-anchor-target-id-int-planned", "anchor/target-unplanned", 17, "The plan's first target and the anchor record's target both carry target_id 5; a non-16-byte id resolves to nothing (amendment q; the harness had matched 5 to 5 and gone on to an indeterminate head-missing).", (bundle) => { rebuildManifest(bundle, (m) => { (((m.anchor_plan as Obj).targets as Obj[])[0]!).target_id = 5; }, true); mutateArtifact(bundle, "anchors", () => true, (p) => { (p.target as Obj).target_id = 5; }); }],
     ["repair-d82-merkle-path-length-impossible", "merkle/path-length", 16, "The carried Merkle proof carries one sibling more than its tree size admits (amendment ak).", (bundle) => { const proof = (artifacts(bundle).merkle_proofs as Obj[])[0]!; proof.siblings = [...(proof.siblings as Uint8Array[]), hash(encodeCbor("extra-sibling"))]; }],
-    ["repair-d82-complete-extra-unindexed-receipt", "bundle/artifact-out-of-scope", 18, "A complete bundle carries a second root observation committed before the selector window that no index entry names and nothing selected reaches (amendment aj; the harness had tolerated unindexed extras).", (bundle) => {
+    ["repair-d82-complete-extra-unindexed-receipt", "manifest/receipt-unindexed", 15, "A complete bundle carries an extra root observation its epoch's index omits: D-87 rule 0 (step 15) fires before aj's scope check (step 18).", (bundle) => {
       makeCompleteRange(bundle);
       const envelope = receiptBy(bundle, (p) => p.kind === "observation" && object(p.root)); const next = clone(payload(envelope)); const t = ((bundle.selector as Obj).committed_from as number) - 1;
       (next.binding as Obj).epoch_seq = 777; (next.emission as Obj).issuer_seq = 7777; (next.emission as Obj).committed_at = t; (next.freshness as Obj).issued_at = t - 1; (next.freshness as Obj).nonce = id16("extra-unindexed");

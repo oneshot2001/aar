@@ -1,5 +1,6 @@
 {
   "name": "d86-history-epoch-coordinate",
   "expected_code": "identity/coordinate-equivocation",
+  "expected_step": 20,
   "mutation_description": "Q2: a prior entry names a carried receipt's epoch coordinate under a different receipt ID; an equal epoch_seq is equivocation, not rollback."
 }

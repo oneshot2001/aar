@@ -1,0 +1,6 @@
+{
+  "name": "d87-history-independence-dangling-parent",
+  "expected_code": "graph/dangling-parent",
+  "expected_step": 12,
+  "mutation_description": "Pin: the graph-dangling-parent bytes with a prior entry reusing a carried receipt ID (identity/reuse in history). The intrinsic defect is reported as without history (v0.3.1 reported identity/reuse at step 9)."
+}

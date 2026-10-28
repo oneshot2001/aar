@@ -1,0 +1,10 @@
+{
+  "name": "d86-partial-history-epoch-rollback",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "expected_observations": [
+    "duplicate_exact",
+    "sequence_below_observed_history"
+  ],
+  "mutation_description": "Partial history: an exact copy of only the highest-epoch_seq carried receipt. That receipt is a duplicate observation; the bundle's other receipts in its epoch have lower epoch_seq, which is the observation sequence_below_observed_history (D-87: prior state is what the relying party observed; was identity/epoch-sequence-rollback)."
+}

@@ -1,5 +1,0 @@
-{
-  "name": "d86-phase-b-issuer-outranks-epoch-rollback",
-  "expected_code": "identity/issuer-sequence-rollback",
-  "mutation_description": "Phase B class order: receipts[0] is an epoch rollback against the first committed entry and an issuer rollback against the second; the issuer-rollback pass runs before the epoch-rollback pass (a per-pair interleave reports the epoch rollback)."
-}

@@ -1,0 +1,13 @@
+{
+  "name": "d87-retained-unretained-epoch",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "expected_observations": [],
+  "absent_observations": [
+    "duplicate_exact"
+  ],
+  "expected_limits": {
+    "retained_manifest_membership": "not_established"
+  },
+  "mutation_description": "Beside the epoch-42 receipts (all listed), a root observation bound to epoch 43, which no retained bundle carries: conformant, and the limit stays not_established."
+}

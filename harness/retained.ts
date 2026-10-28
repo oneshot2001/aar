@@ -34,7 +34,7 @@ export function parseRetainedJson(value: unknown): Uint8Array[] {
   checkCount(value);
   value.forEach((item, index) => {
     if (typeof item !== "string") throw new Error(`${LABEL}[${index}] must be a hex string`);
-    if (!/^(?:[0-9a-fA-F]{2})*$/.test(item)) throw new Error(`${LABEL}[${index}] is not valid hex`);
+    if (item.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(item)) throw new Error(`${LABEL}[${index}] is not valid hex`); // linear: a bundle is up to 32 Mi hex digits
   });
   checkTotal((value as string[]).map((item) => item.length / 2));
   return (value as string[]).map(fromHex);

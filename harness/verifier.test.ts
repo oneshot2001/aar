@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
 import { addDelegationLadder, buildNegativeFixtures, buildRequestCoordinateVariants, mutateEmbeddedDelegationForProbe } from "./negative-fixtures";
 import { parseStatefulPrior } from "./stateful-fixtures";
+import { reindexCarried } from "./mutate-graph";
 import { domainHash, verifySigned } from "./crypto";
 import { TEST_KEYS } from "./testkeys";
 import { verifyBundle } from "./verifier";
@@ -25,7 +26,7 @@ describe("B2 reference verifier", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.result).toBe("conformant");
-      expect(result.verdict.v).toBe(5);
+      expect(result.verdict.v).toBe(6);
       expect((result.verdict.limits as Record<string, string>).input_origin_ancestry).toBe("not_declared");
       expect(result.completedThrough).toBe(20);
       const decoded = decodeCbor(result.verdictEnvelope, { strict: true });
@@ -51,7 +52,7 @@ describe("B2 reference verifier", () => {
       exact_encoded_bundle_bytes: 16_777_216, cbor_container_nesting: 32, receipt_nodes: 10_000,
       directed_graph_edges: 50_000, parents_per_receipt: 64, dag_depth: 128, dag_width: 4_096,
       encoded_proof_bytes: 65_536, aggregate_proof_bytes: 4_194_304, epoch_manifest_entries: 10_000,
-      merkle_batch_leaves: 1_048_576, credential_path_length: 8,
+      merkle_batch_leaves: 1_048_576, credential_path_length: 8, retained_epoch_bundles: 16, retained_epoch_bundle_bytes: 16_777_216,
     };
     const result = verifyBundle(input, { evaluationTime: AT });
     expect(result.ok).toBe(true);
@@ -62,6 +63,7 @@ describe("B2 reference verifier", () => {
       expect(equalBytes(policy.anchor_heads_digest as Uint8Array, domainHash("AAR-VERDICT-HEADS-v1", trust.expected_anchor_heads!))).toBe(true);
       expect(equalBytes(policy.replay_state_digest as Uint8Array, new Uint8Array(32))).toBe(true);
       expect(equalBytes(policy.prior_emissions_digest as Uint8Array, new Uint8Array(32))).toBe(true);
+      expect(equalBytes(policy.retained_epochs_digest as Uint8Array, new Uint8Array(32))).toBe(true);
     }
     const suppliedEmpty = verifyBundle(input, { evaluationTime: AT, replayState: [], priorEmissions: [] });
     expect(suppliedEmpty.ok).toBe(true);
@@ -69,6 +71,7 @@ describe("B2 reference verifier", () => {
       const policy = suppliedEmpty.verdict.trust_policy as Record<string, CborValue>;
       expect(equalBytes(policy.replay_state_digest as Uint8Array, domainHash("AAR-VERDICT-REPLAY-v1", { entries: [] }))).toBe(true);
       expect(equalBytes(policy.prior_emissions_digest as Uint8Array, domainHash("AAR-VERDICT-PRIOR-v1", { entries: [] }))).toBe(true);
+      expect(equalBytes(policy.retained_epochs_digest as Uint8Array, domainHash("AAR-VERDICT-RETAINED-v1", { bundles: [] }))).toBe(true);
     }
   });
 
@@ -228,6 +231,7 @@ print(json.dumps({"result": r.result, "reason": r.reason, "hex": r.verdict_bytes
     for (const [label, levels, width] of [["linear 1,000-link chain", 1000, 1], ["2x30 shared-ancestor ladder", 30, 2]] as const) {
       const bundle = decodeCbor(readFileSync(join(root, "kats", "positive", "bundle-valid-subset.cbor")), { strict: true }) as Record<string, CborValue>;
       mutateEmbeddedDelegationForProbe(bundle, (d) => { d.parent_delegations = addDelegationLadder(bundle, levels, width); });
+      reindexCarried(bundle); // D-87 rule 0: the re-identified receipts must be in the carried manifest
       const bytes = encodeCbor(bundle);
       const started = performance.now();
       const ts = verifyBundle(bytes, { evaluationTime: AT, replayState: [] });
@@ -245,7 +249,7 @@ print(json.dumps({"result": r.result, "reason": r.reason, "hex": r.verdict_bytes
 
   test("D-76 binds empty, unrelated, and rollback prior files with pyref digest parity", () => {
     const directory = mkdtempSync(join(tmpdir(), "aar-d76-"));
-    const stem = join(root, "kats", "negative", "stateful", "identity-issuer-sequence-rollback");
+    const stem = join(root, "kats", "positive", "stateful", "identity-issuer-sequence-rollback");
     const input = readFileSync(`${stem}.bundle.cbor`);
     const rollback = JSON.parse(readFileSync(`${stem}.prior.json`, "utf8"));
     const unrelated = { prior_emissions: rollback.prior_emissions.map((entry: Record<string, unknown>) => ({ ...entry, issuer_kid: "00".repeat(32) })) };
@@ -256,9 +260,8 @@ print(json.dumps({"result": r.result, "reason": r.reason, "hex": r.verdict_bytes
         const path = join(directory, `${label}.json`);
         writeFileSync(path, JSON.stringify(prior));
         const result = verifyBundle(input, { evaluationTime: AT, replayState: [], priorEmissions: parseStatefulPrior(JSON.parse(readFileSync(path, "utf8"))) });
-        expect(result.ok, label).toBe(label !== "rollback");
-        if (!result.ok) expect(result.reason).toBe("identity/issuer-sequence-rollback");
-        expect(result.verdict!.v).toBe(5);
+        expect(result.ok, label).toBe(true); // D-87: a lower sequence is the observation sequence_below_observed_history
+        expect(result.verdict!.v).toBe(6);
         const digest = toHex((result.verdict!.trust_policy as Record<string, CborValue>).prior_emissions_digest as Uint8Array);
         const proc = Bun.spawnSync(["python3", "-B", "-c", `
 import sys

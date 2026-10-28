@@ -1,0 +1,9 @@
+{
+  "name": "identity-issuer-sequence-rollback",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "expected_observations": [
+    "sequence_below_observed_history"
+  ],
+  "mutation_description": "Prior evaluated state has a greater sequence for the carried issuer kid: what the relying party observed, not a complete record, so the lower sequence is the observation sequence_below_observed_history (D-87; was identity/issuer-sequence-rollback)."
+}

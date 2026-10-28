@@ -3,7 +3,8 @@
 // receipt cascade. Extracted unchanged in behaviour (Packet D, Stage C).
 import { CborValue, toHex } from "./cbor";
 import { domainHash } from "./crypto";
-import { Obj, clone, payload, receiptList, resign, sortArtifacts } from "./mutate";
+import { promotedRoot } from "./merkle";
+import { Obj, artifacts, clone, compare, payload, rebuildManifest, receiptList, resign, sortArtifacts } from "./mutate";
 
 export function receiptBy(bundle: Obj, predicate: (value: Obj) => boolean): CborValue {
   const entry = receiptList(bundle).find((candidate) => predicate(payload(candidate)));
@@ -62,4 +63,23 @@ export function mutateEmbeddedDelegation(bundle: Obj, mutation: (value: Obj) => 
       changed = true;
     }
   }
+}
+
+// D-87 rule 0: after a cascade re-identifies carried receipts, re-point each index
+// entry whose receipt is no longer carried at the carried receipt holding its
+// epoch_seq (the cascade keeps every coordinate), then re-sort, re-leaf and re-root
+// the manifest and rebind its events and anchor. A no-op when nothing is stale.
+export function reindexCarried(bundle: Obj): void {
+  const manifest = (artifacts(bundle).epoch_manifests as CborValue[])[0];
+  const carried = new Map(receiptList(bundle).map((envelope) => [((payload(envelope).binding as Obj).epoch_seq as number), payload(envelope).receipt_id as Uint8Array]));
+  const ids = new Set([...carried.values()].map(toHex));
+  const stale = (entry: Obj): boolean => !ids.has(toHex(entry.receipt_id as Uint8Array)) && carried.has(entry.epoch_seq as number);
+  if (manifest === undefined || !((payload(manifest).receipt_index as Obj).entries as Obj[]).some(stale)) return;
+  rebuildManifest(bundle, (m) => {
+    const index = m.receipt_index as Obj;
+    const entries = (index.entries as Obj[]).map((entry) => stale(entry) ? { ...entry, receipt_id: carried.get(entry.epoch_seq as number)! } : entry)
+      .sort((a, b) => (a.committed_at as number) - (b.committed_at as number) || (a.epoch_seq as number) - (b.epoch_seq as number) || compare(a.receipt_id!, b.receipt_id!))
+      .map((entry, leaf_index) => ({ ...entry, leaf_index }));
+    m.receipt_index = { ...index, entries, root: promotedRoot(entries.map((entry) => domainHash("AAR-MANIFEST-INDEX-LEAF-v1", entry)), "AAR-MANIFEST-INDEX-NODE-v1") };
+  }, true);
 }

@@ -1,0 +1,6 @@
+{
+  "name": "d87-retained-conflicting-event",
+  "expected_code": "epoch/fork",
+  "expected_step": 20,
+  "mutation_description": "Same manifest as the retained one, but the final anchor_submitted event differs (occurred_at one second earlier, event_id re-derived): class (d), event pass."
+}
