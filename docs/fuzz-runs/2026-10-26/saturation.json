@@ -1,0 +1,629 @@
+{
+  "inventory_size": 366,
+  "excluded": [
+    {
+      "file": "pyref/cbor.py",
+      "line": 120,
+      "code": "cbor/malformed",
+      "step": "dynamic",
+      "reason": "# floats included; unreachable: the scanner flagged or raised"
+    },
+    {
+      "file": "pyref/cbor.py",
+      "line": 74,
+      "code": "cbor/malformed",
+      "step": "dynamic",
+      "reason": "# unreachable: the scanner walked the whole item"
+    },
+    {
+      "file": "pyref/cbor.py",
+      "line": 84,
+      "code": "cbor/malformed",
+      "step": "dynamic",
+      "reason": "# unreachable: the scanner raised first"
+    },
+    {
+      "file": "pyref/cbor.py",
+      "line": 113,
+      "code": "cbor/tag-forbidden",
+      "step": "dynamic",
+      "reason": "# unreachable: the scanner flagged it"
+    }
+  ],
+  "fired_by_corpus": 246,
+  "fired_by_run": 268,
+  "never_fired": [
+    {
+      "file": "pyref/cbor.py",
+      "line": 19,
+      "code": "cbor/malformed",
+      "step": "dynamic"
+    },
+    {
+      "file": "pyref/cbor.py",
+      "line": 31,
+      "code": "cbor/malformed",
+      "step": "dynamic"
+    },
+    {
+      "file": "pyref/cbor.py",
+      "line": 57,
+      "code": "cbor/malformed",
+      "step": "dynamic"
+    },
+    {
+      "file": "pyref/cbor.py",
+      "line": 110,
+      "code": "cbor/malformed",
+      "step": "dynamic"
+    },
+    {
+      "file": "pyref/cbor.py",
+      "line": 177,
+      "code": "cbor/malformed",
+      "step": "dynamic"
+    },
+    {
+      "file": "pyref/emission_identity.py",
+      "line": 97,
+      "code": "schema/bad-type",
+      "step": 9
+    },
+    {
+      "file": "pyref/emission_identity.py",
+      "line": 101,
+      "code": "schema/bad-type",
+      "step": 9
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 170,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 228,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 235,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 310,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 312,
+      "code": "schema/enum-unknown",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 315,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 322,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 333,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 339,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 341,
+      "code": "schema/out-of-range",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 345,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 362,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 366,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 368,
+      "code": "schema/out-of-range",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 372,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 374,
+      "code": "schema/out-of-range",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 381,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 383,
+      "code": "schema/out-of-range",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 389,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 391,
+      "code": "schema/out-of-range",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 396,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 406,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 408,
+      "code": "schema/out-of-range",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 428,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 438,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 440,
+      "code": "schema/out-of-range",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 446,
+      "code": "schema/bad-type",
+      "step": 3
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 481,
+      "code": "resource/node-count",
+      "step": 4
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 531,
+      "code": "credential/root-not-accepted",
+      "step": 5
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 705,
+      "code": "schema/bad-type",
+      "step": "dynamic"
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 707,
+      "code": "schema/digest-size",
+      "step": "dynamic"
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 725,
+      "code": "schema/bad-type",
+      "step": "dynamic"
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 780,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 782,
+      "code": "schema/version-wrong",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 816,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 829,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 833,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 838,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 848,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 863,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 865,
+      "code": "schema/missing-field",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 868,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 888,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 919,
+      "code": "schema/missing-field",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 922,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 924,
+      "code": "schema/out-of-range",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 927,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 934,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 936,
+      "code": "schema/string-size",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 938,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 940,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 942,
+      "code": "schema/digest-size",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 956,
+      "code": "schema/missing-field",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 958,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 964,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 979,
+      "code": "countersign/invalid",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1070,
+      "code": "dynamic",
+      "step": 6,
+      "code_expr": "'countersign/credential-invalid' if category == 'mediator_countersignatures' else 'schema/bad-type'"
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1105,
+      "code": "credential/usage-mismatch",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1112,
+      "code": "schema/bad-type",
+      "step": 6
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1114,
+      "code": "dynamic",
+      "step": 6,
+      "code_expr": "'countersign/credential-invalid' if category == 'mediator_countersignatures' else 'schema/bad-type'"
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1181,
+      "code": "hash/mismatch",
+      "step": 7
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1186,
+      "code": "schema/bad-type",
+      "step": 7
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1198,
+      "code": "schema/bad-type",
+      "step": 7
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1200,
+      "code": "hash/mismatch",
+      "step": 7
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1204,
+      "code": "schema/bad-type",
+      "step": 7
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1206,
+      "code": "hash/mismatch",
+      "step": 7
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1208,
+      "code": "hash/mismatch",
+      "step": 7
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1255,
+      "code": "manifest/payload-missing",
+      "step": 7
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1385,
+      "code": "credential/not-yet-valid",
+      "step": 8
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1437,
+      "code": "receipt/signer-role-mismatch",
+      "step": 10
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1460,
+      "code": "schema/bad-type",
+      "step": 10
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1471,
+      "code": "receipt/manifest-inconsistent",
+      "step": 10
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1491,
+      "code": "schema/bad-type",
+      "step": 10
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1496,
+      "code": "receipt/decision-presentation",
+      "step": 10
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1498,
+      "code": "receipt/decision-presentation",
+      "step": 10
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1515,
+      "code": "schema/bad-type",
+      "step": 10
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1551,
+      "code": "receipt/action-command-mismatch",
+      "step": 10
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1619,
+      "code": "schema/bad-type",
+      "step": 11
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1621,
+      "code": "schema/bad-type",
+      "step": 11
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1634,
+      "code": "schema/bad-type",
+      "step": 11
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1666,
+      "code": "replay/one-time-reused",
+      "step": 11
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1914,
+      "code": "graph/dominator-missing",
+      "step": 13
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1917,
+      "code": "graph/dominator-missing",
+      "step": 13
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1933,
+      "code": "graph/dominator-missing",
+      "step": 13
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 1936,
+      "code": "graph/dominator-missing",
+      "step": 13
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 2132,
+      "code": "epoch/anchor-deadline",
+      "step": 14
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 2170,
+      "code": "epoch/span-count-mismatch",
+      "step": 15
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 2172,
+      "code": "epoch/span-count-mismatch",
+      "step": 15
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 2282,
+      "code": "anchor/target-unplanned",
+      "step": 17
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 2385,
+      "code": "bundle/range-noncontiguous",
+      "step": 18
+    },
+    {
+      "file": "pyref/verifier.py",
+      "line": 2588,
+      "code": "bundle/dependency-missing",
+      "step": 3
+    }
+  ],
+  "saturation_percent": 73.2,
+  "fired_outside_inventory": []
+}
