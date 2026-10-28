@@ -74,16 +74,20 @@ export function loadRetained(input: Uint8Array, options: VerifyB1Options): Retai
   bundles.forEach((bundle, index) => { if (toHex(hash(bundle)) === current) throw new Error(`${LABEL}[${index}] is byte-identical to the bundle being evaluated`); });
   const retained: Retained = new Map();
   const receipts: Emission[] = [];
-  bundles.forEach((bundle, index) => {
+  // Section 5 check (4) for every bundle, in array order, before any merge (5).
+  const validated = bundles.map((bundle, index) => {
     const at = ownTime(bundle, options.evaluationTime);
     const steps = evaluateSteps(bundle, { evaluationTime: at, configuration: options.configuration }, false);
     if ("issue" in steps) throw new Error(`${LABEL}[${index}] fails step ${steps.issue.step} (${steps.issue.reason})`);
     if (at > options.evaluationTime) throw new Error(`${LABEL}[${index}] evaluation time is later than the current evaluation time`);
-    receipts.push(...steps.parsed.receipt.map(emissionOf));
+    return steps.parsed;
+  });
+  validated.forEach((parsed, index) => {
+    receipts.push(...parsed.receipt.map(emissionOf));
     // Step 14 passed: every carried manifest is a closed epoch, one per key, its events a chain from 0.
-    for (const manifest of steps.parsed.epoch_manifest) {
+    for (const manifest of parsed.epoch_manifest) {
       const key = epochKey(manifest.payload.epoch_owner_kid as Uint8Array, manifest.payload.epoch_id as number);
-      const events = steps.parsed.epoch_event.filter((event) => epochKey(event.payload.epoch_owner_kid as Uint8Array, event.payload.epoch_id as number) === key)
+      const events = parsed.epoch_event.filter((event) => epochKey(event.payload.epoch_owner_kid as Uint8Array, event.payload.epoch_id as number) === key)
         .sort((left, right) => (left.payload.event_seq as number) - (right.payload.event_seq as number)).map((event) => toHex(event.payload.event_id as Uint8Array));
       const epoch: RetainedEpoch = { manifestId: toHex(manifest.payload.manifest_id as Uint8Array), events,
         index: new Map(((manifest.payload.receipt_index as Obj).entries as Obj[]).map((entry) => [toHex(entry.receipt_id as Uint8Array), entry])) };

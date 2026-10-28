@@ -73,6 +73,8 @@ def load(raw: bytes, prior_state: dict[str, Any] | None, evaluated_at: int,
             raise relying_party.UsageError(f"{LABEL}[{index}] is byte-identical to the bundle being evaluated")
     retained: dict[tuple[bytes, int], dict[str, Any]] = {}
     receipts: list[dict[str, Any]] = []
+    # Section 5 check (4) for every bundle, in array order, before any merge (5).
+    states = []
     for index, blob in enumerate(supplied):
         at = _own_time(blob, evaluated_at)
         state = verifier.State(raw=blob, evaluated_at=at, prior_state=None, replay_state=None,
@@ -83,6 +85,8 @@ def load(raw: bytes, prior_state: dict[str, Any] | None, evaluated_at: int,
             raise relying_party.UsageError(f"{LABEL}[{index}] fails step {exc.step} ({exc.code})") from exc
         if at > evaluated_at:
             raise relying_party.UsageError(f"{LABEL}[{index}] evaluation time is later than the current evaluation time")
+        states.append(state)
+    for index, state in enumerate(states):
         receipts.extend(emission_identity.emission_of(envelope) for envelope in state.envelopes["receipts"])
         # Step 14 passed: every carried manifest is a closed epoch, one per key, its events a chain from 0.
         for envelope in state.envelopes["epoch_manifests"]:

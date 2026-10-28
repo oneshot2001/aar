@@ -153,4 +153,17 @@ describe("D-87 fix round 1: retained input hardening", () => {
       expect(cli.stdout).toContain("retained_manifest_membership: all_receipts_listed");
     });
   }, 300_000);
+
+  test("every retained bundle passes steps 1-19 and the time check before any merge (section 5 order), and an open-only retained epoch fails step 14", () => {
+    // a1616101 ({"a": 1}) sorts after both carriers, so a merge-first loader reports index 1's conflict instead.
+    const bad = "a1616101";
+    const openOnly = edit(kept, (bundle) => { artifacts(bundle).epoch_events = (artifacts(bundle).epoch_events as Obj[]).filter((entry) => payload(entry).event === "open"); artifacts(bundle).anchors = []; });
+    expectUsageError(zero, [
+      usage("manifest conflict, then a malformed bundle", { retained_epochs: retained(fork, kept, fromHex(bad)) }, `${LABEL}[2] fails step 3 (schema/unknown-field)`),
+      usage("event-chain conflict, then a malformed bundle", { retained_epochs: retained(event, kept, fromHex(bad)) }, `${LABEL}[2] fails step 3 (schema/unknown-field)`),
+      usage("open-only retained epoch", { retained_epochs: [toHex(openOnly)] }, `${LABEL}[0] fails step 14 (epoch/open-close)`),
+    ]);
+    expect(retained(fork, kept, fromHex(bad)).at(-1)).toBe(bad);
+    expect(retained(event, kept, fromHex(bad)).at(-1)).toBe(bad);
+  }, 120_000);
 });
