@@ -80,6 +80,10 @@ export function buildD87Fixtures(): StatefulFixture[] {
       "The repair-d82-verifier-key-not-found bytes (no verifier_signing credential) with a prior entry reusing a carried receipt ID: the step-20 key resolution runs before the history phase, so the result is indeterminate key/not-found as without history (v0.3.1: identity/reuse at step 9).", 20),
     negative("d87-history-early-failure", mismatched, priorJson({ ...contradicting, issuerSeq: contradicting.issuerSeq + 1 }), "hash/mismatch",
       "The hash-mismatch bytes (step 7) with a prior entry carrying one of its receipts' id and digest but issuer_seq + 1: rule 0(b) refuses such history only once step 9 runs, so this bundle gets its intrinsic verdict with the supplied history bound in prior_emissions_digest.", 7),
+    // Fix round 4: not a D-87 rule. A leading U+FEFF is text, never a byte-order mark to strip (the harness's
+    // decoders stripped it, so this split: harness cbor/malformed at step 2, pyref schema/enum-unknown at step 3).
+    negative("d87-utf8-leading-bom-text", edit((bundle) => { bundle.claimed_profile = `\uFEFF${bundle.claimed_profile as string}`; }), undefined, "schema/enum-unknown",
+      "claimed_profile is bundle-valid-subset's profile with a leading U+FEFF: an unknown enum value at step 3 in both verifiers (the harness decoders used to strip the U+FEFF, fail the canonical re-encode and report cbor/malformed at step 2).", 3),
     positive("d87-late-for-epoch-not-selecting", undefined, "Rule 0: beside the epoch-42 receipts, a root observation bound to epoch 43 with late_for_epoch_id 42; no epoch-43 manifest is carried, and late_for_epoch_id never selects the epoch-42 manifest, so the receipt is not judged against its index: conformant.", edit((bundle) => extra(bundle, 43, (next) => { (next.binding as Obj).late_for_epoch_id = 42; })), unlisted),
   ];
 }

@@ -6,7 +6,8 @@ export type CborValue =
   | Map<CborScalar, CborValue>;
 
 const utf8 = new TextEncoder();
-const strictUtf8 = new TextDecoder("utf-8", { fatal: true });
+// ignoreBOM keeps a leading U+FEFF as text, as pyref does (the default strips it).
+export const strictUtf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 function concat(parts: readonly Uint8Array[]): Uint8Array {
   const length = parts.reduce((sum, part) => sum + part.length, 0);

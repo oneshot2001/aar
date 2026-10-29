@@ -1,0 +1,6 @@
+{
+  "name": "d87-utf8-leading-bom-text",
+  "expected_code": "schema/enum-unknown",
+  "expected_step": 3,
+  "mutation_description": "claimed_profile is bundle-valid-subset's profile with a leading U+FEFF: an unknown enum value at step 3 in both verifiers (the harness decoders used to strip the U+FEFF, fail the canonical re-encode and report cbor/malformed at step 2)."
+}

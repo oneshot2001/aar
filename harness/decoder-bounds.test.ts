@@ -7,6 +7,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { decodeCbor, fromHex } from "./cbor";
 import { ConfigurationError, loadConfiguration } from "./relying-party";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -66,6 +67,13 @@ test.skipIf(process.platform !== "linux")("Linux: a no-op child's VmHWM excludes
   expect(held[held.length - 1]).toBe(1);
   expect(result.peakMb).toBeLessThan(200);
 }, 60_000);
+
+test("a leading U+FEFF is text in the harness decoder, as in pyref: 63efbbbf is one character, a2600063efbbbf00 two keys", () => {
+  expect(decodeCbor(fromHex("63efbbbf"), { strict: true })).toBe("\uFEFF");
+  expect(Object.keys(decodeCbor(fromHex("a2600063efbbbf00"), { strict: true }) as object)).toEqual(["", "\uFEFF"]);
+  const pyref = Bun.spawnSync(["python3", "-B", "-c", "from pyref.cbor import loads\nprint(ascii(loads(bytes.fromhex('63efbbbf'))), ascii(sorted(loads(bytes.fromhex('a2600063efbbbf00')))))"], { cwd: root });
+  expect(pyref.stdout.toString().trim()).toBe("'\\ufeff' ['', '\\ufeff']");
+});
 
 // Policy credentials report the first defect in byte order; these three agree in the harness, the
 // pyref library and the pyref CLI (other defects' wording differs: a pre-existing BACKLOG item).

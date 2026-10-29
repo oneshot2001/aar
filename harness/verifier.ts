@@ -1,5 +1,5 @@
 import { p256 } from "@noble/curves/nist.js";
-import { CborScalar, CborValue, decodeCbor, encodeCbor, equalBytes, toHex } from "./cbor";
+import { CborScalar, CborValue, decodeCbor, encodeCbor, equalBytes, strictUtf8, toHex } from "./cbor";
 import { domainHash, hash, P256_HALF_ORDER, signatureScalars } from "./crypto";
 import { checkPriorEmissions, validateEmission } from "./emission-identity";
 import { retainedMembership, validateHistory } from "./history";
@@ -164,7 +164,7 @@ type Scan = {
 };
 
 class CborScanner {
-  private readonly utf8 = new TextDecoder("utf-8", { fatal: true });
+  private readonly utf8 = strictUtf8;
   constructor(private readonly input: Uint8Array) {}
 
   scan(): Scan {

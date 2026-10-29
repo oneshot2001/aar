@@ -1,6 +1,6 @@
 {
   "deterministic": true,
-  "deterministic_fixtures": 549,
+  "deterministic_fixtures": 550,
   "divergence_count": 0,
   "divergences": [],
   "entry_point_findings": 1,
@@ -6400,6 +6400,20 @@
     {
       "deterministic": true,
       "expected_class": null,
+      "expected_code": "schema/enum-unknown",
+      "expected_result": "nonconformant",
+      "first_failure_step": 3,
+      "fixture": "kats/negative/stateful/d87-utf8-leading-bom-text.bundle.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "schema/enum-unknown",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "eedb41572f92719a9b63ec92c821be7994f7c271b8fa7ec87303bb4295226ef5"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
       "expected_code": "identity/reuse",
       "expected_result": "nonconformant",
       "first_failure_step": 20,
@@ -7985,8 +7999,8 @@
       "verdict_sha256": "081f485ad962cf8c2e79b48a3e77c36e3df6bbb4368bacb677a76a5275951aad"
     }
   ],
-  "fixtures_evaluated": 549,
-  "matches": 549,
+  "fixtures_evaluated": 550,
+  "matches": 550,
   "mismatches": 0,
   "schema_version": 1,
   "slice": "C2"
