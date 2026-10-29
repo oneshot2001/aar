@@ -10,7 +10,8 @@ import { deterministicId, domainHash } from "./crypto";
 import { buildD87Fixtures } from "./d87-fixtures";
 import { HISTORY_CONTRADICTS_RECEIPT } from "./emission-identity";
 import { expectUsageError, harnessPrior } from "./prior-state-probe";
-import { exactEntries } from "./stateful-fixtures";
+import { RETAINED_COORDINATES, RETAINED_RECEIPT_CONTRADICTION } from "./retained";
+import { exactEntries, priorJson } from "./stateful-fixtures";
 import { Obj, verifyBundle } from "./verifier";
 
 const AT = 1_735_689_800;
@@ -22,7 +23,19 @@ const kept = fixture("d87-retained-superset").prior!.retained_epochs![0]!;
 const first = exactEntries(base)[0]!;
 const unlisted = (issuerKid: Uint8Array) => ({ ...first, issuerKid, receiptId: deterministicId("d87:unlisted"), envelopeDigest: deterministicId("d87:unlisted") });
 
-describe("D-87 early failure with contradicting history", () => {
+describe("D-87 section 5 cross-entry precedence", () => {
+  test("check (6) over every entry before check (7): a later retained-receipt contradiction beats an earlier unlisted entry; within (7), an earlier miscoordinated entry beats a later unlisted one", () => {
+    const sixOverSeven = priorJson(unlisted(new Uint8Array(32)), { ...first, issuerSeq: first.issuerSeq + 1 });
+    const sevenInOrder = priorJson({ ...first, issuerSeq: first.issuerSeq + 1, envelopeDigest: deterministicId("d87:other") }, unlisted(new Uint8Array(32).fill(0xff)));
+    // Committed order puts the entry the wrong implementation would report first.
+    expect(sixOverSeven.prior_emissions![0]!.receipt_id).toBe(toHex(deterministicId("d87:unlisted")));
+    expect(sevenInOrder.prior_emissions![1]!.receipt_id).toBe(toHex(deterministicId("d87:unlisted")));
+    expectUsageError(zero, [
+      ["(6) before (7)", { ...sixOverSeven, retained_epochs: [toHex(base)] }, RETAINED_RECEIPT_CONTRADICTION, "UsageError"],
+      ["(7) in entry order", { ...sevenInOrder, retained_epochs: [kept] }, RETAINED_COORDINATES, "UsageError"],
+    ]);
+  }, 120_000);
+
   test("d87-history-early-failure: the hash-mismatch bytes, signed hash/mismatch@7 with the contradicting history bound; the same history on bundle-valid-subset is refused at step 9", () => {
     const row = fixture("d87-history-early-failure");
     expect(toHex(row.bundle)).toBe(toHex(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "kats", "negative", "hash-mismatch.cbor"))));
