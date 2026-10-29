@@ -8,15 +8,15 @@ are signed, so the audit diffs decoded fields, not bytes.
 **Method.** pyref at `6ff6b51` (v0.3.1) evaluated every row of its own
 `pyref.kat` enumeration (532 rows) with the row's own inputs
 (`KAT_EVALUATION_TIME`, the row's prior and replay state, or its
-relying-party inputs sidecar); pyref at fix round 2 did the same over its
-enumeration (549 rows). Both verdict envelopes were decoded; payload maps were
+relying-party inputs sidecar); pyref at fix round 4 did the same over its
+enumeration (550 rows). Both verdict envelopes were decoded; payload maps were
 flattened and diffed field by field, the protected headers compared, and
 result, reason and first failing step compared. Rows are paired by path; the
 four rows D-87 relocates from `negative/stateful/` to `positive/stateful/`
 are paired by name (their bundle and prior bytes are identical). The harness
 needs no separate column: the full-corpus gate (`harness/crossimpl.test.ts`)
 holds it byte-identical to pyref on every row, before and after (0 splits
-over 549 rows at fix round 2). The 17 rows D-87 adds were also run through
+over 550 rows at fix round 4). The 18 rows D-87 adds were also run through
 both v0.3.1 verifiers.
 
 ## The 532 existing rows
@@ -92,7 +92,7 @@ subject; `bundle_digest` and `anchor_heads_digest` (the expected head follows
 the rebound anchor) change with the bytes. Every other generated row is
 byte-identical (the helper is a no-op when no entry is stale).
 
-## The 17 rows D-87 adds
+## The 18 rows D-87 adds
 
 Old codes are what each v0.3.1 verifier returns for the same bytes and prior.
 
@@ -114,6 +114,7 @@ Old codes are what each v0.3.1 verifier returns for the same bytes and prior.
 | `relying-party/rp-replay-two-entries` (fix round 1) | conformant (compared only the last entry) | `replay/one-time-reused`@11 | `replay/one-time-reused`@20 |
 | `relying-party/rp-history-independence-replay` (fix round 1) | `replay/one-time-reused`@11 | `replay/one-time-reused`@11 | `graph/root-missing`@12 |
 | `relying-party/rp-retained-under-policy` (fix round 1) | usage error | usage error | conformant, `all_receipts_listed` |
+| `negative/stateful/d87-utf8-leading-bom-text` (fix round 4, no prior; not a D-87 rule) | `cbor/malformed`@2 (stripped the leading U+FEFF) | `schema/enum-unknown`@3 | `schema/enum-unknown`@3 in both: the pre-existing split closed |
 | `negative/stateful/d87-history-early-failure` (fix round 2) | `hash/mismatch`@7 | `hash/mismatch`@7 | `hash/mismatch`@7, unchanged: a contradicting history is refused only once step 9's coordinate type checks pass, so a step-7 failure is signed with it bound |
 
 The v0.3.1 pyref column for the two replay rows decodes the replay sidecar
@@ -131,7 +132,7 @@ build, and a test asserts the identity). `d87-history-independence-dangling-pare
 is byte-identical to `kats/negative/graph-dangling-parent.cbor`; its prior
 holds one entry reusing a carried receipt ID.
 
-Corpus after re-pin: 549 rows (`pyref/results-c2.json`), 549 matched, 549
-deterministic, 0 divergences (454 nonconformant, 90 conformant, 5
+Corpus after re-pin: 550 rows (`pyref/results-c2.json`), 550 matched, 550
+deterministic, 0 divergences (455 nonconformant, 90 conformant, 5
 indeterminate). The 532 existing rows' classes above are unchanged by fix
 round 1 (re-run: 515 / 12 / 2 / 3 / 0).
