@@ -122,7 +122,7 @@ instead and the output is headed "UNVERIFIED TRANSCRIPT: the inputs used for thi
 by this check". It writes `run3.verdict.cbor`, `run3.sig_structure.bin`, `run3.leaf-spki.der` and
 `run3.signature.der` beside the keys, never inside the package, for the printed OpenSSL re-check.
 Private keys never enter the package. Exit codes: 0 every line passed in controlled mode; 1 a line failed;
-2 usage error; 3 transcript mode, always.
+2 usage error (takes precedence); 3 transcript mode, whatever the lines say. Generated text files are UTF-8 with LF newlines; copied records keep their source bytes. `03-source-and-run.md` records the builder's run-1 interpreter, not the examiner's run-3 interpreter.
 
 ## Reproducible set and tarball
 

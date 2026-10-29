@@ -15,8 +15,8 @@ examiner's leaf; (3) leaf kid in the protected header; (4) policy digest; (5) ev
 (9) limits, (10) observations equal run 1's verdict; (11) no report-layer marker in the stdout.
 Exports (``run3.sig_structure.bin``, ``run3.leaf-spki.der``, ``run3.signature.der``) are written
 beside the keys, never inside the package. Exit codes: 0 every line passed in controlled mode; 1 a
-line failed; 2 usage error (bad or missing input); 3 transcript mode (``--stdout``), always, whatever
-the lines say.
+line failed; 2 usage error (bad or missing input); 3 transcript mode (``--stdout``), whatever the
+lines say; a usage error still exits 2.
 """
 
 from __future__ import annotations

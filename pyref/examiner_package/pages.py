@@ -150,8 +150,8 @@ byte-identical over that set for the same CPython minor version and Unicode data
 
 `run1.json` holds the same values as data and is the baseline locator: point `--run1` at the package
 you intend to check. The builder's interpreter path and version are on `03-source-and-run.md`,
-outside the reproducible set. Every distributed text file is written UTF-8 with `\\n` newlines
-regardless of the build host's locale.
+outside the reproducible set. Generated text files are written UTF-8 with `\\n` newlines whatever
+the host locale; copied records keep their source bytes.
 
 ## Run 3 — the examiner's own key, as a controlled invocation
 
@@ -171,10 +171,10 @@ The controlled invocation is exactly
 `{cmd} --policy ../examiner-keys/examiner-policy.json --signing-key ../examiner-keys/examiner.key`
 (the checker prints the argv it used as line 0). The checker and the verifier it runs are the same
 checkout (`$AAR`); confirm `$AAR` against `03-source-and-run.md` before trusting line 0. Line 0 prints
-the portable command; the interpreter that ran is recorded in 03. A transcript pasted from elsewhere
+the portable command; 03 names the run-1 interpreter, not the one that ran run 3. A transcript pasted from elsewhere
 can be checked with `--stdout FILE`, and the output is then headed "UNVERIFIED TRANSCRIPT: the inputs
 used for this run are not established by this check". Exit codes: 0 every line passed in controlled
-mode; 1 a line failed; 2 usage error; 3 transcript mode, always, whatever the lines say.
+mode; 1 a line failed; 2 usage error; 3 transcript mode (a usage error still exits 2).
 
 What the mint does, in full: draws two P-256 scalars `1 <= d < n` with `secrets.randbelow`; writes
 `examiner-root.key` and `examiner.key` (64 lowercase hex characters then LF, mode 0600, created
