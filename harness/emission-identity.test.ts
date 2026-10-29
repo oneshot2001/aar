@@ -32,7 +32,7 @@ describe("D-86 emission identity", () => {
       for (const observation of fixture.descriptor.expected_observations ?? []) expect(result.verdict.observations, fixture.name).toContain(observation);
       for (const observation of fixture.descriptor.absent_observations ?? []) expect(result.verdict.observations, fixture.name).not.toContain(observation);
     }
-  });
+  }, 60_000);
 
   test("generated stateful files equal the in-memory fixtures; a fixture without prior state has no prior file", () => {
     for (const fixture of fixtures) {

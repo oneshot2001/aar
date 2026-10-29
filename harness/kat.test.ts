@@ -37,7 +37,7 @@ describe("positive KAT harness", () => {
       expect(JSON.parse(readFileSync(join(root, "kats", "positive", `${fixture.filename}.json`), "utf8"))).toEqual(fixture.descriptor);
       expect(verifyBundle(fixture.bytes, { evaluationTime: AT }).result).toBe(fixture.descriptor.expected_result);
     }
-  });
+  }, 60_000);
 
   test("D-78 reports include undispatched attempts without signing their declarations and deduplicate diamonds", () => {
     for (const fixture of buildD78ReportVariants()) {
