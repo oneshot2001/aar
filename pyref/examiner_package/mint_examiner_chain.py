@@ -45,7 +45,7 @@ def credential(subject: int, issuer: int, path: list[bytes], at: int, leaf: bool
 
 def write_key(path: Path, scalar: int) -> None:
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(descriptor, "w") as handle:
+    with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(f"{scalar:064x}\n")
 
 
@@ -66,7 +66,7 @@ def mint(keys: Path, at: int, trust_policy: Path) -> dict[str, str]:
         "verifier_root_kid": key_id(root_scalar).hex(),
         "verifier_credentials": [dumps(env).hex() for env in envelopes],
     }
-    (keys / "examiner-policy.json").write_text(json.dumps(policy, indent=2) + "\n")
+    (keys / "examiner-policy.json").write_text(json.dumps(policy, indent=2) + "\n", encoding="utf-8", newline="\n")
     # The verifier's own chain logic validates what was just written (amendment a).
     configuration = relying_party.load_configuration(keys / "examiner-policy.json", keys / "examiner.key", at)
     return {"root_kid": key_id(root_scalar).hex(), "leaf_kid": configuration.kid.hex(),

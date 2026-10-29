@@ -163,7 +163,7 @@ class SpecimenRule(unittest.TestCase):
 
 class TextFields(unittest.TestCase):
     def test_contract(self):
-        sample = "a​b|‮\x07\U000E0100 "
+        sample = "a\u200bb|\u202e\x07\U000E0100\u2028"
         self.assertEqual(ep.visible(sample), "a\\u200Bb\\|\\u202E\\u0007\\u{E0100}\\u2028")
         self.assertEqual(ep.escaped(sample), "a\\u200Bb\\|\\u202E\\u0007\\u{E0100}\\u2028")
         self.assertTrue(all(ep.is_invisible(c) for c in (0x200B, 0x202E, 0xFEFF, 0xFE0F, 0xE0100, 0x2060)))
@@ -171,7 +171,7 @@ class TextFields(unittest.TestCase):
 
     def test_traversal_decodes_embedded_and_inventories_bytes(self):
         cose = dumps([dumps({1: -7}), {}, None, b"\x00" * 64])
-        bundle = {"artifacts": {"receipts": [[dumps({"a": "x​y"}), cose]]},
+        bundle = {"artifacts": {"receipts": [[dumps({"a": "x\u200by"}), cose]]},
                   "parameters_cbor": dumps({"k": "v"}), "canonical_bytes": b"\xff\xff",
                   "siblings": [b"\x01" * 32, b"\x02" * 16], "blob": b"\x03" * 5, "name": "plain"}
         texts, payloads = ep.text_rows(bundle)
@@ -188,7 +188,7 @@ class TextFields(unittest.TestCase):
     def test_nested_envelope_is_inventoried_not_hidden(self):
         # Codex P2-8 reproduction: an envelope-shaped pair under an unknown key inside canonical_bytes.
         cose = dumps([dumps({1: -7}), {}, None, b"\x00" * 64])
-        bundle = {"canonical_bytes": dumps({"nested_envelope": [dumps({"text": "hidden‮"}), cose]})}
+        bundle = {"canonical_bytes": dumps({"nested_envelope": [dumps({"text": "hidden\u202e"}), cose]})}
         texts, payloads = ep.text_rows(bundle)
         page = ep.page_05(texts, payloads, body=True)
         appendix = ep.page_05(texts, payloads, body=False)
@@ -198,15 +198,15 @@ class TextFields(unittest.TestCase):
                                  "bundle.canonical_bytes{cbor}.nested_envelope[1]": "opaque"})
         self.assertIn("nested\\_envelope\\[0\\]", appendix)
         self.assertIn("nested\\_envelope\\[1\\]", page)
-        self.assertNotIn("‮", page + appendix)
+        self.assertNotIn("\u202e", page + appendix)
         self.assertFalse(any("hidden" in t["text"] for t in texts))
 
     def test_path_column_is_escaped(self):
         # Codex P2-7 reproduction: a bidi control in a key reaches the path column.
-        texts, payloads = ep.text_rows({"parameters_cbor": dumps({"evil‮key": "normal", "a|b`c": "d"})})
+        texts, payloads = ep.text_rows({"parameters_cbor": dumps({"evil\u202ekey": "normal", "a|b`c": "d"})})
         for body in (True, False):
             page = ep.page_05(texts, payloads, body=body)
-            self.assertNotIn("‮", page)
+            self.assertNotIn("\u202e", page)
         appendix = ep.page_05(texts, payloads, body=False)
         self.assertIn("evil\\u202Ekey", appendix)
         self.assertIn("a\\|b\\`c", appendix)
@@ -250,6 +250,14 @@ class OperatorRecords(unittest.TestCase):
         self.assertEqual(ep.localize(b'{"p":"/x/receipts2/a.jpg"}', roots), b'{"p":"/x/receipts2/a.jpg"}')
         self.assertEqual(ep.localize(b'{"x":"a.b"}', roots), b'{"x":"a.b"}')  # Codex-style line, untouched
         self.assertEqual(ep.localize(b'{"x":"a.b"}', [Path("/a")]), b'{"x":"a.b"}')
+        # F-04 R1: a root matches at a path start only (Codex delta-3 P2-1 counterexample first).
+        self.assertEqual(ep.localize(b'{"p":"/elsewhere/x/receipts/a.jpg"}', roots), b'{"p":"/elsewhere/x/receipts/a.jpg"}')
+        self.assertEqual(ep.localize(b'{"w":"/x/receipts, ok"}', roots), b'{"w":"<local>, ok"}')
+        self.assertEqual(ep.localize(b"path=/x/receipts/a (/x/receipts) '/x/receipts' k:/x/receipts", roots),
+                         b"path=<local>/a (<local>) '<local>' k:<local>")
+        self.assertEqual(ep.localize(b'/x/receipts', roots), b'<local>')
+        self.assertEqual(ep.localize(b'x/x/receipts/a', roots), b'x/x/receipts/a')
+        self.assertEqual(ep.localize(b'{"p":"/x/receipts.bak"}', roots), b'{"p":"/x/receipts.bak"}')
 
 
 class Tarball(unittest.TestCase):

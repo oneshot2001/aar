@@ -148,8 +148,10 @@ byte-identical over that set for the same CPython minor version and Unicode data
 | raw envelope | `run1.verdict.cbor` (SHA-256 `{pinned.get('verdict_cbor_sha256')}`) |
 | stdout / stderr | `run1.stdout.txt` / `run1.stderr.txt` |
 
-`run1.json` holds the same values as data; the builder's interpreter path and version are on
-`03-source-and-run.md`, outside the reproducible set.
+`run1.json` holds the same values as data and is the baseline locator: point `--run1` at the package
+you intend to check. The builder's interpreter path and version are on `03-source-and-run.md`,
+outside the reproducible set. Every distributed text file is written UTF-8 with `\\n` newlines
+regardless of the build host's locale.
 
 ## Run 3 — the examiner's own key, as a controlled invocation
 
@@ -167,9 +169,12 @@ openssl dgst -sha256 -verify ../examiner-keys/leaf.pem -signature ../examiner-ke
 
 The controlled invocation is exactly
 `{cmd} --policy ../examiner-keys/examiner-policy.json --signing-key ../examiner-keys/examiner.key`
-(the checker prints the argv it used as line 0). A transcript pasted from elsewhere can be checked
-with `--stdout FILE`, and the output is then headed "UNVERIFIED TRANSCRIPT: the inputs used for this
-run are not established by this check".
+(the checker prints the argv it used as line 0). The checker and the verifier it runs are the same
+checkout (`$AAR`); confirm `$AAR` against `03-source-and-run.md` before trusting line 0. Line 0 prints
+the portable command; the interpreter that ran is recorded in 03. A transcript pasted from elsewhere
+can be checked with `--stdout FILE`, and the output is then headed "UNVERIFIED TRANSCRIPT: the inputs
+used for this run are not established by this check". Exit codes: 0 every line passed in controlled
+mode; 1 a line failed; 2 usage error; 3 transcript mode, always, whatever the lines say.
 
 What the mint does, in full: draws two P-256 scalars `1 <= d < n` with `secrets.randbelow`; writes
 `examiner-root.key` and `examiner.key` (64 lowercase hex characters then LF, mode 0600, created

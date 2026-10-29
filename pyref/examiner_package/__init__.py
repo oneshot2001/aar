@@ -97,11 +97,15 @@ def package_acquisition(full: dict[str, Any], files: list[dict[str, Any]]) -> di
             "files": [{key: value for key, value in row.items() if key != "source_path"} for row in files]}
 
 
+LOCALIZE_LEFT = rb'(?<![^\s"\'=:(])'      # path start: line start or one of whitespace " ' = : (
+LOCALIZE_RIGHT = rb'(?=[/"\',):\s]|$)'     # segment end: / " ' , ) : whitespace or line end
+
+
 def localize(line: bytes, roots: list[Path]) -> bytes:
-    """Replace each resolved root path with ``<local>`` where it occupies whole path segments:
-    the match must be followed by ``/``, a closing double quote, whitespace or the end of the line."""
+    """Literal replacement of the configured roots with ``<local>``, at path starts only
+    (amendment l): the root must begin a path and end a segment. Not general path anonymization."""
     for root in sorted((str(r).encode() for r in roots), key=len, reverse=True):
-        line = re.sub(re.escape(root) + rb'(?=/|"|\s|$)', b"<local>", line)
+        line = re.sub(LOCALIZE_LEFT + re.escape(root) + LOCALIZE_RIGHT, b"<local>", line)
     return line
 
 
@@ -156,14 +160,14 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
                     "commitments-differ": "dispatch and outcome commitments are not one digest",
                     "still-ambiguous": "more than one still has the committed digest",
                     "no-exact-still-match": "no still has the committed digest"},
-        "camera": camera, "candidates": rows}))
+        "camera": camera, "candidates": rows}), encoding="utf-8", newline="\n")
 
     # 01-copy
     files = copy_specimen(candidates / pick["dir"], stills / pick["still"], package / "01-copy")
     full = fill_acquisition(acquisition_input, files, pick["dir"])
-    (out / "acquisition-full.json").write_text(json_text(full))
+    (out / "acquisition-full.json").write_text(json_text(full), encoding="utf-8", newline="\n")
     acquisition = package_acquisition(full, files)
-    (package / "01-copy" / "acquisition.json").write_text(json_text(acquisition))
+    (package / "01-copy" / "acquisition.json").write_text(json_text(acquisition), encoding="utf-8", newline="\n")
     meta = read_json(package / "01-copy" / "meta.json", "meta.json")
     trust_policy = read_json(package / "01-copy" / "trust-policy.json", "trust-policy.json")
     bundle = loads((package / "01-copy" / "bundle.cbor").read_bytes())
@@ -176,8 +180,8 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
     verify.mkdir()
     at = meta["evaluated_at"]
     run1 = run_verifier(package, "01-copy/bundle.cbor", at, "01-copy/trust-policy.json", "01-copy/prior-state.json")
-    (verify / "run1.stdout.txt").write_text(run1["stdout"])
-    (verify / "run1.stderr.txt").write_text(run1["stderr"])
+    (verify / "run1.stdout.txt").write_text(run1["stdout"], encoding="utf-8", newline="\n")
+    (verify / "run1.stderr.txt").write_text(run1["stderr"], encoding="utf-8", newline="\n")
     pinned = {key: run1[key] for key in ("command", "exit", "result", "verdict_id", "bundle_digest", "selector_matching_receipts", "observations")}
     pinned.update(cwd="the package root (this directory's parent)", PYTHONPATH=f"the aar checkout at {commit}",
                   evaluated_at=at, evaluated_at_source="01-copy/meta.json (a producer file)")
@@ -186,11 +190,11 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
         (verify / "run1.verdict.cbor").write_bytes(bytes.fromhex(run1["verdict_cbor_hex"]))
         pinned["verdict_kid"] = decoded["protected"][4].hex()
         pinned["verdict_cbor_sha256"] = sha256_hex(bytes.fromhex(run1["verdict_cbor_hex"]))
-    (verify / "run1.json").write_text(json_text(pinned))
-    (verify / "README.md").write_text(page_02(pinned, at, commit))
+    (verify / "run1.json").write_text(json_text(pinned), encoding="utf-8", newline="\n")
+    (verify / "README.md").write_text(page_02(pinned, at, commit), encoding="utf-8", newline="\n")
 
     # 03 (outside the reproducible set: interpreter and platform live here)
-    (package / "03-source-and-run.md").write_text(page_03(run1, pinned, files, source_inventory(), commit))
+    (package / "03-source-and-run.md").write_text(page_03(run1, pinned, files, source_inventory(), commit), encoding="utf-8", newline="\n")
 
     # 04
     records = package / "04-operator-records"
@@ -225,17 +229,17 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
                           f"{len(raw_log.splitlines())} lines).",
                           f"Kept {len(kept)} line(s), source line numbers {[n for n, _ in kept]}; written to `{name}` in this directory. "
                           "Lines that do not parse as a JSON object are never kept.",
-                          "Transformation: each of the builder's resolved absolute root paths (`--candidates`, `--stills`, `--logs`), where "
-                          "it occupies whole path segments in a kept line (followed by `/`, a double quote, whitespace or the end of the "
-                          "line), is replaced by `<local>`; nothing else is altered. "
+                          "Transformation: literal replacement of the three configured roots (`--candidates`, `--stills`, `--logs`, resolved) "
+                          "by `<local>` at path starts only (the root begins a path and ends a segment); not general path anonymization; "
+                          "encoded or Windows-style forms are not covered; nothing else is altered. "
                           + (f"{len(changed)} line(s) changed, so this file is an identified derivative; the original lines are held "
                              "by the operator:" if changed else "No kept line contained such a path, so this file is byte for byte "
                              "the original lines.")]
             companion += [f"- line {n}: original SHA-256 `{sha256_hex(line)}`, derivative SHA-256 `{sha256_hex(local)}`" for n, line, local in changed]
             companion += [f"- line {n}: undated (`ts` carries no UTC offset), not selected, SHA-256 `{digest}`" for n, digest in undated] or []
             companion.append("Missing-file behaviour: had the source been absent, no file would be written and this companion would say so.")
-        (records / f"{name}.md").write_text("\n".join(companion) + "\n")
-    (records / "legal-maps.md").write_text(legal_maps(receipts))
+        (records / f"{name}.md").write_text("\n".join(companion) + "\n", encoding="utf-8", newline="\n")
+    (records / "legal-maps.md").write_text(legal_maps(receipts), encoding="utf-8", newline="\n")
 
     # 05
     texts, payloads = text_rows(bundle)
@@ -244,15 +248,15 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
         if row["path"].split(".")[-1].split("[")[0] in EMBEDDED_KEYS:
             row["file"] = f"05-payloads/{index:03d}-{re.sub(r'[^A-Za-z0-9_]+', '-', row['path'])[-80:]}.bin"
             (package / row["file"]).write_bytes(row["bytes"])
-    (package / "05-text-fields.md").write_text(page_05(texts, payloads, body=True))
-    (package / "appendix" / "text-fields-zero.md").write_text(page_05(texts, payloads, body=False))
+    (package / "05-text-fields.md").write_text(page_05(texts, payloads, body=True), encoding="utf-8", newline="\n")
+    (package / "appendix" / "text-fields-zero.md").write_text(page_05(texts, payloads, body=False), encoding="utf-8", newline="\n")
 
     # 06, 07, appendix, 00
-    (package / "06-worksheet-902-14.md").write_text(page_06(pinned, decoded, acquisition, files, still_digest))
-    (package / "07-questions.md").write_text(page_07(pick, decoded))
-    (package / "appendix" / "prohibited-claims.md").write_text(prohibited_claims())
+    (package / "06-worksheet-902-14.md").write_text(page_06(pinned, decoded, acquisition, files, still_digest), encoding="utf-8", newline="\n")
+    (package / "07-questions.md").write_text(page_07(pick, decoded), encoding="utf-8", newline="\n")
+    (package / "appendix" / "prohibited-claims.md").write_text(prohibited_claims(), encoding="utf-8", newline="\n")
     (package / "00-READ-FIRST.md").write_text(
-        page_00(facts, pick, run1, pinned, decoded, bundle, receipts, trust_policy, still_digest))
+        page_00(facts, pick, run1, pinned, decoded, bundle, receipts, trust_policy, still_digest), encoding="utf-8", newline="\n")
 
     # inventory last, then the tarball
     inventory = [{"path": file.relative_to(package).as_posix(), "byte_length": file.stat().st_size, "sha256": file_sha256(file)}
@@ -261,11 +265,11 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
         "_doc": "Inventory for recomputation, not a copy foundation. Unsigned. Scope: every file distributed in this "
                 "package directory except this file. The copy foundation is 01-copy/acquisition.json. This file lists "
                 "03-source-and-run.md, so it is outside the reproducible set with it.",
-        "files": inventory}))
+        "files": inventory}), encoding="utf-8", newline="\n")
     tarball = out / f"{PACKAGE_NAME}.tar.gz"
     tar_digest = write_tarball(package, tarball, mtime=at)
-    (out / f"{PACKAGE_NAME}.tar.gz.sha256").write_text(f"{file_sha256(tarball)}  {tarball.name}\n")
-    (out / f"{PACKAGE_NAME}.tar.sha256").write_text(f"{tar_digest}  {PACKAGE_NAME}.tar\n")
+    (out / f"{PACKAGE_NAME}.tar.gz.sha256").write_text(f"{file_sha256(tarball)}  {tarball.name}\n", encoding="utf-8", newline="\n")
+    (out / f"{PACKAGE_NAME}.tar.sha256").write_text(f"{tar_digest}  {PACKAGE_NAME}.tar\n", encoding="utf-8", newline="\n")
     print(f"specimen: {pick['dir']}")
     print(f"run 1: exit {run1['exit']} Result {run1['result']} verdict_id {run1['verdict_id']} bundle_digest {run1['bundle_digest']}")
     print(f"tarball: {tarball} sha256 {file_sha256(tarball)} (tar sha256 {tar_digest})")

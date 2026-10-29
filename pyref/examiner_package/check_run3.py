@@ -14,7 +14,9 @@ examiner's leaf; (3) leaf kid in the protected header; (4) policy digest; (5) ev
 (6) bundle_digest, (7) result, (8) signed trust values (except relying_party_policy_digest),
 (9) limits, (10) observations equal run 1's verdict; (11) no report-layer marker in the stdout.
 Exports (``run3.sig_structure.bin``, ``run3.leaf-spki.der``, ``run3.signature.der``) are written
-beside the keys, never inside the package. Exit 0 only when every line passes.
+beside the keys, never inside the package. Exit codes: 0 every line passed in controlled mode; 1 a
+line failed; 2 usage error (bad or missing input); 3 transcript mode (``--stdout``), always, whatever
+the lines say.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from pathlib import Path
 from .. import relying_party
 from ..cbor import dumps, loads
 from ..crypto import public_spki, verify_es256
-from .core import REPORT_LAYER_MARKERS, decode_verdict, parse_report, read_json, run_verifier
+from .core import REPORT_LAYER_MARKERS, PackageError, decode_verdict, parse_report, read_json, run_verifier
 
 UNVERIFIED = "UNVERIFIED TRANSCRIPT: the inputs used for this run are not established by this check"
 
@@ -47,8 +49,8 @@ def controlled_run(keys: Path, package: Path) -> dict:
     at = read_json(package / "01-copy" / "meta.json", "meta.json")["evaluated_at"]
     run = run_verifier(package, "01-copy/bundle.cbor", at, "01-copy/trust-policy.json", "01-copy/prior-state.json",
                        str((keys / "examiner-policy.json").resolve()), str((keys / "examiner.key").resolve()))
-    (keys / "run3.stdout.txt").write_text(run["stdout"])
-    (keys / "run3.stderr.txt").write_text(run["stderr"])
+    (keys / "run3.stdout.txt").write_text(run["stdout"], encoding="utf-8", newline="\n")
+    (keys / "run3.stderr.txt").write_text(run["stderr"], encoding="utf-8", newline="\n")
     return run
 
 
@@ -112,11 +114,15 @@ def main(argv: list[str] | None = None) -> int:
         print(UNVERIFIED)
     try:
         results = check(args.keys, args.run1, args.stdout)
-    except (OSError, ValueError, KeyError) as exc:
+    except (PackageError, OSError, ValueError, KeyError) as exc:
         print(f"{parser.prog}: error: {exc}", file=sys.stderr)
         return 2
     for name, passed, detail in results:
         print(f"{'PASS' if passed else 'FAIL'}  {name}: {detail}")
+    # Exit codes: 0 every line passed in controlled mode; 1 a line failed; 2 usage error;
+    # 3 transcript mode (--stdout), whatever the lines say.
+    if args.stdout is not None:
+        return 3
     return 0 if all(passed for _, passed, _ in results) else 1
 
 

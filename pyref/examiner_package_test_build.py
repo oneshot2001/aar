@@ -100,6 +100,19 @@ class FullBuild(unittest.TestCase):
         self.assertEqual(differing, set(ep.OUTSIDE_REPRODUCIBLE_SET))
         self.assertIn(str(alt), (self.root / "fourth" / "package" / "03-source-and-run.md").read_text())
 
+    def test_build_under_c_locale_is_byte_identical(self):
+        # F-04 R2 / amendment (l): an ASCII locale with UTF-8 mode off yields the same bytes over the reproducible set.
+        env = {**os.environ, "LC_ALL": "C", "LANG": "C", "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"}
+        env.pop("PYTHONIOENCODING", None)
+        proc = subprocess.run([sys.executable, "-B", "-m", "pyref.examiner_package", "--candidates", str(CORPUS / "aar"),
+                               "--stills", str(CORPUS), "--logs", str(CORPUS), "--inputs", str(self.inputs),
+                               "--out", str(self.root / "clocale")], cwd=REPO, env=env, capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        base, other = tree_hashes(self.package), tree_hashes(self.root / "clocale" / "package")
+        self.assertEqual(set(base), set(other))
+        differing = {path for path in base if base[path] != other[path]}
+        self.assertEqual(differing - set(ep.OUTSIDE_REPRODUCIBLE_SET), set())
+
     def test_tarball_carries_no_absolute_path_or_host(self):
         with tarfile.open(self.root / "second" / "examiner-package-v0.1.tar.gz") as tar:
             members = {m.name: tar.extractfile(m).read() for m in tar.getmembers() if m.isfile()}
@@ -137,8 +150,18 @@ class FullBuild(unittest.TestCase):
         self.assertTrue(all(passed for name, passed, _ in results if name.split()[0] in {str(i) for i in range(1, 11)}), results)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            check_run3.main(["--keys", str(self.keys), "--run1", str(self.run1), "--stdout", str(edited)])
+            code = check_run3.main(["--keys", str(self.keys), "--run1", str(self.run1), "--stdout", str(edited)])
+        self.assertEqual(code, 3)  # F-04 R3: transcript mode always exits 3
         self.assertTrue(out.getvalue().startswith(check_run3.UNVERIFIED))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(check_run3.main(["--keys", str(self.keys), "--run1", str(self.run1), "--stdout", str(good)]), 3)
+        # F-04 R3: a PackageError (no 01-copy/meta.json where --run1 points) is a usage error, exit 2.
+        stub = self.root / "stub" / "02-verify"
+        shutil.copytree(self.package / "02-verify", stub)
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            self.assertEqual(check_run3.main(["--keys", str(self.keys), "--run1", str(stub / "run1.json")]), 2)
+        self.assertIn("meta.json", err.getvalue())
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(check_run3.main(["--keys", str(self.keys), "--run1", str(self.run1)]), 0)

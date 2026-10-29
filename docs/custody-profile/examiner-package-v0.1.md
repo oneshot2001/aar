@@ -80,8 +80,8 @@ appendix/                candidates.json, prohibited-claims.md, text-fields-zero
   `verdict_cbor_sha256`. `run1.verdict.cbor` is the raw `[payload, COSE_Sign1]` envelope.
 - `inventory.json`: `files: [{path, byte_length, sha256}]` over every distributed file except itself.
 - `04-operator-records/<log>.jsonl`: the kept source lines in source order, after one stated transformation:
-  each of the builder's resolved absolute root paths, where it occupies whole path segments (followed by `/`,
-  a double quote, whitespace or the end of the line), is replaced by `<local>`. A log whose kept lines
+  literal replacement of the three configured roots (resolved) by `<local>` at path starts only (the root begins
+  a path and ends a segment); not general path anonymization; encoded or Windows-style forms are not covered. A log whose kept lines
   contained none is byte for byte the original; otherwise the file is an identified derivative and the
   companion lists each changed line's original and derivative SHA-256 (the operator holds the originals).
   Rules (stated in each companion): journal by carried `invocation_id` or `receipt_id`; anchor by
@@ -121,14 +121,16 @@ run 1's verdict (`run1.verdict.cbor`); (11) no report-layer `stateful_not_evalua
 instead and the output is headed "UNVERIFIED TRANSCRIPT: the inputs used for this run are not established
 by this check". It writes `run3.verdict.cbor`, `run3.sig_structure.bin`, `run3.leaf-spki.der` and
 `run3.signature.der` beside the keys, never inside the package, for the printed OpenSSL re-check.
-Private keys never enter the package.
+Private keys never enter the package. Exit codes: 0 every line passed in controlled mode; 1 a line failed;
+2 usage error; 3 transcript mode, always.
 
 ## Reproducible set and tarball
 
 Reproducible set: every distributed file except `03-source-and-run.md` (the build host's interpreter
 and platform) and `01-copy/inventory.json` (it lists 03, so it varies with it). Two builds from the
 same inputs are byte-identical over that set for the same CPython minor version and Unicode data
-version; the `acquisition.json` inside the package derives from the input. The tarball
+version; the `acquisition.json` inside the package derives from the input. Every distributed text file is
+written UTF-8 with `\n` newlines and every text input is read as UTF-8, regardless of the build host's locale. The tarball
 `examiner-package-v0.1.tar.gz` holds the package under `examiner-package-v0.1/`: entries sorted by
 path, uid/gid 0, empty user and group names, mode 0644/0755, mtime = `meta.evaluated_at`, PAX format;
 gzip level 9, mtime 0, no name. Two digests are written beside it for publication outside the
