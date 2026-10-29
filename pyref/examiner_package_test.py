@@ -6,26 +6,35 @@ when ~/Projects/onvif-mcp/receipts exists (they are skipped, not failed, elsewhe
 
 from __future__ import annotations
 
+import gzip
 import json
+import os
+import re
 import shutil
+import subprocess
 import tarfile
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 from pyref import examiner_package as ep
 from pyref.cbor import dumps, loads
+from pyref.crypto import public_spki
 from pyref.examiner_package import check_run3, mint_examiner_chain
 
 REPO = Path(__file__).resolve().parents[1]
 KAT = REPO / "kats" / "positive" / "bundle-valid-subset.cbor"
 CORPUS = Path.home() / "Projects" / "onvif-mcp" / "receipts"
-EXPECTED_PICK = "1792172898-camera-stream-view-q6358-78f38116"
-EXPECTED_STILL = "snap-q6358-1792172897320.jpg"
+KNOWN_PICK = "1792172898-camera-stream-view-q6358-78f38116"
+KNOWN_STILL = "snap-q6358-1792172897320.jpg"
 FACTS = {"specimen_kind": "test specimen", "coverage_sentence": "complete relative to the selected producer-declared indexes",
-         "d66_sentence": "D-66 sentence.", "facts": [{"label": "one", "text": "A fact.", "ref": "ref"}]}
-ACQUISITION = {"source": {"repo_path": "x/<specimen-dir>/", "collector_label": "test"}, "files": [], "copy_method": "",
-               "tool_versions": {}, "collection_time_utc": None, "platform": None, "errors": [], "transformations": []}
+         "d66_sentence": "D-66 sentence.", "asserts": {"no_conformant_tool_action_other_than": ["camera.stream.view"]},
+         "verified_against": {"bundle_digest": None},
+         "facts": [{"label": "anchor log", "text": "This bundle carries no anchor.", "ref": "ref"},
+                   {"label": "bundle and exporter", "text": "The bundle file is unsigned (D-36).", "ref": "D-36", "generated_prefix": "artifact_inventory"}]}
+ACQUISITION = {"source": {"repo_path": "x/<specimen-dir>/", "host_label": "Mac Studio (test)", "collector_label": "test"}, "files": [],
+               "copy_method": "", "tool_versions": {}, "collection_time_utc": None, "platform": None, "errors": [], "transformations": []}
 
 
 def _hexify(value):
@@ -64,13 +73,44 @@ class SpecimenRule(unittest.TestCase):
             (root / "d-no-bundle").mkdir()
             rows = {row["dir"]: row for row in ep.sweep(root, root / "stills")}
             self.assertEqual(set(rows), {"a-conformant", "b-refused", "c-missing"})
-            self.assertEqual((rows["a-conformant"]["exit"], rows["a-conformant"]["reason"]), (0, "no-exact-still-match"))
+            self.assertEqual(rows["a-conformant"]["exit"], 0)
+            self.assertIn(rows["a-conformant"]["reason"], ("no-exact-still-match", "commitments-missing", "commitments-differ"))
             self.assertEqual(rows["b-refused"]["exit"], 2)
             self.assertIn("prior-state.prior_emissions must be strictly sorted and unique", rows["b-refused"]["reason"])
             self.assertEqual(rows["c-missing"]["reason"], "missing sidecar: meta.json")
             self.assertEqual((root / "b-refused" / "prior-state.json").read_text(), json.dumps({"prior_emissions": [entry, entry]}))
             with self.assertRaises(ep.PackageError):
                 ep.select_specimen(root, root / "stills", "kat")
+
+    def test_classify_reasons(self):
+        d = b"\x01" * 32
+        self.assertEqual(ep.classify_still(set(), {d}, {d.hex(): ["a"]}), (None, "commitments-missing"))
+        self.assertEqual(ep.classify_still({d}, {b"\x02" * 32}, {d.hex(): ["a"]}), (None, "commitments-differ"))
+        self.assertEqual(ep.classify_still({d}, {d}, {d.hex(): ["a", "b"]}), (None, "still-ambiguous"))
+        self.assertEqual(ep.classify_still({d}, {d}, {}), (None, "no-exact-still-match"))
+        self.assertEqual(ep.classify_still({d}, {d}, {d.hex(): ["a"]}), ("a", "conformant, exact still match"))
+
+    def test_asserts_binding(self):
+        rows = [{"exit": 0, "tool_action": "camera.ptz.preset"}, {"exit": 0, "tool_action": "camera.stream.view"}]
+        pick = {"dir": "x", "bundle_digest": "ab"}
+        facts = {"asserts": {"no_conformant_tool_action_other_than": ["camera.stream.view"]}, "verified_against": {"bundle_digest": "ab"}}
+        with self.assertRaisesRegex(ep.PackageError, "no_conformant_tool_action_other_than.*camera.ptz.preset"):
+            ep.check_asserts(facts, pick, rows)
+        ep.check_asserts(facts, pick, rows[1:])
+        with self.assertRaisesRegex(ep.PackageError, "verified_against.bundle_digest"):
+            ep.check_asserts({**facts, "verified_against": {"bundle_digest": "cd"}}, pick, rows[1:])
+
+    def test_out_as_file_is_usage_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ("inputs", "c", "s", "l"):
+                (root / name).mkdir()
+            (root / "inputs" / "specimen-facts.json").write_text(json.dumps(FACTS))
+            (root / "inputs" / "acquisition.json").write_text(json.dumps(ACQUISITION))
+            (root / "out").write_text("")
+            with self.assertRaisesRegex(ep.PackageError, "--out"):
+                ep.build(root / "c", root / "s", root / "l", root / "inputs", root / "out", "q6358")
+            self.assertEqual(sorted(p.name for p in root.iterdir()), ["c", "inputs", "l", "out", "s"])
 
     @unittest.skipUnless(CORPUS.is_dir(), "onvif-mcp corpus not present")
     def test_real_corpus_pick(self):
@@ -79,46 +119,77 @@ class SpecimenRule(unittest.TestCase):
         newest_q6358 = max((row for row in eligible if row["camera"] == "q6358"), key=lambda row: row["evaluated_at"])
         self.assertIs(pick, newest_q6358)
         self.assertTrue(pick["selected"] and pick["dir"].startswith(str(pick["evaluated_at"])))
-        # The 2026-10-29 lock-time specimen stays conformant and still-matched; a newer capture outranks it by rule.
-        known = next(row for row in rows if row["dir"] == EXPECTED_PICK)
-        self.assertEqual((known["exit"], known["still"]), (0, EXPECTED_STILL))
         self.assertEqual([row["evaluated_at"] for row in eligible], sorted((row["evaluated_at"] for row in eligible), reverse=True))
+        known = next(row for row in rows if row["dir"] == KNOWN_PICK)
+        self.assertEqual((known["exit"], known["still"]), (0, KNOWN_STILL))
         refused = [row for row in rows if row["exit"] == 2]
         self.assertTrue(refused and all("prior_emissions must be strictly sorted" in row["reason"] for row in refused))
         self.assertTrue(all(row["reason"] for row in rows))
 
     @unittest.skipUnless(CORPUS.is_dir(), "onvif-mcp corpus not present")
-    def test_real_candidate_without_still_is_excluded(self):
+    def test_real_candidate_without_still_or_with_two_stills(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            shutil.copytree(CORPUS / "aar" / EXPECTED_PICK, root / EXPECTED_PICK)
-            (root / "stills").mkdir()
-            [row] = ep.sweep(root, root / "stills")
+            shutil.copytree(CORPUS / "aar" / KNOWN_PICK, root / KNOWN_PICK)
+            (root / "none").mkdir()
+            [row] = ep.sweep(root, root / "none")
             self.assertEqual((row["exit"], row["reason"], row["still"]), (0, "no-exact-still-match", None))
+            (root / "two").mkdir()
+            for name in (KNOWN_STILL, "snap-q6358-copy.jpg"):
+                shutil.copyfile(CORPUS / KNOWN_STILL, root / "two" / name)
+            [row] = ep.sweep(root, root / "two")
+            self.assertEqual((row["reason"], row["still"]), ("still-ambiguous", None))
 
 
 class TextFields(unittest.TestCase):
     def test_contract(self):
-        sample = "a​b|‮\x07\U000E0100"
-        self.assertEqual(ep.visible(sample), "a\\u200Bb\\|\\u202E\\u0007\\u{E0100}")
-        self.assertEqual(ep.escaped(sample), "a\\u200Bb\\|\\u202E\\u0007\\u{E0100}")
+        sample = "a​b|‮\x07\U000E0100 "
+        self.assertEqual(ep.visible(sample), "a\\u200Bb\\|\\u202E\\u0007\\u{E0100}\\u2028")
+        self.assertEqual(ep.escaped(sample), "a\\u200Bb\\|\\u202E\\u0007\\u{E0100}\\u2028")
         self.assertTrue(all(ep.is_invisible(c) for c in (0x200B, 0x202E, 0xFEFF, 0xFE0F, 0xE0100, 0x2060)))
-        self.assertFalse(ep.is_invisible(ord("a")))
+        self.assertFalse(ep.is_invisible(ord("a")) or ep.is_invisible(0x2028))
 
-    def test_traversal_decodes_embedded_and_keeps_siblings_opaque(self):
+    def test_traversal_decodes_embedded_and_inventories_bytes(self):
         cose = dumps([dumps({1: -7}), {}, None, b"\x00" * 64])
         bundle = {"artifacts": {"receipts": [[dumps({"a": "x​y"}), cose]]},
                   "parameters_cbor": dumps({"k": "v"}), "canonical_bytes": b"\xff\xff",
-                  "siblings": [b"\x01" * 32, b"\x02" * 32], "name": "plain"}
+                  "siblings": [b"\x01" * 32, b"\x02" * 16], "blob": b"\x03" * 5, "name": "plain"}
         texts, payloads = ep.text_rows(bundle)
         by_path = {row["path"]: row for row in texts}
         self.assertEqual(by_path["bundle.artifacts.receipts[0][0]{payload}.a"]["invisible"], [(1, 0x200B)])
         self.assertEqual(by_path["bundle.parameters_cbor{cbor}.k"]["text"], "v")
         self.assertIn("bundle.<key:name>", by_path)
-        decoded = {row["path"]: row["decoded"] for row in payloads}
-        self.assertEqual(decoded, {"bundle.artifacts.receipts[0][0]": True, "bundle.artifacts.receipts[0][1]": True,
-                                   "bundle.artifacts.receipts[0][1]{cose}[0]": True, "bundle.parameters_cbor": True,
-                                   "bundle.canonical_bytes": False})
+        kinds = {row["path"]: row["kind"] for row in payloads}
+        self.assertEqual(kinds, {"bundle.artifacts.receipts[0][0]": "decoded", "bundle.artifacts.receipts[0][1]": "decoded",
+                                 "bundle.artifacts.receipts[0][1]{cose}[0]": "decoded", "bundle.artifacts.receipts[0][1]{cose}[3]": "opaque",
+                                 "bundle.parameters_cbor": "decoded", "bundle.canonical_bytes": "not-decoded",
+                                 "bundle.siblings[0]": "identifier", "bundle.siblings[1]": "identifier", "bundle.blob": "opaque"})
+
+    def test_nested_envelope_is_inventoried_not_hidden(self):
+        # Codex P2-8 reproduction: an envelope-shaped pair under an unknown key inside canonical_bytes.
+        cose = dumps([dumps({1: -7}), {}, None, b"\x00" * 64])
+        bundle = {"canonical_bytes": dumps({"nested_envelope": [dumps({"text": "hidden‮"}), cose]})}
+        texts, payloads = ep.text_rows(bundle)
+        page = ep.page_05(texts, payloads, body=True)
+        appendix = ep.page_05(texts, payloads, body=False)
+        kinds = {p["path"]: p["kind"] for p in payloads if "nested_envelope" in p["path"]}
+        # The 16-byte payload is identifier-sized by the R6 rule (appendix); the COSE bytes are opaque (body).
+        self.assertEqual(kinds, {"bundle.canonical_bytes{cbor}.nested_envelope[0]": "identifier",
+                                 "bundle.canonical_bytes{cbor}.nested_envelope[1]": "opaque"})
+        self.assertIn("nested\\_envelope\\[0\\]", appendix)
+        self.assertIn("nested\\_envelope\\[1\\]", page)
+        self.assertNotIn("‮", page + appendix)
+        self.assertFalse(any("hidden" in t["text"] for t in texts))
+
+    def test_path_column_is_escaped(self):
+        # Codex P2-7 reproduction: a bidi control in a key reaches the path column.
+        texts, payloads = ep.text_rows({"parameters_cbor": dumps({"evil‮key": "normal", "a|b`c": "d"})})
+        for body in (True, False):
+            page = ep.page_05(texts, payloads, body=body)
+            self.assertNotIn("‮", page)
+        appendix = ep.page_05(texts, payloads, body=False)
+        self.assertIn("evil\\u202Ekey", appendix)
+        self.assertIn("a\\|b\\`c", appendix)
 
 
 class OperatorRecords(unittest.TestCase):
@@ -126,10 +197,33 @@ class OperatorRecords(unittest.TestCase):
         journal = b'{"event":"x","invocation_id":"aa"}\n{"event":"y","receipt_id":"bb"}\n{"event":"z"}\nnot json\n'
         anchor = b'{"appended_at":5}\n{"appended_at":10}\n{"appended_at":11}\n'
         chain = b'{"ts":"2026-10-16T17:48:18.766Z"}\n{"ts":"2026-10-16T17:49:00Z"}\n[1]\n'
-        self.assertEqual([n for n, _ in ep.select_lines("journal.jsonl", journal, (0, 0), {"aa"}, {"bb"})], [1, 2])
-        self.assertEqual([n for n, _ in ep.select_lines("anchor.jsonl", anchor, (6, 10), set(), set())], [2])
-        kept = ep.select_lines("chain.jsonl", chain, (1792172838, 1792172899), set(), set())
-        self.assertEqual([(n, line) for n, line in kept], [(1, b'{"ts":"2026-10-16T17:48:18.766Z"}\n')])
+        self.assertEqual([n for n, _ in ep.select_lines("journal.jsonl", journal, (0, 0), {"aa"}, {"bb"})[0]], [1, 2])
+        self.assertEqual([n for n, _ in ep.select_lines("anchor.jsonl", anchor, (6, 10), set(), set())[0]], [2])
+        kept, undated = ep.select_lines("chain.jsonl", chain, (1792172838, 1792172899), set(), set())
+        self.assertEqual((kept, undated), ([(1, b'{"ts":"2026-10-16T17:48:18.766Z"}\n')], []))
+
+    def test_offset_free_timestamp_never_interpreted(self):
+        # Codex P2-10 reproduction under two TZ values: the naive line is undated and never selected.
+        line = b'{"ts":"2026-10-16T17:48:18"}\n'
+        original = os.environ.get("TZ")
+        try:
+            for zone in ("UTC", "America/Denver"):
+                os.environ["TZ"] = zone
+                time.tzset()
+                kept, undated = ep.select_lines("chain.jsonl", line, (1792172838, 1792172899), set(), set())
+                self.assertEqual(kept, [])
+                self.assertEqual(undated, [(1, ep.sha256_hex(line))])
+                self.assertIsNone(ep.iso_seconds("2026-10-16T17:48:18"))
+                self.assertEqual(ep.iso_seconds("2026-10-16T17:48:18Z"), 1792172898)
+        finally:
+            if original is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = original
+            time.tzset()
+
+    def test_localize(self):
+        self.assertEqual(ep.localize(b'{"detail":"saved /x/receipts/a.jpg"}', [b"/x/receipts"]), b'{"detail":"saved <local>/a.jpg"}')
 
 
 class Tarball(unittest.TestCase):
@@ -139,11 +233,14 @@ class Tarball(unittest.TestCase):
             (root / "pkg" / "sub").mkdir(parents=True)
             (root / "pkg" / "b.txt").write_text("b")
             (root / "pkg" / "sub" / "a.txt").write_text("a")
-            ep.write_tarball(root / "pkg", root / "one.tar.gz", mtime=1792172898)
+            digest = ep.write_tarball(root / "pkg", root / "one.tar.gz", mtime=1792172898)
             (root / "pkg" / "b.txt").touch()
             ep.write_tarball(root / "pkg", root / "two.tar.gz", mtime=1792172898)
-            self.assertEqual((root / "one.tar.gz").read_bytes(), (root / "two.tar.gz").read_bytes())
-            self.assertEqual((root / "one.tar.gz").read_bytes()[3:9], b"\x00" * 6)  # gzip FLG 0 (no name), MTIME 0, XFL 0
+            one = (root / "one.tar.gz").read_bytes()
+            self.assertEqual(one, (root / "two.tar.gz").read_bytes())
+            self.assertEqual(one[3:8], b"\x00" * 5)  # gzip FLG 0 (no name), MTIME 0
+            self.assertEqual(one[8], 2)  # XFL: maximum compression (level 9)
+            self.assertEqual(ep.sha256_hex(gzip.decompress(one)), digest)
             with tarfile.open(root / "one.tar.gz") as tar:
                 members = tar.getmembers()
             self.assertEqual({(m.uid, m.gid, m.mtime, m.uname) for m in members}, {(0, 0, 1792172898, "")})
@@ -152,40 +249,122 @@ class Tarball(unittest.TestCase):
 
 @unittest.skipUnless(CORPUS.is_dir(), "onvif-mcp corpus not present")
 class FullBuild(unittest.TestCase):
-    def test_build_twice_identical_and_run3_passes(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            inputs = root / "inputs"
-            inputs.mkdir()
-            (inputs / "specimen-facts.json").write_text(json.dumps(FACTS))
-            (inputs / "acquisition.json").write_text(json.dumps(ACQUISITION))
-            self.assertEqual(ep.build(CORPUS / "aar", CORPUS, CORPUS, inputs, root / "first", "q6358"), 0)
-            filled = json.loads((root / "first" / "package" / "01-copy" / "acquisition.json").read_text())
-            self.assertTrue(filled["collection_time_utc"] and filled["files"] and filled["platform"])
-            shutil.copyfile(root / "first" / "package" / "01-copy" / "acquisition.json", inputs / "acquisition.json")
-            for name in ("second", "third"):
-                self.assertEqual(ep.build(CORPUS / "aar", CORPUS, CORPUS, inputs, root / name, "q6358"), 0)
-            second, third = root / "second", root / "third"
-            for file in sorted(p for p in second.rglob("*") if p.is_file()):
-                self.assertEqual(file.read_bytes(), (third / file.relative_to(second)).read_bytes(), str(file))
-            package = second / "package"
-            self.assertTrue((package / "00-READ-FIRST.md").read_text().startswith("# 00 — READ FIRST\n\n" + ep.OPENING))
-            inventory = json.loads((package / "01-copy" / "inventory.json").read_text())
-            self.assertNotIn("01-copy/inventory.json", {row["path"] for row in inventory["files"]})
-            self.assertIn("01-copy/acquisition.json", {row["path"] for row in inventory["files"]})
-            run1 = json.loads((package / "02-verify" / "run1.json").read_text())
-            self.assertEqual((run1["exit"], run1["result"]), (0, "conformant"))
-            self.assertIn("## Not decoded", (package / "05-text-fields.md").read_text())
-            self.assertNotIn("inclusion.siblings", (package / "05-text-fields.md").read_text())
-            keys = mint_examiner_chain.mint(root / "keys", run1["evaluated_at"], package / "01-copy" / "trust-policy.json")
-            self.assertEqual((root / "keys" / "examiner.key").stat().st_mode & 0o777, 0o600)
-            run3 = ep.run_verifier(package, "01-copy/bundle.cbor", run1["evaluated_at"], "01-copy/trust-policy.json",
-                                   "01-copy/prior-state.json", "../../keys/examiner-policy.json", "../../keys/examiner.key")
-            self.assertEqual(run3["exit"], 0, run3["stderr"])
-            (root / "run3.stdout.txt").write_text(run3["stdout"])
-            results = check_run3.check(root / "run3.stdout.txt", root / "keys" / "examiner-policy.json", package / "02-verify" / "run1.json")
-            self.assertTrue(all(passed for _, passed, _ in results), results)
-            self.assertIn(keys["leaf_kid"], results[1][2])
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        root = cls.root = Path(cls.tmp.name)
+        pick, _ = ep.select_specimen(CORPUS / "aar", CORPUS, "q6358")
+        inputs = root / "inputs"
+        inputs.mkdir()
+        facts = {**FACTS, "verified_against": {"bundle_digest": pick["bundle_digest"]}}
+        (inputs / "specimen-facts.json").write_text(json.dumps(facts))
+        (inputs / "acquisition.json").write_text(json.dumps(ACQUISITION))
+        assert ep.build(CORPUS / "aar", CORPUS, CORPUS, inputs, root / "first", "q6358") == 0
+        shutil.copyfile(root / "first" / "acquisition-full.json", inputs / "acquisition.json")
+        for name in ("second", "third"):
+            assert ep.build(CORPUS / "aar", CORPUS, CORPUS, inputs, root / name, "q6358") == 0
+        cls.package = root / "second" / "package"
+        cls.run1 = json.loads((cls.package / "02-verify" / "run1.json").read_text())
+        cls.keys = root / "keys"
+        cls.minted = mint_examiner_chain.mint(cls.keys, cls.run1["evaluated_at"], cls.package / "01-copy" / "trust-policy.json")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def run3(self, keys: Path, name: str, trust="01-copy/trust-policy.json", prior="01-copy/prior-state.json") -> Path:
+        run = ep.run_verifier(self.package, "01-copy/bundle.cbor", self.run1["evaluated_at"], trust, prior,
+                              os.path.relpath(keys / "examiner-policy.json", self.package), os.path.relpath(keys / "examiner.key", self.package))
+        self.assertEqual(run["exit"], 0, run["stderr"])
+        path = self.root / f"{name}.stdout.txt"
+        path.write_text(run["stdout"])
+        return path
+
+    def test_builds_identical_and_inventory(self):
+        second, third = self.root / "second", self.root / "third"
+        for file in sorted(p for p in second.rglob("*") if p.is_file()):
+            self.assertEqual(file.read_bytes(), (third / file.relative_to(second)).read_bytes(), str(file))
+        self.assertEqual((second / "examiner-package-v0.1.tar.sha256").read_text(),
+                         ep.sha256_hex(gzip.decompress((second / "examiner-package-v0.1.tar.gz").read_bytes())) + "  examiner-package-v0.1.tar\n")
+        page = (self.package / "00-READ-FIRST.md").read_text()
+        self.assertTrue(page.startswith("# 00 — READ FIRST\n\n" + ep.OPENING))
+        self.assertIn("Artifacts carried in this bundle, from the decoded bytes: ", page)
+        self.assertIn("anchors (signed) 0", page)
+        inventory = json.loads((self.package / "01-copy" / "inventory.json").read_text())
+        self.assertNotIn("01-copy/inventory.json", {row["path"] for row in inventory["files"]})
+        self.assertIn("01-copy/acquisition.json", {row["path"] for row in inventory["files"]})
+        self.assertEqual((self.run1["exit"], self.run1["result"]), (0, "conformant"))
+        self.assertIn("## Not decoded", (self.package / "05-text-fields.md").read_text())
+        self.assertNotIn("inclusion.siblings", (self.package / "05-text-fields.md").read_text())
+        self.assertIn("Identifier-sized byte strings", (self.package / "appendix" / "text-fields-zero.md").read_text())
+        self.assertIn("This bundle carries no anchor.", (self.package / "04-operator-records" / "anchor.jsonl.md").read_text())
+
+    def test_tarball_carries_no_absolute_path_or_host(self):
+        with tarfile.open(self.root / "second" / "examiner-package-v0.1.tar.gz") as tar:
+            members = {m.name: tar.extractfile(m).read() for m in tar.getmembers() if m.isfile()}
+        for name, data in members.items():
+            self.assertNotIn(b"/Users/", data, name)
+            self.assertNotIn(b"Agents-MacBook", data, name)
+            if not name.endswith("01-copy/acquisition.json"):
+                self.assertNotIn(b"Mac Studio", data, name)
+        self.assertIn(b"Mac Studio (test)", members[f"{ep.PACKAGE_NAME}/01-copy/acquisition.json"])
+        self.assertIn(b"<local>", members[f"{ep.PACKAGE_NAME}/04-operator-records/chain.jsonl"])
+        self.assertIn("identified derivative", (self.package / "04-operator-records" / "chain.jsonl.md").read_text())
+        self.assertIn("/Users/", (self.root / "first" / "acquisition-full.json").read_text())
+
+    def test_run3_positive_and_negatives(self):
+        self.assertEqual((self.keys / "examiner.key").stat().st_mode & 0o777, 0o600)
+        results = check_run3.check(self.run3(self.keys, "run3"), self.keys, self.package / "02-verify" / "run1.json")
+        self.assertEqual([name[:2].strip() for name, _, _ in results][:11], [str(i) for i in range(1, 12)])
+        self.assertTrue(all(passed for _, passed, _ in results), results)
+        self.assertIn(self.minted["leaf_kid"], results[0][2])
+        # (i) Codex P1-1: substituted leaf SPKI, original kid and credential signature kept.
+        bad = self.root / "bad-spki"
+        shutil.copytree(self.keys, bad)
+        policy = json.loads((bad / "examiner-policy.json").read_text())
+        credentials = []
+        for item in policy["verifier_credentials"]:
+            envelope = loads(bytes.fromhex(item))
+            payload = loads(envelope[0])
+            if payload["key_usage"] == "verifier_signing":
+                payload["public_key"] = public_spki(789)
+                envelope = [dumps(payload), envelope[1]]
+            credentials.append(dumps(envelope).hex())
+        policy["verifier_credentials"] = credentials
+        (bad / "examiner-policy.json").write_text(json.dumps(policy))
+        results = check_run3.check(self.root / "run3.stdout.txt", bad, self.package / "02-verify" / "run1.json")
+        self.assertFalse(results[0][1], results)
+        # (ii) a second chain's policy and key against chain A's verdict.
+        other = self.root / "other"
+        mint_examiner_chain.mint(other, self.run1["evaluated_at"], self.package / "01-copy" / "trust-policy.json")
+        results = check_run3.check(self.root / "run3.stdout.txt", other, self.package / "02-verify" / "run1.json")
+        failed = {name for name, passed, _ in results if not passed}
+        self.assertTrue(any(name.startswith(("2 ", "3 ", "4 ")) for name in failed), results)
+        # (iii) Codex P1-2: run 3 without --trust-policy / --prior-state.
+        results = check_run3.check(self.run3(self.keys, "run3-nopins", trust=None, prior=None), self.keys, self.package / "02-verify" / "run1.json")
+        failed = {name for name, passed, _ in results if not passed}
+        self.assertTrue(any(name.startswith("8 ") for name in failed) and any(name.startswith("11 ") for name in failed), results)
+        # (iv) run-1 stdout fed as run 3.
+        results = check_run3.check(self.package / "02-verify" / "run1.stdout.txt", self.keys, self.package / "02-verify" / "run1.json")
+        self.assertFalse(all(passed for _, passed, _ in results), results)
+
+    @unittest.skipUnless(shutil.which("openssl") and shutil.which("bash"), "openssl and bash needed")
+    def test_printed_commands_run_verbatim_from_a_fresh_extraction(self):
+        extract = self.root / "extract"
+        extract.mkdir()
+        with tarfile.open(self.root / "second" / "examiner-package-v0.1.tar.gz") as tar:
+            tar.extractall(extract, filter="data")
+        package = extract / ep.PACKAGE_NAME
+        readme = (package / "02-verify" / "README.md").read_text()
+        blocks = re.findall(r"```\n(.*?)```", readme.split("## Run 2")[0], re.DOTALL)
+        script = "set -euo pipefail\n" + "\n".join(blocks)
+        proc = subprocess.run(["bash", "-c", script], cwd=package, capture_output=True, text=True,
+                              env={**os.environ, "AAR": str(REPO)})
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("Verified OK", proc.stdout + proc.stderr)
+        self.assertEqual(proc.stdout.count("FAIL"), 0, proc.stdout)
+        self.assertTrue((extract / "examiner-keys" / "examiner.key").exists())
+        self.assertFalse(any(p.name.startswith("run3") for p in (package / "02-verify").iterdir()))
 
 
 if __name__ == "__main__":

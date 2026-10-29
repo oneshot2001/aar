@@ -32,6 +32,21 @@ LIMIT_GLOSS = {
     "evaluated_profile": "the profile the verifier evaluated the bundle against",
 }
 
+# Generated artifact inventory (amendment b): one line from the decoded bundle, every category counted.
+ARTIFACT_LABELS = {
+    "receipts": "receipts (signed)", "credentials": "credentials (signed)", "delegations": "delegations (signed)",
+    "requests": "requests (signed)", "presentations": "presentations (signed)", "epoch_events": "epoch events (signed)",
+    "epoch_manifests": "epoch manifests (signed)", "manifest_payloads": "manifest payloads (digest-bound, not signed)",
+    "anchors": "anchors (signed)", "merkle_batches": "Merkle batches (signed)", "merkle_proofs": "Merkle proofs",
+    "status_snapshots": "status snapshots (signed)", "rotations": "rotations (signed)",
+    "mediator_countersignatures": "mediator countersignatures (signed)",
+}
+
+
+def artifact_inventory(bundle) -> str:
+    counts = ", ".join(f"{ARTIFACT_LABELS.get(key, key)} {len(value)}" for key, value in bundle["artifacts"].items())
+    return f"Artifacts carried in this bundle, from the decoded bytes: {counts}."
+
 
 def page_00(facts, pick, run1, pinned, decoded, bundle, receipts, trust_policy, still_digest) -> str:
     verdict = decoded["verdict"] if decoded else None
@@ -64,7 +79,9 @@ def page_00(facts, pick, run1, pinned, decoded, bundle, receipts, trust_policy, 
               f"The pinned trust policy carries a `life_safety_action_names` entry: "
               f"{'yes' if 'life_safety_action_names' in trust_policy else 'no'} (aar-core.cddl:493,1190).",
               "", "## 4. Specimen facts", ""]
-    lines += [f"- **{fact['label']}** — {fact['text']} ({fact['ref']})" for fact in facts["facts"]]
+    for fact in facts["facts"]:
+        prefix = artifact_inventory(bundle) + " " if fact.get("generated_prefix") == "artifact_inventory" else ""
+        lines.append(f"- **{fact['label']}** — {prefix}{fact['text']} ({fact['ref']})")
     dispatch, observed = media_digests(bundle)
     lines += ["", "## 5. Media", "",
               f"Still `01-copy/{pick['still']}`, SHA-256 `{still_digest}`. Committed digests: dispatch "
@@ -92,7 +109,7 @@ def page_00(facts, pick, run1, pinned, decoded, bundle, receipts, trust_policy, 
     return "\n".join(lines)
 
 
-def page_02(pinned, at) -> str:
+def page_02(pinned, at, commit) -> str:
     cmd = " ".join(pinned["command"])
     return f"""# 02 — verify
 
@@ -101,10 +118,17 @@ Producer-supplied pins and history remain producer-supplied when passed through 
 are the producer's files. The verifier (pyref, Python 3.11+, standard library only) is run as a
 subprocess by the packager; the packager is not part of the verifier.
 
-## Run 1 — pinned
+Every command below runs from the package root (the directory holding this `02-verify/`). Set `AAR`
+to a checkout of https://github.com/oneshot2001/aar at commit `{commit}` first (bootstrap:
+`git clone https://github.com/oneshot2001/aar && git -C aar checkout {commit}`); the first block
+declares it once. Keys and run-3 outputs go to `../examiner-keys/`, outside the package.
 
-From the package root, with `PYTHONPATH` set to the aar checkout at the commit in
-`03-source-and-run.md` (bootstrap: `git clone https://github.com/oneshot2001/aar && cd aar && git checkout <commit>`):
+```
+AAR="${{AAR:?set AAR to the aar checkout at commit {commit}}}"
+export PYTHONPATH="$AAR"
+```
+
+## Run 1 — pinned
 
 ```
 {cmd}
@@ -120,7 +144,8 @@ From the package root, with `PYTHONPATH` set to the aar checkout at the commit i
 | raw envelope | `run1.verdict.cbor` (SHA-256 `{pinned.get('verdict_cbor_sha256')}`) |
 | stdout / stderr | `run1.stdout.txt` / `run1.stderr.txt` |
 
-`run1.json` holds the same values as data.
+`run1.json` holds the same values as data, plus the builder's real interpreter path and version
+beside the portable `python3` command.
 
 ## Run 3 — the examiner's own key
 
@@ -128,50 +153,51 @@ The examiner mints a chain and runs the same verifier under `--policy` and `--si
 A self-issued chain establishes key control, not the examiner's identity or the verifier's
 correctness. Private keys never enter the package.
 
-Mint (from the aar checkout; stdlib `secrets` for the scalars):
-
 ```
-python3 -B -m pyref.examiner_package.mint_examiner_chain --out KEYS --at {at} \\
-    --trust-policy 01-copy/trust-policy.json
+python3 -B -m pyref.examiner_package.mint_examiner_chain --keys ../examiner-keys --at {at} --trust-policy 01-copy/trust-policy.json
+{cmd} --policy ../examiner-keys/examiner-policy.json --signing-key ../examiner-keys/examiner.key > ../examiner-keys/run3.stdout.txt
+python3 -B -m pyref.examiner_package.check_run3 --stdout ../examiner-keys/run3.stdout.txt --keys ../examiner-keys --run1 02-verify/run1.json
+openssl pkey -pubin -inform DER -in ../examiner-keys/run3.leaf-spki.der -out ../examiner-keys/leaf.pem
+openssl dgst -sha256 -verify ../examiner-keys/leaf.pem -signature ../examiner-keys/run3.signature.der ../examiner-keys/run3.sig_structure.bin
 ```
 
-What it does, in full: draws two P-256 scalars `1 <= d < n` with `secrets.randbelow`; writes
-`KEYS/examiner-root.key` and `KEYS/examiner.key` (64 lowercase hex characters then LF, mode 0600,
-created exclusively); derives each SPKI (DER, 91 bytes) and `kid = SHA-256(SPKI)`; builds a
-self-signed root credential (`key_usage credential_issuing`, `principal_role authority_source`,
-empty `path`) and a leaf (`key_usage verifier_signing`, `principal_role verifier`, `path =
-[root credential_id]`), both `principal_type service`, `tenant_id` and `site_id` sixteen zero
-bytes, `trust_anchor_id = SHA-256("AAR-EXAMINER-TRUST-ANCHOR-v1" || root kid)`,
-`valid_from = {at} - 86400`, `valid_until = {at} + 30*86400` (chosen to cover the historical
-`--at`; the examiner states this choice), `profile_limits` AAR-1 constants; `credential_id =
-SHA-256(deterministic-CBOR(["AAR-CREDENTIAL-ID-v1", fields without credential_id]))`; signs each
-with COSE_Sign1 (protected `{{1: -7, 3: "application/aar-credential+cbor;v=0.2", 4: issuer kid}}`,
-detached payload, RFC 6979 ES256, low-S, P1363 r||s); orders `verifier_credentials` by
-`credential_id` and `artifact_roots` by `root_kid`; writes `KEYS/examiner-policy.json` with
-`v: 1`, `artifact_roots` copied from the producer's pinned `trust_store.roots` (a policy narrows
-trust and never widens it: the carried credentials must still chain to a listed root),
-`verifier_root_kid` and the two credential envelopes as hex; prints both kids and the policy digest
+What the mint does, in full: draws two P-256 scalars `1 <= d < n` with `secrets.randbelow`; writes
+`examiner-root.key` and `examiner.key` (64 lowercase hex characters then LF, mode 0600, created
+exclusively); derives each SPKI (DER, 91 bytes) and `kid = SHA-256(SPKI)`; builds a self-signed root
+credential (`key_usage credential_issuing`, `principal_role authority_source`, empty `path`) and a
+leaf (`key_usage verifier_signing`, `principal_role verifier`, `path = [root credential_id]`), both
+`principal_type service`, `tenant_id` and `site_id` sixteen zero bytes, `trust_anchor_id =
+SHA-256("AAR-EXAMINER-TRUST-ANCHOR-v1" || root kid)`, `valid_from = {at} - 86400`, `valid_until =
+{at} + 30*86400` (chosen to cover the historical `--at`; the examiner states this choice),
+`profile_limits` AAR-1 constants; `credential_id = SHA-256(deterministic-CBOR(["AAR-CREDENTIAL-ID-v1",
+fields without credential_id]))`; signs each with COSE_Sign1 (protected `{{1: -7, 3:
+"application/aar-credential+cbor;v=0.2", 4: issuer kid}}`, detached payload, RFC 6979 ES256, low-S,
+P1363 r||s); orders `verifier_credentials` by `credential_id` and `artifact_roots` by `root_kid`;
+writes `examiner-policy.json` with `v: 1`, `artifact_roots` copied from the producer's pinned
+`trust_store.roots` (a policy narrows trust and never widens it: the carried credentials must still
+chain to a listed root), `verifier_root_kid` and the two credential envelopes as hex; then loads the
+result through the verifier's own `load_configuration` and prints both kids and the policy digest
 `SHA-256(deterministic-CBOR(["AAR-RP-POLICY-v1", policy]))`.
 
-Run:
+Acceptance (`check_run3` prints each line as PASS or FAIL; all must pass):
 
-```
-{cmd} --policy KEYS/examiner-policy.json --signing-key KEYS/examiner.key > run3.stdout.txt
-python3 -B -m pyref.examiner_package.check_run3 --stdout run3.stdout.txt --policy KEYS/examiner-policy.json --run1 run1.json
-```
+1. the policy and key pass the verifier's own chain logic (`pyref.relying_party.load_configuration`:
+   credential signatures, SPKI-to-kid binding, chain to `verifier_root_kid`, validity at `--at`);
+2. the verdict signature verifies under the examiner's leaf public key (derived from the key file);
+3. the leaf `kid` is the `kid` in the verdict's protected header;
+4. `relying_party_policy_digest` equals the policy digest the verifier computed from `examiner-policy.json`;
+5. `evaluated_at` equals run 1;
+6. `bundle_digest` equals run 1;
+7. `result` equals run 1;
+8. every `trust_policy` entry except `relying_party_policy_digest` equals run 1 (`trust_store_digest`,
+   `prior_emissions_digest`, `replay_state_digest`, `anchor_heads_digest`, `retained_epochs_digest`, …),
+   so the same pins and history were supplied;
+9. `limits` equal run 1;
+10. `observations` equal run 1;
+11. run-3 stdout carries no report-layer `stateful_not_evaluated`, `empty_scope` or `producer-declared only` marker.
 
-The five acceptance checks (`check_run3` prints each as PASS or FAIL):
-
-1. the verdict signature verifies under the examiner's leaf public key;
-2. the leaf `kid` is the `kid` in the verdict's protected header;
-3. `relying_party_policy_digest` equals the policy digest recomputed from `examiner-policy.json`;
-4. `bundle_digest` equals run 1's;
-5. `Result` equals run 1's.
-
-The verdict id is not pinned: a fresh kid changes the preimage (`pyref/verdict.py:128-131`).
-Independent signature check with a second tool: `check_run3` writes `run3.sig_structure.bin`,
-`run3.leaf-spki.der` and `run3.signature.der` beside the stdout file; then
-`openssl pkey -pubin -inform DER -in run3.leaf-spki.der -out leaf.pem && openssl dgst -sha256 -verify leaf.pem -signature run3.signature.der run3.sig_structure.bin`.
+The verdict id is not pinned: a fresh kid changes the preimage (`pyref/verdict.py:128-131`). The two
+`openssl` lines re-verify the same signature with a second tool over the files `check_run3` writes.
 
 Known limit: the relying-party chain has no revocation (D-83 part 10); a compromised examiner key
 can sign verdicts asserting any evaluation time inside its window.
@@ -182,13 +208,12 @@ Stateless experiment, no history or pin inputs (`harness/verify.ts:14` accepts n
 `--prior-state` nor `--trust-policy`). It is a second implementation, never corroboration of run 1:
 
 ```
-bun install --frozen-lockfile && bun run harness/verify.ts 01-copy/bundle.cbor --at {at}
+(cd "$AAR" && bun install --frozen-lockfile) && bun run "$AAR/harness/verify.ts" 01-copy/bundle.cbor --at {at}
 ```
 """
 
 
-def page_03(run1, pinned, files, source_rows) -> str:
-    head = git("rev-parse", "HEAD")
+def page_03(run1, pinned, files, source_rows, commit) -> str:
     tag_object = git("rev-parse", "v0.4.0")
     tag_target = git("rev-parse", "v0.4.0^{}")
     head_tree = git("rev-parse", "HEAD:pyref")
@@ -197,9 +222,10 @@ def page_03(run1, pinned, files, source_rows) -> str:
     executable = Path(sys.executable).resolve()
     lines = ["# 03 — source and run", "",
              "This section identifies the source that was supplied and records the claimed conditions under which it ran. "
-             "It does not prove which code executed.", "",
+             "It does not prove which code executed. This page is outside the reproducible set by design: it records the "
+             "build host's interpreter and platform.", "",
              "## Source identifiers (labels from the build host's git)", "",
-             f"- commit at package time (the declared bootstrap target): `{head}`",
+             f"- commit at package time (the declared bootstrap target): `{commit}`",
              f"- tag `v0.4.0`: tag object `{tag_object}` → commit `{tag_target}`; Git object format `{git('rev-parse', '--show-object-format')}`",
              f"- `pyref/` tree at package time `{head_tree}`; at `v0.4.0` `{tag_tree}`; equal: {'yes' if head_tree == tag_tree else 'no'}"
              " (`git rev-parse COMMIT:pyref` names the stored tree, not working files; working files are hashed below).",
@@ -208,10 +234,10 @@ def page_03(run1, pinned, files, source_rows) -> str:
              "corpus test key (unauthenticated labels, both).",
              "", "## Interpreter and platform", "",
              f"- `sys.executable`: `{sys.executable}` → `{executable}`, SHA-256 `{file_sha256(executable)}`",
-             f"- Python `{platform.python_version()}` ({sys.version.split()[0]}, {platform.python_implementation()})",
+             f"- Python `{platform.python_version()}` ({platform.python_implementation()})",
              f"- platform: `{platform.platform()}`, machine `{platform.machine()}`",
              "", "## Exact command and inputs", "",
-             f"- cwd: the package root; `PYTHONPATH`: the aar checkout at `{head}`",
+             f"- cwd: the package root; `PYTHONPATH`: the aar checkout at `{commit}`",
              f"- `{' '.join(pinned['command'])}`",
              f"- inputs: " + "; ".join(f"`01-copy/{f['name']}` {f['byte_length']} bytes SHA-256 `{f['destination_sha256']}`" for f in files),
              f"- exit `{run1['exit']}`; stdout `02-verify/run1.stdout.txt` (SHA-256 `{sha256_hex(run1['stdout'].encode())}`); "

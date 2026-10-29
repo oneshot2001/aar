@@ -15,18 +15,25 @@ import io
 import platform
 import re
 import shutil
+import sys
 import tarfile
 from pathlib import Path
 from typing import Any
 
 from ..cbor import loads
-from .core import (LOG_NAMES, PACKAGE_NAME, REPO, SIDECARS, PackageError, decode_verdict, file_sha256, git,  # noqa: F401
-                   json_text, media_digests, parse_report, read_json, receipt_payloads, run_verifier, select_specimen,
-                   sha256_hex, sweep, window)
-from .pages import OPENING, legal_maps, page_00, page_02, page_03  # noqa: F401
+from .core import (LOG_NAMES, PACKAGE_NAME, REPO, SIDECARS, PackageError, check_asserts, classify_still,  # noqa: F401
+                   decode_verdict, file_sha256, git, json_text, media_digests, parse_report, read_json,
+                   receipt_payloads, run_verifier, select_specimen, sha256_hex, sweep, window)
+from .pages import OPENING, artifact_inventory, legal_maps, page_00, page_02, page_03  # noqa: F401
 from .pages_tail import page_05, page_06, page_07, prohibited_claims
 from .text import (EMBEDDED_KEYS, ENVELOPE_KEYS, INVISIBLE_RANGES, LOG_RULES, escape_code, escaped, find_log,  # noqa: F401
-                   is_invisible, select_lines, text_rows, visible)
+                   is_invisible, iso_seconds, select_lines, text_rows, visible)
+
+ROOT_LABELS = {
+    "<candidates>": "onvif-mcp receipts corpus on the builder's machine, aar/ directory (one directory per bundle)",
+    "<stills>": "onvif-mcp receipts corpus on the builder's machine (snap-*.jpg)",
+    "<logs>": "onvif-mcp receipts corpus on the builder's machine (chain.jsonl; journal.jsonl and anchor.jsonl under aar/)",
+}
 
 
 def source_inventory() -> list[dict[str, Any]]:
@@ -47,20 +54,23 @@ def source_inventory() -> list[dict[str, Any]]:
 
 
 def copy_specimen(src: Path, still: Path, dest: Path) -> list[dict[str, Any]]:
+    """Byte copies with before/after hashes; ``source_path`` is absolute (full record), ``source_id`` relative."""
     dest.mkdir(parents=True)
     files = []
-    for source in [src / "bundle.cbor", *(src / name for name in SIDECARS), still]:
+    for source, label in [(src / "bundle.cbor", "<candidates>"), *((src / name, "<candidates>") for name in SIDECARS), (still, "<stills>")]:
         before = file_sha256(source)
         target = dest / source.name
         shutil.copyfile(source, target)
-        files.append({"name": source.name, "source_path": str(source), "byte_length": source.stat().st_size,
-                      "source_sha256": before, "destination_sha256": file_sha256(target)})
+        relative = f"{src.name}/{source.name}" if label == "<candidates>" else source.name
+        files.append({"name": source.name, "source_path": str(source), "source_id": f"{label}/{relative}",
+                      "byte_length": source.stat().st_size, "source_sha256": before, "destination_sha256": file_sha256(target)})
     return files
 
 
 def fill_acquisition(record: dict[str, Any], files: list[dict[str, Any]], specimen_dir: str) -> dict[str, Any]:
-    """The acquisition record is an input. On the first copy (``collection_time_utc`` null) the
-    builder fills the copy facts; a filled record is checked against the copy and kept verbatim."""
+    """The full acquisition record (absolute source paths; stays beside the package, never inside it).
+    On the first copy (``collection_time_utc`` null) the builder fills the copy facts; a filled
+    record is checked against the copy and kept verbatim."""
     record = dict(record)
     if record.get("collection_time_utc") is None:
         record["source"] = {**record.get("source", {}),
@@ -78,8 +88,23 @@ def fill_acquisition(record: dict[str, Any], files: list[dict[str, Any]], specim
     return record
 
 
-def write_tarball(package: Path, tarball: Path, mtime: int) -> None:
-    """Sorted entries, uid/gid 0, empty names, fixed mtime, gzip without name or timestamp."""
+def package_acquisition(full: dict[str, Any], files: list[dict[str, Any]]) -> dict[str, Any]:
+    """The distributed record: relative source identifiers under labelled roots, no absolute paths."""
+    source = {key: value for key, value in full.get("source", {}).items() if key not in ("repo_path", "stills_path")}
+    return {**full, "source": {**source, "roots": ROOT_LABELS},
+            "files": [{key: value for key, value in row.items() if key != "source_path"} for row in files]}
+
+
+def localize(line: bytes, prefixes: list[bytes]) -> bytes:
+    """Replace every occurrence of the builder's absolute root paths with ``<local>``."""
+    for prefix in prefixes:
+        line = line.replace(prefix, b"<local>")
+    return line
+
+
+def write_tarball(package: Path, tarball: Path, mtime: int) -> str:
+    """Sorted entries, uid/gid 0, empty names, fixed mtime; gzip level 9, mtime 0, no name.
+    Returns the SHA-256 of the uncompressed tar bytes."""
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w", format=tarfile.PAX_FORMAT) as tar:
         for path in sorted(package.rglob("*"), key=lambda p: p.relative_to(package).as_posix()):
@@ -93,27 +118,28 @@ def write_tarball(package: Path, tarball: Path, mtime: int) -> None:
                     tar.addfile(info, handle)
             else:
                 tar.addfile(info)
-    with open(tarball, "wb") as handle, gzip.GzipFile(filename="", mode="wb", fileobj=handle, mtime=0) as gz:
+    with open(tarball, "wb") as handle, gzip.GzipFile(filename="", mode="wb", fileobj=handle, mtime=0, compresslevel=9) as gz:
         gz.write(buffer.getvalue())
+    return sha256_hex(buffer.getvalue())
 
 
 def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, camera: str) -> int:
     for label, path in (("candidates", candidates), ("stills", stills), ("logs", logs), ("inputs", inputs)):
         if not path.is_dir():
             raise PackageError(f"--{label} {path} is not a directory")
+    if out.is_file() or (out.is_dir() and any(out.iterdir())):
+        raise PackageError(f"--out {out} must be an absent or empty directory")
     facts = read_json(inputs / "specimen-facts.json", "specimen-facts.json")
     acquisition_input = read_json(inputs / "acquisition.json", "acquisition.json")
-    for key in ("specimen_kind", "facts", "coverage_sentence", "d66_sentence"):
+    for key in ("specimen_kind", "facts", "coverage_sentence", "d66_sentence", "asserts", "verified_against"):
         if key not in facts:
             raise PackageError(f"specimen-facts.json lacks {key}")
-    if out.exists() and any(out.iterdir()):
-        raise PackageError(f"--out {out} exists and is not empty")
+
+    # Nothing is written before the specimen rule and the facts binding both hold.
+    pick, rows = select_specimen(candidates, stills, camera)
+    check_asserts(facts, pick, rows)
     package = out / "package"
     package.mkdir(parents=True)
-
-    pick, rows = select_specimen(candidates, stills, camera)
-    if any(row["exit"] == 0 and row.get("tool_action") == "camera.ptz.preset" for row in rows):
-        raise PackageError("a conformant PTZ-action candidate exists; specimen-facts.json specimen_kind must be re-checked")
     (package / "appendix").mkdir()
     (package / "appendix" / "candidates.json").write_text(json_text({
         "_doc": "Every directory under the candidates path holding bundle.cbor, with the verifier exit code under its own "
@@ -121,17 +147,24 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
         "rule": "exit 0 under --at meta.evaluated_at --trust-policy --prior-state; dispatch target_response_body_digest and "
                 "outcome_observation observation_commitment both equal the SHA-256 of exactly one snap-*.jpg; order by "
                 "evaluated_at descending then bundle_digest; first entry whose meta.camera equals the requested camera",
+        "reasons": {"commitments-missing": "no dispatch digest or no outcome commitment carried",
+                    "commitments-differ": "dispatch and outcome commitments are not one digest",
+                    "still-ambiguous": "more than one still has the committed digest",
+                    "no-exact-still-match": "no still has the committed digest"},
         "camera": camera, "candidates": rows}))
 
     # 01-copy
     files = copy_specimen(candidates / pick["dir"], stills / pick["still"], package / "01-copy")
-    acquisition = fill_acquisition(acquisition_input, files, pick["dir"])
+    full = fill_acquisition(acquisition_input, files, pick["dir"])
+    (out / "acquisition-full.json").write_text(json_text(full))
+    acquisition = package_acquisition(full, files)
     (package / "01-copy" / "acquisition.json").write_text(json_text(acquisition))
     meta = read_json(package / "01-copy" / "meta.json", "meta.json")
     trust_policy = read_json(package / "01-copy" / "trust-policy.json", "trust-policy.json")
     bundle = loads((package / "01-copy" / "bundle.cbor").read_bytes())
     receipts = receipt_payloads(bundle)
     still_digest = file_sha256(package / "01-copy" / pick["still"])
+    commit = git("rev-parse", "HEAD")
 
     # 02-verify, run 1 against the copied files, relative paths from the package root
     verify = package / "02-verify"
@@ -141,7 +174,8 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
     (verify / "run1.stdout.txt").write_text(run1["stdout"])
     (verify / "run1.stderr.txt").write_text(run1["stderr"])
     pinned = {key: run1[key] for key in ("command", "exit", "result", "verdict_id", "bundle_digest", "selector_matching_receipts", "observations")}
-    pinned.update(cwd="the package root (this directory's parent)", PYTHONPATH="the aar checkout named in 03-source-and-run.md",
+    pinned.update(cwd="the package root (this directory's parent)", PYTHONPATH=f"the aar checkout at {commit}",
+                  interpreter={"executable": sys.executable, "version": platform.python_version()},
                   evaluated_at=at, evaluated_at_source="01-copy/meta.json (a producer file)")
     decoded = decode_verdict(run1["verdict_cbor_hex"]) if run1["verdict_cbor_hex"] else None
     if decoded is not None:
@@ -149,10 +183,10 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
         pinned["verdict_kid"] = decoded["protected"][4].hex()
         pinned["verdict_cbor_sha256"] = sha256_hex(bytes.fromhex(run1["verdict_cbor_hex"]))
     (verify / "run1.json").write_text(json_text(pinned))
-    (verify / "README.md").write_text(page_02(pinned, at))
+    (verify / "README.md").write_text(page_02(pinned, at, commit))
 
     # 03
-    (package / "03-source-and-run.md").write_text(page_03(run1, pinned, files, source_inventory()))
+    (package / "03-source-and-run.md").write_text(page_03(run1, pinned, files, source_inventory(), commit))
 
     # 04
     records = package / "04-operator-records"
@@ -160,6 +194,9 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
     selector_window = window(bundle)
     invocation_ids = {r["freshness"]["invocation_id"].hex() for r in receipts if isinstance(r.get("freshness", {}).get("invocation_id"), bytes)}
     receipt_ids = {r["receipt_id"].hex() for r in receipts}
+    prefixes = sorted({str(p.resolve()).encode() for p in (candidates, stills, logs)} | {str(p).encode() for p in (candidates, stills, logs)},
+                      key=len, reverse=True)
+    anchor_fact = next((f["text"] for f in facts["facts"] if f["label"] == "anchor log"), "")
     for name in LOG_NAMES:
         source = find_log(logs, name)
         companion = [f"# {name} — companion", "",
@@ -168,19 +205,32 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
                      f"Selection rule: {LOG_RULES[name]}. Selector window: {selector_window[0]}..{selector_window[1]} (producer host clock)."]
         if name == "journal.jsonl":
             companion.append(f"Journal keys for this specimen: invocation ids {sorted(invocation_ids)}; receipt ids {sorted(receipt_ids)}.")
+        if name == "anchor.jsonl":
+            head = trust_policy["expected_anchor_heads"][0] if trust_policy.get("expected_anchor_heads") else {}
+            companion.append(f"{anchor_fact} Expected anchor head in `01-copy/trust-policy.json`: tree_size {head.get('tree_size')}, "
+                             f"root `{head.get('root')}`.")
         companion.append("")
         if source is None:
-            companion += [f"Missing-file behaviour: `{name}` was not found under the logs path (checked `{name}` and `aar/{name}`). "
-                          "Nothing was copied and nothing was fabricated; this companion is the only output for this log."]
+            companion += [f"Missing-file behaviour: `{name}` was not found under the logs root (checked `<logs>/{name}` and "
+                          f"`<logs>/aar/{name}`). Nothing was copied and nothing was fabricated; this companion is the only output for this log."]
         else:
             raw_log = source.read_bytes()
-            kept = select_lines(name, raw_log, selector_window, invocation_ids, receipt_ids)
-            (records / name).write_bytes(b"".join(line for _, line in kept))
-            companion += [f"Source: `{source}` ({len(raw_log)} bytes, SHA-256 `{sha256_hex(raw_log)}`, "
+            kept, undated = select_lines(name, raw_log, selector_window, invocation_ids, receipt_ids)
+            derived = [(number, line, localize(line, prefixes)) for number, line in kept]
+            (records / name).write_bytes(b"".join(local for _, _, local in derived))
+            changed = [(n, line, local) for n, line, local in derived if local != line]
+            companion += [f"Source: `<logs>/{source.relative_to(logs).as_posix()}` ({len(raw_log)} bytes, SHA-256 `{sha256_hex(raw_log)}`, "
                           f"{len(raw_log.splitlines())} lines).",
-                          f"Kept {len(kept)} line(s), byte for byte, source line numbers {[n for n, _ in kept]}; "
-                          f"written to `{name}` in this directory. Lines that do not parse as a JSON object are never kept.",
-                          "Missing-file behaviour: had the source been absent, no file would be written and this companion would say so."]
+                          f"Kept {len(kept)} line(s), source line numbers {[n for n, _ in kept]}; written to `{name}` in this directory. "
+                          "Lines that do not parse as a JSON object are never kept.",
+                          "Transformation: every occurrence of the builder's absolute root paths (`--candidates`, `--stills`, `--logs`, "
+                          "as given and resolved) in a kept line is replaced by `<local>`; nothing else is altered. "
+                          + (f"{len(changed)} line(s) changed, so this file is an identified derivative; the original lines are held "
+                             "by the operator:" if changed else "No kept line contained such a path, so this file is byte for byte "
+                             "the original lines.")]
+            companion += [f"- line {n}: original SHA-256 `{sha256_hex(line)}`, derivative SHA-256 `{sha256_hex(local)}`" for n, line, local in changed]
+            companion += [f"- line {n}: undated (`ts` carries no UTC offset), not selected, SHA-256 `{digest}`" for n, digest in undated] or []
+            companion.append("Missing-file behaviour: had the source been absent, no file would be written and this companion would say so.")
         (records / f"{name}.md").write_text("\n".join(companion) + "\n")
     (records / "legal-maps.md").write_text(legal_maps(receipts))
 
@@ -209,9 +259,10 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
                 "package directory except this file. The copy foundation is 01-copy/acquisition.json.",
         "files": inventory}))
     tarball = out / f"{PACKAGE_NAME}.tar.gz"
-    write_tarball(package, tarball, mtime=at)
+    tar_digest = write_tarball(package, tarball, mtime=at)
     (out / f"{PACKAGE_NAME}.tar.gz.sha256").write_text(f"{file_sha256(tarball)}  {tarball.name}\n")
+    (out / f"{PACKAGE_NAME}.tar.sha256").write_text(f"{tar_digest}  {PACKAGE_NAME}.tar\n")
     print(f"specimen: {pick['dir']}")
     print(f"run 1: exit {run1['exit']} Result {run1['result']} verdict_id {run1['verdict_id']} bundle_digest {run1['bundle_digest']}")
-    print(f"tarball: {tarball} sha256 {file_sha256(tarball)}")
+    print(f"tarball: {tarball} sha256 {file_sha256(tarball)} (tar sha256 {tar_digest})")
     return 0 if run1["exit"] == 0 else 1

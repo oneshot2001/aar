@@ -18,6 +18,7 @@ REPO = Path(__file__).resolve().parents[2]
 SIDECARS = ("meta.json", "trust-policy.json", "prior-state.json")
 LOG_NAMES = ("journal.jsonl", "anchor.jsonl", "chain.jsonl")
 PACKAGE_NAME = "examiner-package-v0.1"
+REPORT_LAYER_MARKERS = ("stateful_not_evaluated", "empty_scope", "producer-declared only")
 
 
 class PackageError(Exception):
@@ -50,11 +51,14 @@ def git(*args: str) -> str:
 
 # --- verifier subprocess -----------------------------------------------------
 
-def run_verifier(cwd: Path, bundle: str, at: int, trust_policy: str, prior_state: str,
+def run_verifier(cwd: Path, bundle: str, at: int, trust_policy: str | None, prior_state: str | None,
                  policy: str | None = None, signing_key: str | None = None) -> dict[str, Any]:
     """Run the unchanged CLI; keep raw stdout, stderr, exit and the verdict envelope."""
-    argv = ["python3", "-B", "-m", "pyref", "verify", bundle, "--at", str(at),
-            "--trust-policy", trust_policy, "--prior-state", prior_state]
+    argv = ["python3", "-B", "-m", "pyref", "verify", bundle, "--at", str(at)]
+    if trust_policy is not None:
+        argv += ["--trust-policy", trust_policy]
+    if prior_state is not None:
+        argv += ["--prior-state", prior_state]
     if policy is not None:
         argv += ["--policy", policy, "--signing-key", signing_key or ""]
     env = {**os.environ, "PYTHONPATH": str(REPO)}
@@ -76,6 +80,7 @@ def parse_report(stdout: str) -> dict[str, Any]:
         "verdict_cbor_hex": one(r"^  CBOR hex: ([0-9a-f]+)$"),
         "selector_matching_receipts": one(r"^Selector-matching receipts: (.+)$"),
         "observations": [{"name": name, "signed": kind == "signed"} for name, kind in observations],
+        "report_layer_markers": [marker for marker in REPORT_LAYER_MARKERS if marker in stdout],
     }
 
 
@@ -112,6 +117,20 @@ def window(bundle: dict[str, Any]) -> tuple[int, int]:
 
 # --- S2: specimen rule ---------------------------------------------------------
 
+def classify_still(dispatch: set[bytes], observed: set[bytes], stills: dict[str, list[str]]) -> tuple[str | None, str]:
+    """(matched still name, reason). One digest committed by both receipt kinds must equal exactly one still."""
+    if not dispatch or not observed:
+        return None, "commitments-missing"
+    if len(dispatch | observed) != 1:
+        return None, "commitments-differ"
+    names = stills.get(next(iter(dispatch)).hex(), [])
+    if len(names) > 1:
+        return None, "still-ambiguous"
+    if not names:
+        return None, "no-exact-still-match"
+    return names[0], "conformant, exact still match"
+
+
 def sweep(candidates_dir: Path, stills_dir: Path) -> list[dict[str, Any]]:
     """Run every candidate under its own unchanged sidecars and pair the conformant ones with a still."""
     stills: dict[str, list[str]] = {}
@@ -139,13 +158,7 @@ def sweep(candidates_dir: Path, stills_dir: Path) -> list[dict[str, Any]]:
             row["reason"] = f"verifier exit {run['exit']}: {detail}"
             continue
         dispatch, observed = media_digests(loads((directory / "bundle.cbor").read_bytes()))
-        committed = dispatch | observed
-        names = stills.get(next(iter(committed)).hex(), []) if len(committed) == 1 else []
-        if dispatch and observed and len(names) == 1:
-            row["still"] = names[0]
-            row["reason"] = "conformant, exact still match"
-        else:
-            row["reason"] = "no-exact-still-match"
+        row["still"], row["reason"] = classify_still(dispatch, observed, stills)
     return rows
 
 
@@ -165,3 +178,19 @@ def select_specimen(candidates_dir: Path, stills_dir: Path, camera: str) -> tupl
         if row is not pick:
             row["reason"] += f", not selected (rank {row['rank']}, camera {row.get('camera')})"
     return pick, rows
+
+
+def check_asserts(facts: dict[str, Any], pick: dict[str, Any], rows: list[dict[str, Any]]) -> None:
+    """Facts binding (amendment b): every assert holds over the sweep and the facts were verified
+    against this specimen's bundle digest; otherwise refuse before anything is written."""
+    asserts = facts.get("asserts", {})
+    allowed = asserts.get("no_conformant_tool_action_other_than")
+    if allowed is not None:
+        offenders = sorted({row.get("tool_action") for row in rows if row["exit"] == 0} - set(allowed))
+        if offenders:
+            raise PackageError(f"specimen-facts.json assert no_conformant_tool_action_other_than fails: conformant "
+                               f"candidates carry tool_action {offenders}; a person must re-check the facts")
+    expected = facts.get("verified_against", {}).get("bundle_digest")
+    if expected != pick["bundle_digest"]:
+        raise PackageError(f"specimen-facts.json verified_against.bundle_digest {expected} is not the selected specimen's "
+                           f"{pick['bundle_digest']} ({pick['dir']}); a person must re-check the facts for this specimen")

@@ -1,7 +1,7 @@
 """Mint an examiner's relying-party chain (D-83): two fresh P-256 keys, a self-signed root and a
 verifier leaf, written as a policy JSON valid for ``--policy`` plus 0600 key files for ``--signing-key``.
 
-    python3 -B -m pyref.examiner_package.mint_examiner_chain --out DIR --at UNIX_SECONDS --trust-policy FILE
+    python3 -B -m pyref.examiner_package.mint_examiner_chain --keys DIR --at UNIX_SECONDS --trust-policy FILE
 
 ``artifact_roots`` is copied from the producer's pinned trust-policy roots so the carried credentials
 still chain to a listed root; a policy narrows trust and never widens it. A self-issued chain
@@ -49,12 +49,12 @@ def write_key(path: Path, scalar: int) -> None:
         handle.write(f"{scalar:064x}\n")
 
 
-def mint(out: Path, at: int, trust_policy: Path) -> dict[str, str]:
-    out.mkdir(parents=True, exist_ok=True)
+def mint(keys: Path, at: int, trust_policy: Path) -> dict[str, str]:
+    keys.mkdir(parents=True, exist_ok=True)
     root_scalar = secrets.randbelow(N - 1) + 1
     leaf_scalar = secrets.randbelow(N - 1) + 1
-    write_key(out / "examiner-root.key", root_scalar)
-    write_key(out / "examiner.key", leaf_scalar)
+    write_key(keys / "examiner-root.key", root_scalar)
+    write_key(keys / "examiner.key", leaf_scalar)
     root_id, root_envelope = credential(root_scalar, root_scalar, [], at, leaf=False)
     leaf_id, leaf_envelope = credential(leaf_scalar, root_scalar, [root_id], at, leaf=True)
     envelopes = [env for _, env in sorted(((root_id, root_envelope), (leaf_id, leaf_envelope)))]
@@ -66,18 +66,20 @@ def mint(out: Path, at: int, trust_policy: Path) -> dict[str, str]:
         "verifier_root_kid": key_id(root_scalar).hex(),
         "verifier_credentials": [dumps(env).hex() for env in envelopes],
     }
-    (out / "examiner-policy.json").write_text(json.dumps(policy, indent=2) + "\n")
-    digest = hashes.domain_hash(relying_party.POLICY_DOMAIN, relying_party.load_policy(out / "examiner-policy.json"))
-    return {"root_kid": key_id(root_scalar).hex(), "leaf_kid": key_id(leaf_scalar).hex(), "policy_digest": digest.hex()}
+    (keys / "examiner-policy.json").write_text(json.dumps(policy, indent=2) + "\n")
+    # The verifier's own chain logic validates what was just written (amendment a).
+    configuration = relying_party.load_configuration(keys / "examiner-policy.json", keys / "examiner.key", at)
+    return {"root_kid": key_id(root_scalar).hex(), "leaf_kid": configuration.kid.hex(),
+            "policy_digest": configuration.policy_digest.hex()}
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m pyref.examiner_package.mint_examiner_chain", description=__doc__.splitlines()[0])
-    parser.add_argument("--out", required=True, type=Path, metavar="DIR")
+    parser.add_argument("--keys", required=True, type=Path, metavar="DIR", help="where the key files and policy go (outside the package)")
     parser.add_argument("--at", required=True, type=int, metavar="UNIX_SECONDS", help="the run's --at; validity covers it")
     parser.add_argument("--trust-policy", required=True, type=Path, metavar="FILE", help="producer's pinned trust-policy.json (roots copied)")
     args = parser.parse_args(argv)
-    for name, value in mint(args.out, args.at, args.trust_policy).items():
+    for name, value in mint(args.keys, args.at, args.trust_policy).items():
         print(f"{name}: {value}")
     return 0
 
