@@ -2449,11 +2449,12 @@ history turned `graph-dangling-parent` from `graph/dangling-parent`@12 into
 agree on what is wrong with the bundle itself. Retained manifests are the
 EP's signed statement of an epoch's contents, so they decide membership in
 that epoch and nothing about any issuer's other emissions. D-86 rule 0(b)
-stays at step 9 because, from step 9 on, it refuses to sign a verdict over
-history the verifier can see contradicts a carried receipt; a bundle that
-fails steps 1 to 8 gets its intrinsic verdict with that history bound in
-`prior_emissions_digest` (the receipts it would compare against have not
-passed step 6). The signing-key resolution precedes the history phase for
+stays at step 9 because, once a bundle passes step 9's coordinate type
+checks, it refuses to sign a verdict over history the verifier can see
+contradicts a carried receipt; a bundle that fails before that gets its
+intrinsic verdict with that history bound in `prior_emissions_digest` (the
+bundle has not completed steps 1 to 8, or its receipt coordinates are not
+well-typed). The signing-key resolution precedes the history phase for
 the same reason the phase is last: `key/not-found` depends on the bundle and
 configuration only.
 
@@ -2480,9 +2481,10 @@ retention is out of scope. Reuse is detectable only against
 structure at its embedded time, not that the relying party held it before
 any compromise. Closed padding epochs can't be carried conformant today (a
 D-17 nil span against the step-14 sequence equality; BACKLOG). History that
-contradicts a carried receipt (D-86 rule 0(b)) is refused only from step 9
-on; a bundle failing steps 1 to 8 is signed with that history bound in
-`prior_emissions_digest`. A bundle whose verifier key does not resolve
+contradicts a carried receipt (D-86 rule 0(b)) is refused once a bundle
+passes step 9's coordinate type checks; a bundle that fails before that is
+signed with that history bound in `prior_emissions_digest` (row
+`d87-history-early-failure`). A bundle whose verifier key does not resolve
 reports `key/not-found` even when the supplied history shows reuse (v0.3.1
 reported `identity/reuse` at step 9; row `d87-history-after-key-not-found`).
 
