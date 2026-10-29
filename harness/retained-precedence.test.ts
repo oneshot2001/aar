@@ -5,8 +5,8 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { toHex } from "./cbor";
-import { deterministicId, domainHash } from "./crypto";
+import { fromHex, toHex } from "./cbor";
+import { deterministicId, domainHash, hash } from "./crypto";
 import { buildD87Fixtures } from "./d87-fixtures";
 import { HISTORY_CONTRADICTS_RECEIPT } from "./emission-identity";
 import { expectUsageError, harnessPrior } from "./prior-state-probe";
@@ -33,6 +33,26 @@ describe("D-87 section 5 cross-entry precedence", () => {
     expectUsageError(zero, [
       ["(6) before (7)", { ...sixOverSeven, retained_epochs: [toHex(base)] }, RETAINED_RECEIPT_CONTRADICTION, "UsageError"],
       ["(7) in entry order", { ...sevenInOrder, retained_epochs: [kept] }, RETAINED_COORDINATES, "UsageError"],
+    ]);
+  }, 120_000);
+
+  test("compound order: (2) sorting before (3) byte-identity, (3) before (4) steps, (5) merge before (6) and (7)", () => {
+    const digest = (hex: string): string => toHex(hash(fromHex(hex)));
+    const sorted = (...hexes: string[]): string[] => [...hexes].sort((left, right) => digest(left) < digest(right) ? -1 : 1);
+    const current = toHex(zero);
+    // (2) over (3): the current bundle's bytes in an unsorted list; sorted, the same list is (3).
+    const unsorted = sorted(current, kept).reverse();
+    // (3) over (4): a malformed bundle sorted before the current bundle's bytes (a per-bundle loop reports it first).
+    const malformed = Array.from({ length: 256 }, (_, index) => `a16161${index.toString(16).padStart(2, "0")}`).find((hex) => digest(hex) < digest(current))!;
+    // (5) over (6) and (7): two retained epoch-42 manifests that differ, plus an entry contradicting a retained receipt and one unlisted entry.
+    const merge = sorted(toHex(base), toHex(fixture("d87-retained-competing-manifest").bundle));
+    const history = priorJson({ ...first, issuerSeq: first.issuerSeq + 1 }, unlisted(new Uint8Array(32))).prior_emissions;
+    expect(sorted(malformed, current)).toEqual([malformed, current]);
+    expectUsageError(zero, [
+      ["(2) before (3)", { retained_epochs: unsorted }, "prior-state.retained_epochs must be strictly sorted and unique by SHA-256", "UsageError"],
+      ["(3) alone, sorted", { retained_epochs: sorted(current, kept) }, `prior-state.retained_epochs[${sorted(current, kept).indexOf(current)}] is byte-identical to the bundle being evaluated`, "UsageError"],
+      ["(3) before (4)", { retained_epochs: [malformed, current] }, "prior-state.retained_epochs[1] is byte-identical to the bundle being evaluated", "UsageError"],
+      ["(5) before (6) and (7)", { prior_emissions: history, retained_epochs: merge }, "prior-state.retained_epochs[1] carries a manifest that conflicts with a retained manifest for the same owner and epoch", "UsageError"],
     ]);
   }, 120_000);
 
