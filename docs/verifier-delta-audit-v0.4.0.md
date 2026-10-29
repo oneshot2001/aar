@@ -16,7 +16,7 @@ four rows D-87 relocates from `negative/stateful/` to `positive/stateful/`
 are paired by name (their bundle and prior bytes are identical). The harness
 needs no separate column: the full-corpus gate (`harness/crossimpl.test.ts`)
 holds it byte-identical to pyref on every row, before and after (0 splits
-over 550 rows at fix round 4). The 18 rows D-87 adds were also run through
+over 550 rows at fix round 4). The 18 rows v0.4.0 adds were also run through
 both v0.3.1 verifiers.
 
 ## The 532 existing rows
@@ -92,7 +92,7 @@ subject; `bundle_digest` and `anchor_heads_digest` (the expected head follows
 the rebound anchor) change with the bytes. Every other generated row is
 byte-identical (the helper is a no-op when no entry is stale).
 
-## The 18 rows D-87 adds
+## The 18 rows v0.4.0 adds
 
 Old codes are what each v0.3.1 verifier returns for the same bytes and prior.
 

@@ -95,13 +95,14 @@ describe("D-87 retained evidence", () => {
     expect(toHex(fixture("d87-history-independence-dangling-parent").bundle)).toBe(toHex(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "kats", "negative", "graph-dangling-parent.cbor"))));
   });
 
-  test("valid at its own earlier time but not now: a retained bundle whose credentials expire between its time and now is accepted in the harness, pyref library and pyref CLI", () => {
+  test("valid at its own earlier time but not now: a retained bundle whose credentials expire between its time and now is accepted as input (a signed verdict, not a usage error) in the harness, pyref library and pyref CLI; the current bundle is itself expired at now, so the history phase is not reached", () => {
     const now = 1_738_281_601; // one second after every carrier credential's valid_until (1738281600)
     const retime = (bytes: Uint8Array): Uint8Array => edit(bytes, (bundle) => { (bundle.trust_inputs as Obj).evaluation_time = now; });
     const alone = verifyBundle(retime(kept), { evaluationTime: now });
-    expect(alone.ok ? null : [alone.reason, alone.step]).not.toBeNull(); // the same carrier at now fails
+    expect(alone.ok ? null : [alone.reason, alone.step]).toEqual(["credential/expired", 6]); // the same carrier at now fails
     const current = retime(zero); const value = { retained_epochs: [toHex(kept)] };
     const harness = verifyBundle(current, { evaluationTime: now, ...harnessPrior(value) });
+    expect(harness.ok ? null : [harness.reason, harness.step]).toEqual(["credential/expired", 6]);
     withBundle(current, (directory, path) => {
       expect(pyrefLibrary(directory, path, [value], now)[0]!.slice(0, 2)).toEqual(["verdict", harness.ok ? null : harness.reason]);
       const cli = pyrefCli(directory, path, value, now);
