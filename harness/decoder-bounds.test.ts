@@ -75,23 +75,28 @@ test("a leading U+FEFF is text in the harness decoder, as in pyref: 63efbbbf is 
   expect(pyref.stdout.toString().trim()).toBe("'\\ufeff' ['', '\\ufeff']");
 });
 
-// Policy credentials report the first defect in byte order; these three agree in the harness, the
-// pyref library and the pyref CLI (other defects' wording differs: a pre-existing BACKLOG item).
-const POLICY_CREDENTIALS: [string, string][] = [
+// Policy credentials: [credential, harness message, pyref message when its wording differs (a
+// pre-existing BACKLOG item; both reject)]. The harness reports the first defect in byte order.
+const POLICY_CREDENTIALS: [string, string, string?][] = [
   ["829f", "indefinite-length CBOR is forbidden"],
   ["9b0000000100000000", "truncated CBOR item"], // a 2^32 array count (v0.3.1's harness threw a RangeError)
   ["9b00000001000000009f", "indefinite-length CBOR is forbidden"],
+  // A -2^53 map key, rejected before its duplicate-key identity, as c29bbf0 did (fix round 4).
+  ["a13b001fffffffffffff00", "CBOR profile permits only safe integers, not floats", "negative integer beyond the profile's safe range"],
+  ["a13b001fffffffffffff", "CBOR profile permits only safe integers, not floats", "truncated CBOR item"],
+  ["a23b001fffffffffffff003b001fffffffffffff01", "CBOR profile permits only safe integers, not floats", "duplicate map key"],
 ];
 
-test("policy credentials 829f, 9b0000000100000000, 9b00000001000000009f: one message each in the harness, the pyref library and the pyref CLI", () => {
+test("policy credentials: each pinned message in the harness decoder and policy path, the pyref library and the pyref CLI", () => {
   const rp = join(root, "kats", "relying-party");
   const directory = mkdtempSync(join(tmpdir(), "aar-d87-policy-"));
   try {
     const key = join(rp, "rp-verifier.key");
-    for (const [credential, detail] of POLICY_CREDENTIALS) {
+    for (const [credential, detail, pyrefDetail = detail] of POLICY_CREDENTIALS) {
+      expect(() => decodeCbor(fromHex(credential), { strict: true }), credential).toThrow(detail);
       const policy = join(directory, `${credential}.json`);
       writeFileSync(policy, JSON.stringify({ ...JSON.parse(readFileSync(join(rp, "rp-positive-strict-subset.policy.json"), "utf8")), verifier_credentials: [credential] }));
-      const message = `policy.verifier_credentials[0]: ${detail}`;
+      const message = `policy.verifier_credentials[0]: ${detail}`; const pyrefMessage = `policy.verifier_credentials[0]: ${pyrefDetail}`;
       let harness = "";
       try { loadConfiguration(policy, key, AT); } catch (error) { if (!(error instanceof ConfigurationError)) throw error; harness = error.message; }
       expect(harness, credential).toBe(message);
@@ -104,10 +109,10 @@ try:
 except UsageError as exc:
     print(exc)
 `, policy, key], { cwd: root });
-      expect(library.stdout.toString().trim(), credential).toBe(message);
+      expect(library.stdout.toString().trim(), credential).toBe(pyrefMessage);
       const cli = Bun.spawnSync(["python3", "-B", "-m", "pyref", "verify", join(rp, "rp-positive-strict-subset.cbor"), "--at", String(AT), "--policy", policy, "--signing-key", key], { cwd: root });
       expect(cli.exitCode, credential).toBe(2);
-      expect(cli.stderr.toString(), credential).toContain(`error: ${message}\n`);
+      expect(cli.stderr.toString(), credential).toContain(`error: ${pyrefMessage}\n`);
     }
   } finally {
     rmSync(directory, { recursive: true, force: true });

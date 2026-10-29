@@ -197,6 +197,8 @@ class Decoder {
       for (let i = 0; i < argument; i += 1) {
         const key = this.item(depth + 1);
         if (!isScalar(key)) throw new Error("compound CBOR map keys are outside the AAR profile");
+        // Before the identity, as re-encoding the key used to: -2^53 decodes as a number but is outside the profile.
+        if (typeof key === "number" && !Number.isSafeInteger(key)) throw new TypeError("CBOR profile permits only safe integers, not floats");
         // One identity per distinct encoding without re-encoding the key (text keys are well-formed UTF-8 here).
         const keyId = typeof key === "string" ? `t${key}` : key instanceof Uint8Array ? `b${toHex(key)}` : `${typeof key}:${String(key)}`;
         if (keys.has(keyId)) throw new Error("duplicate CBOR map key");
