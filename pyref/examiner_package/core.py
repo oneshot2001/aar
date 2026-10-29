@@ -19,6 +19,8 @@ SIDECARS = ("meta.json", "trust-policy.json", "prior-state.json")
 LOG_NAMES = ("journal.jsonl", "anchor.jsonl", "chain.jsonl")
 PACKAGE_NAME = "examiner-package-v0.1"
 REPORT_LAYER_MARKERS = ("stateful_not_evaluated", "empty_scope", "producer-declared only")
+# Closed set of machine-checkable facts (amendment k): key -> element type of the list value.
+KNOWN_ASSERTS = {"no_conformant_tool_action_other_than": str}
 
 
 class PackageError(Exception):
@@ -47,6 +49,16 @@ def read_json(path: Path, label: str) -> Any:
 def git(*args: str) -> str:
     proc = subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True)
     return proc.stdout.strip() if proc.returncode == 0 else ""
+
+
+def resolved_root(label: str, path: Path) -> Path:
+    """A root is given absolute and resolves to at least two path components (amendment k)."""
+    if not path.is_absolute():
+        raise PackageError(f"--{label} {path} must be an absolute path")
+    resolved = path.resolve()
+    if resolved == Path(resolved.anchor) or len(resolved.parts) < 3:
+        raise PackageError(f"--{label} {path} resolves to {resolved}, which has fewer than two path components")
+    return resolved
 
 
 # --- verifier subprocess -----------------------------------------------------
@@ -180,10 +192,23 @@ def select_specimen(candidates_dir: Path, stills_dir: Path, camera: str) -> tupl
     return pick, rows
 
 
+def validate_asserts(facts: dict[str, Any]) -> dict[str, list]:
+    """Closed keys and list-of-<type> values (amendment k); an unknown key is an error, not a no-op."""
+    asserts = facts.get("asserts")
+    if not isinstance(asserts, dict):
+        raise PackageError("specimen-facts.json asserts must be a JSON object")
+    for key, value in asserts.items():
+        if key not in KNOWN_ASSERTS:
+            raise PackageError(f"specimen-facts.json asserts: unknown key {key!r}; known keys: {sorted(KNOWN_ASSERTS)}")
+        if not isinstance(value, list) or not all(isinstance(item, KNOWN_ASSERTS[key]) for item in value):
+            raise PackageError(f"specimen-facts.json asserts.{key} must be a list of {KNOWN_ASSERTS[key].__name__}")
+    return asserts
+
+
 def check_asserts(facts: dict[str, Any], pick: dict[str, Any], rows: list[dict[str, Any]]) -> None:
     """Facts binding (amendment b): every assert holds over the sweep and the facts were verified
     against this specimen's bundle digest; otherwise refuse before anything is written."""
-    asserts = facts.get("asserts", {})
+    asserts = validate_asserts(facts)
     allowed = asserts.get("no_conformant_tool_action_other_than")
     if allowed is not None:
         offenders = sorted({row.get("tool_action") for row in rows if row["exit"] == 0} - set(allowed))

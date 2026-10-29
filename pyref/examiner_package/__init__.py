@@ -15,15 +15,15 @@ import io
 import platform
 import re
 import shutil
-import sys
 import tarfile
 from pathlib import Path
 from typing import Any
 
 from ..cbor import loads
-from .core import (LOG_NAMES, PACKAGE_NAME, REPO, SIDECARS, PackageError, check_asserts, classify_still,  # noqa: F401
-                   decode_verdict, file_sha256, git, json_text, media_digests, parse_report, read_json,
-                   receipt_payloads, run_verifier, select_specimen, sha256_hex, sweep, window)
+from .core import (KNOWN_ASSERTS, LOG_NAMES, PACKAGE_NAME, REPO, SIDECARS, PackageError, check_asserts,  # noqa: F401
+                   classify_still, decode_verdict, file_sha256, git, json_text, media_digests, parse_report,
+                   read_json, receipt_payloads, resolved_root, run_verifier, select_specimen, sha256_hex, sweep,
+                   validate_asserts, window)
 from .pages import OPENING, artifact_inventory, legal_maps, page_00, page_02, page_03  # noqa: F401
 from .pages_tail import page_05, page_06, page_07, prohibited_claims
 from .text import (EMBEDDED_KEYS, ENVELOPE_KEYS, INVISIBLE_RANGES, LOG_RULES, escape_code, escaped, find_log,  # noqa: F401
@@ -34,6 +34,8 @@ ROOT_LABELS = {
     "<stills>": "onvif-mcp receipts corpus on the builder's machine (snap-*.jpg)",
     "<logs>": "onvif-mcp receipts corpus on the builder's machine (chain.jsonl; journal.jsonl and anchor.jsonl under aar/)",
 }
+# Amendment (j): every distributed file except these two is in the reproducible set.
+OUTSIDE_REPRODUCIBLE_SET = ("03-source-and-run.md", "01-copy/inventory.json")
 
 
 def source_inventory() -> list[dict[str, Any]]:
@@ -95,10 +97,11 @@ def package_acquisition(full: dict[str, Any], files: list[dict[str, Any]]) -> di
             "files": [{key: value for key, value in row.items() if key != "source_path"} for row in files]}
 
 
-def localize(line: bytes, prefixes: list[bytes]) -> bytes:
-    """Replace every occurrence of the builder's absolute root paths with ``<local>``."""
-    for prefix in prefixes:
-        line = line.replace(prefix, b"<local>")
+def localize(line: bytes, roots: list[Path]) -> bytes:
+    """Replace each resolved root path with ``<local>`` where it occupies whole path segments:
+    the match must be followed by ``/``, a closing double quote, whitespace or the end of the line."""
+    for root in sorted((str(r).encode() for r in roots), key=len, reverse=True):
+        line = re.sub(re.escape(root) + rb'(?=/|"|\s|$)', b"<local>", line)
     return line
 
 
@@ -124,6 +127,7 @@ def write_tarball(package: Path, tarball: Path, mtime: int) -> str:
 
 
 def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, camera: str) -> int:
+    roots = [resolved_root(label, path) for label, path in (("candidates", candidates), ("stills", stills), ("logs", logs))]
     for label, path in (("candidates", candidates), ("stills", stills), ("logs", logs), ("inputs", inputs)):
         if not path.is_dir():
             raise PackageError(f"--{label} {path} is not a directory")
@@ -134,6 +138,7 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
     for key in ("specimen_kind", "facts", "coverage_sentence", "d66_sentence", "asserts", "verified_against"):
         if key not in facts:
             raise PackageError(f"specimen-facts.json lacks {key}")
+    validate_asserts(facts)
 
     # Nothing is written before the specimen rule and the facts binding both hold.
     pick, rows = select_specimen(candidates, stills, camera)
@@ -175,7 +180,6 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
     (verify / "run1.stderr.txt").write_text(run1["stderr"])
     pinned = {key: run1[key] for key in ("command", "exit", "result", "verdict_id", "bundle_digest", "selector_matching_receipts", "observations")}
     pinned.update(cwd="the package root (this directory's parent)", PYTHONPATH=f"the aar checkout at {commit}",
-                  interpreter={"executable": sys.executable, "version": platform.python_version()},
                   evaluated_at=at, evaluated_at_source="01-copy/meta.json (a producer file)")
     decoded = decode_verdict(run1["verdict_cbor_hex"]) if run1["verdict_cbor_hex"] else None
     if decoded is not None:
@@ -185,7 +189,7 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
     (verify / "run1.json").write_text(json_text(pinned))
     (verify / "README.md").write_text(page_02(pinned, at, commit))
 
-    # 03
+    # 03 (outside the reproducible set: interpreter and platform live here)
     (package / "03-source-and-run.md").write_text(page_03(run1, pinned, files, source_inventory(), commit))
 
     # 04
@@ -194,8 +198,6 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
     selector_window = window(bundle)
     invocation_ids = {r["freshness"]["invocation_id"].hex() for r in receipts if isinstance(r.get("freshness", {}).get("invocation_id"), bytes)}
     receipt_ids = {r["receipt_id"].hex() for r in receipts}
-    prefixes = sorted({str(p.resolve()).encode() for p in (candidates, stills, logs)} | {str(p).encode() for p in (candidates, stills, logs)},
-                      key=len, reverse=True)
     anchor_fact = next((f["text"] for f in facts["facts"] if f["label"] == "anchor log"), "")
     for name in LOG_NAMES:
         source = find_log(logs, name)
@@ -216,15 +218,16 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
         else:
             raw_log = source.read_bytes()
             kept, undated = select_lines(name, raw_log, selector_window, invocation_ids, receipt_ids)
-            derived = [(number, line, localize(line, prefixes)) for number, line in kept]
+            derived = [(number, line, localize(line, roots)) for number, line in kept]
             (records / name).write_bytes(b"".join(local for _, _, local in derived))
             changed = [(n, line, local) for n, line, local in derived if local != line]
             companion += [f"Source: `<logs>/{source.relative_to(logs).as_posix()}` ({len(raw_log)} bytes, SHA-256 `{sha256_hex(raw_log)}`, "
                           f"{len(raw_log.splitlines())} lines).",
                           f"Kept {len(kept)} line(s), source line numbers {[n for n, _ in kept]}; written to `{name}` in this directory. "
                           "Lines that do not parse as a JSON object are never kept.",
-                          "Transformation: every occurrence of the builder's absolute root paths (`--candidates`, `--stills`, `--logs`, "
-                          "as given and resolved) in a kept line is replaced by `<local>`; nothing else is altered. "
+                          "Transformation: each of the builder's resolved absolute root paths (`--candidates`, `--stills`, `--logs`), where "
+                          "it occupies whole path segments in a kept line (followed by `/`, a double quote, whitespace or the end of the "
+                          "line), is replaced by `<local>`; nothing else is altered. "
                           + (f"{len(changed)} line(s) changed, so this file is an identified derivative; the original lines are held "
                              "by the operator:" if changed else "No kept line contained such a path, so this file is byte for byte "
                              "the original lines.")]
@@ -256,7 +259,8 @@ def build(candidates: Path, stills: Path, logs: Path, inputs: Path, out: Path, c
                  for file in sorted(p for p in package.rglob("*") if p.is_file())]
     (package / "01-copy" / "inventory.json").write_text(json_text({
         "_doc": "Inventory for recomputation, not a copy foundation. Unsigned. Scope: every file distributed in this "
-                "package directory except this file. The copy foundation is 01-copy/acquisition.json.",
+                "package directory except this file. The copy foundation is 01-copy/acquisition.json. This file lists "
+                "03-source-and-run.md, so it is outside the reproducible set with it.",
         "files": inventory}))
     tarball = out / f"{PACKAGE_NAME}.tar.gz"
     tar_digest = write_tarball(package, tarball, mtime=at)

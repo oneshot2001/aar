@@ -50,6 +50,16 @@ def kat_candidate(root: Path, name: str, prior: dict, sidecars=("meta.json", "tr
     return directory
 
 
+def synthetic_inputs(root: Path) -> Path:
+    inputs = root / "inputs"
+    inputs.mkdir()
+    (inputs / "specimen-facts.json").write_text(json.dumps(FACTS))
+    (inputs / "acquisition.json").write_text(json.dumps(ACQUISITION))
+    for name in ("c", "s", "l"):
+        (root / name).mkdir()
+    return inputs
+
+
 class SpecimenRule(unittest.TestCase):
     def test_synthetic_sweep_reasons(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -90,17 +100,37 @@ class SpecimenRule(unittest.TestCase):
         with self.assertRaisesRegex(ep.PackageError, "verified_against.bundle_digest"):
             ep.check_asserts({**facts, "verified_against": {"bundle_digest": "cd"}}, pick, rows[1:])
 
+    def test_asserts_are_closed(self):
+        # Codex NEW-2: the typo must be an error, not a silent pass, even with a PTZ row present.
+        rows = [{"exit": 0, "tool_action": "camera.ptz.preset"}]
+        pick = {"dir": "x", "bundle_digest": "ab"}
+        typo = {"asserts": {"no_conformant_tool_actions_other_than": ["camera.stream.view"]}, "verified_against": {"bundle_digest": "ab"}}
+        with self.assertRaisesRegex(ep.PackageError, "unknown key 'no_conformant_tool_actions_other_than'"):
+            ep.check_asserts(typo, pick, rows)
+        for bad in ("camera.stream.view", [1], None):
+            with self.assertRaisesRegex(ep.PackageError, "must be a list of str"):
+                ep.validate_asserts({"asserts": {"no_conformant_tool_action_other_than": bad}})
+        with self.assertRaisesRegex(ep.PackageError, "must be a JSON object"):
+            ep.validate_asserts({"asserts": []})
+
     def test_out_as_file_is_usage_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for name in ("inputs", "c", "s", "l"):
-                (root / name).mkdir()
-            (root / "inputs" / "specimen-facts.json").write_text(json.dumps(FACTS))
-            (root / "inputs" / "acquisition.json").write_text(json.dumps(ACQUISITION))
+            inputs = synthetic_inputs(root)
             (root / "out").write_text("")
             with self.assertRaisesRegex(ep.PackageError, "--out"):
-                ep.build(root / "c", root / "s", root / "l", root / "inputs", root / "out", "q6358")
+                ep.build(root / "c", root / "s", root / "l", inputs, root / "out", "q6358")
             self.assertEqual(sorted(p.name for p in root.iterdir()), ["c", "inputs", "l", "out", "s"])
+
+    def test_relative_or_short_root_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inputs = synthetic_inputs(root)
+            for logs, message in ((Path("."), "must be an absolute path"), (Path("receipts"), "must be an absolute path"),
+                                  (Path("/"), "fewer than two path components"), (Path("/usr"), "fewer than two path components")):
+                with self.assertRaisesRegex(ep.PackageError, message):
+                    ep.build(root / "c", root / "s", logs, inputs, root / "out", "q6358")
+            self.assertFalse((root / "out").exists())
 
     @unittest.skipUnless(CORPUS.is_dir(), "onvif-mcp corpus not present")
     def test_real_corpus_pick(self):
@@ -212,8 +242,14 @@ class OperatorRecords(unittest.TestCase):
                 os.environ["TZ"] = original
             time.tzset()
 
-    def test_localize(self):
-        self.assertEqual(ep.localize(b'{"detail":"saved /x/receipts/a.jpg"}', [b"/x/receipts"]), b'{"detail":"saved <local>/a.jpg"}')
+    def test_localize_whole_segments_only(self):
+        roots = [Path("/x/receipts"), Path("/x/receipts/aar")]
+        self.assertEqual(ep.localize(b'{"detail":"saved /x/receipts/a.jpg"}\n', roots), b'{"detail":"saved <local>/a.jpg"}\n')
+        self.assertEqual(ep.localize(b'{"p":"/x/receipts"}', roots), b'{"p":"<local>"}')
+        self.assertEqual(ep.localize(b'/x/receipts/aar/j.jsonl', roots), b'<local>/j.jsonl')
+        self.assertEqual(ep.localize(b'{"p":"/x/receipts2/a.jpg"}', roots), b'{"p":"/x/receipts2/a.jpg"}')
+        self.assertEqual(ep.localize(b'{"x":"a.b"}', roots), b'{"x":"a.b"}')  # Codex-style line, untouched
+        self.assertEqual(ep.localize(b'{"x":"a.b"}', [Path("/a")]), b'{"x":"a.b"}')
 
 
 class Tarball(unittest.TestCase):

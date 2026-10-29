@@ -121,12 +121,16 @@ subprocess by the packager; the packager is not part of the verifier.
 Every command below runs from the package root (the directory holding this `02-verify/`). Set `AAR`
 to a checkout of https://github.com/oneshot2001/aar at commit `{commit}` first (bootstrap:
 `git clone https://github.com/oneshot2001/aar && git -C aar checkout {commit}`); the first block
-declares it once. Keys and run-3 outputs go to `../examiner-keys/`, outside the package.
+declares it once. Keys and every run-3 output go to `../examiner-keys/`, outside the package.
 
 ```
 AAR="${{AAR:?set AAR to the aar checkout at commit {commit}}}"
 export PYTHONPATH="$AAR"
 ```
+
+Reproducible set: every distributed file except `03-source-and-run.md` (the build host's interpreter
+and platform) and `01-copy/inventory.json` (it lists 03). Two builds from the same inputs are
+byte-identical over that set for the same CPython minor version and Unicode data version.
 
 ## Run 1 — pinned
 
@@ -144,22 +148,28 @@ export PYTHONPATH="$AAR"
 | raw envelope | `run1.verdict.cbor` (SHA-256 `{pinned.get('verdict_cbor_sha256')}`) |
 | stdout / stderr | `run1.stdout.txt` / `run1.stderr.txt` |
 
-`run1.json` holds the same values as data, plus the builder's real interpreter path and version
-beside the portable `python3` command.
+`run1.json` holds the same values as data; the builder's interpreter path and version are on
+`03-source-and-run.md`, outside the reproducible set.
 
-## Run 3 — the examiner's own key
+## Run 3 — the examiner's own key, as a controlled invocation
 
-The examiner mints a chain and runs the same verifier under `--policy` and `--signing-key`.
-A self-issued chain establishes key control, not the examiner's identity or the verifier's
-correctness. Private keys never enter the package.
+The examiner mints a chain; `check_run3` then runs the verifier itself with the package sidecars and
+the examiner's key, captures the complete stdout into `../examiner-keys/run3.stdout.txt`, and checks
+what it captured. A self-issued chain establishes key control, not the examiner's identity or the
+verifier's correctness. Private keys never enter the package; nothing is written inside it.
 
 ```
 python3 -B -m pyref.examiner_package.mint_examiner_chain --keys ../examiner-keys --at {at} --trust-policy 01-copy/trust-policy.json
-{cmd} --policy ../examiner-keys/examiner-policy.json --signing-key ../examiner-keys/examiner.key > ../examiner-keys/run3.stdout.txt
-python3 -B -m pyref.examiner_package.check_run3 --stdout ../examiner-keys/run3.stdout.txt --keys ../examiner-keys --run1 02-verify/run1.json
+python3 -B -m pyref.examiner_package.check_run3 --keys ../examiner-keys --run1 02-verify/run1.json
 openssl pkey -pubin -inform DER -in ../examiner-keys/run3.leaf-spki.der -out ../examiner-keys/leaf.pem
 openssl dgst -sha256 -verify ../examiner-keys/leaf.pem -signature ../examiner-keys/run3.signature.der ../examiner-keys/run3.sig_structure.bin
 ```
+
+The controlled invocation is exactly
+`{cmd} --policy ../examiner-keys/examiner-policy.json --signing-key ../examiner-keys/examiner.key`
+(the checker prints the argv it used as line 0). A transcript pasted from elsewhere can be checked
+with `--stdout FILE`, and the output is then headed "UNVERIFIED TRANSCRIPT: the inputs used for this
+run are not established by this check".
 
 What the mint does, in full: draws two P-256 scalars `1 <= d < n` with `secrets.randbelow`; writes
 `examiner-root.key` and `examiner.key` (64 lowercase hex characters then LF, mode 0600, created
@@ -181,6 +191,7 @@ result through the verifier's own `load_configuration` and prints both kids and 
 
 Acceptance (`check_run3` prints each line as PASS or FAIL; all must pass):
 
+0. the controlled invocation exited 0 (its argv is printed);
 1. the policy and key pass the verifier's own chain logic (`pyref.relying_party.load_configuration`:
    credential signatures, SPKI-to-kid binding, chain to `verifier_root_kid`, validity at `--at`);
 2. the verdict signature verifies under the examiner's leaf public key (derived from the key file);
@@ -189,15 +200,17 @@ Acceptance (`check_run3` prints each line as PASS or FAIL; all must pass):
 5. `evaluated_at` equals run 1;
 6. `bundle_digest` equals run 1;
 7. `result` equals run 1;
-8. every `trust_policy` entry except `relying_party_policy_digest` equals run 1 (`trust_store_digest`,
-   `prior_emissions_digest`, `replay_state_digest`, `anchor_heads_digest`, `retained_epochs_digest`, …),
-   so the same pins and history were supplied;
+8. the signed trust values equal run 1 except `relying_party_policy_digest` (the use of the pin file is
+   established by the controlled invocation, not by this equality);
 9. `limits` equal run 1;
 10. `observations` equal run 1;
-11. run-3 stdout carries no report-layer `stateful_not_evaluated`, `empty_scope` or `producer-declared only` marker.
+11. the captured stdout carries no report-layer `stateful_not_evaluated`, `empty_scope` or
+    `producer-declared only` marker.
 
 The verdict id is not pinned: a fresh kid changes the preimage (`pyref/verdict.py:128-131`). The two
-`openssl` lines re-verify the same signature with a second tool over the files `check_run3` writes.
+`openssl` lines re-verify the same signature with a second tool over the files `check_run3` writes
+beside the keys (`run3.sig_structure.bin`, `run3.leaf-spki.der`, `run3.signature.der`, plus
+`run3.verdict.cbor`).
 
 Known limit: the relying-party chain has no revocation (D-83 part 10); a compromised examiner key
 can sign verdicts asserting any evaluation time inside its window.

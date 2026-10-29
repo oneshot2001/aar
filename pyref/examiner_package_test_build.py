@@ -3,12 +3,15 @@
 
 from __future__ import annotations
 
+import contextlib
 import gzip
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -30,6 +33,10 @@ ACQUISITION = {"source": {"repo_path": "x/<specimen-dir>/", "host_label": "Mac S
                "copy_method": "", "tool_versions": {}, "collection_time_utc": None, "platform": None, "errors": [], "transformations": []}
 
 
+def tree_hashes(package: Path) -> dict[str, str]:
+    return {p.relative_to(package).as_posix(): ep.file_sha256(p) for p in package.rglob("*") if p.is_file()}
+
+
 @unittest.skipUnless(CORPUS.is_dir(), "onvif-mcp corpus not present")
 class FullBuild(unittest.TestCase):
     @classmethod
@@ -37,7 +44,7 @@ class FullBuild(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         root = cls.root = Path(cls.tmp.name)
         pick, _ = ep.select_specimen(CORPUS / "aar", CORPUS, "q6358")
-        inputs = root / "inputs"
+        inputs = cls.inputs = root / "inputs"
         inputs.mkdir()
         facts = {**FACTS, "verified_against": {"bundle_digest": pick["bundle_digest"]}}
         (inputs / "specimen-facts.json").write_text(json.dumps(facts))
@@ -47,21 +54,13 @@ class FullBuild(unittest.TestCase):
         for name in ("second", "third"):
             assert ep.build(CORPUS / "aar", CORPUS, CORPUS, inputs, root / name, "q6358") == 0
         cls.package = root / "second" / "package"
-        cls.run1 = json.loads((cls.package / "02-verify" / "run1.json").read_text())
+        cls.run1 = cls.package / "02-verify" / "run1.json"
         cls.keys = root / "keys"
-        cls.minted = mint_examiner_chain.mint(cls.keys, cls.run1["evaluated_at"], cls.package / "01-copy" / "trust-policy.json")
+        cls.minted = mint_examiner_chain.mint(cls.keys, json.loads(cls.run1.read_text())["evaluated_at"], cls.package / "01-copy" / "trust-policy.json")
 
     @classmethod
     def tearDownClass(cls):
         cls.tmp.cleanup()
-
-    def run3(self, keys: Path, name: str, trust="01-copy/trust-policy.json", prior="01-copy/prior-state.json") -> Path:
-        run = ep.run_verifier(self.package, "01-copy/bundle.cbor", self.run1["evaluated_at"], trust, prior,
-                              os.path.relpath(keys / "examiner-policy.json", self.package), os.path.relpath(keys / "examiner.key", self.package))
-        self.assertEqual(run["exit"], 0, run["stderr"])
-        path = self.root / f"{name}.stdout.txt"
-        path.write_text(run["stdout"])
-        return path
 
     def test_builds_identical_and_inventory(self):
         second, third = self.root / "second", self.root / "third"
@@ -76,11 +75,30 @@ class FullBuild(unittest.TestCase):
         inventory = json.loads((self.package / "01-copy" / "inventory.json").read_text())
         self.assertNotIn("01-copy/inventory.json", {row["path"] for row in inventory["files"]})
         self.assertIn("01-copy/acquisition.json", {row["path"] for row in inventory["files"]})
-        self.assertEqual((self.run1["exit"], self.run1["result"]), (0, "conformant"))
+        run1 = json.loads(self.run1.read_text())
+        self.assertEqual((run1["exit"], run1["result"]), (0, "conformant"))
+        self.assertNotIn("interpreter", run1)
+        self.assertIn("sys.executable", (self.package / "03-source-and-run.md").read_text())
         self.assertIn("## Not decoded", (self.package / "05-text-fields.md").read_text())
         self.assertNotIn("inclusion.siblings", (self.package / "05-text-fields.md").read_text())
         self.assertIn("Identifier-sized byte strings", (self.package / "appendix" / "text-fields-zero.md").read_text())
         self.assertIn("This bundle carries no anchor.", (self.package / "04-operator-records" / "anchor.jsonl.md").read_text())
+
+    def test_reproducible_set_excludes_only_03_and_inventory(self):
+        # Amendment (j): a different interpreter path changes 03 and inventory.json and nothing else.
+        alt = self.root / "alt-python"
+        os.symlink(sys.executable, alt)
+        original = sys.executable
+        sys.executable = str(alt)
+        try:
+            self.assertEqual(ep.build(CORPUS / "aar", CORPUS, CORPUS, self.inputs, self.root / "fourth", "q6358"), 0)
+        finally:
+            sys.executable = original
+        base, other = tree_hashes(self.package), tree_hashes(self.root / "fourth" / "package")
+        self.assertEqual(set(base), set(other))
+        differing = {path for path in base if base[path] != other[path]}
+        self.assertEqual(differing, set(ep.OUTSIDE_REPRODUCIBLE_SET))
+        self.assertIn(str(alt), (self.root / "fourth" / "package" / "03-source-and-run.md").read_text())
 
     def test_tarball_carries_no_absolute_path_or_host(self):
         with tarfile.open(self.root / "second" / "examiner-package-v0.1.tar.gz") as tar:
@@ -95,12 +113,37 @@ class FullBuild(unittest.TestCase):
         self.assertIn("identified derivative", (self.package / "04-operator-records" / "chain.jsonl.md").read_text())
         self.assertIn("/Users/", (self.root / "first" / "acquisition-full.json").read_text())
 
-    def test_run3_positive_and_negatives(self):
+    def test_run3_controlled_and_transcript_modes(self):
         self.assertEqual((self.keys / "examiner.key").stat().st_mode & 0o777, 0o600)
-        results = check_run3.check(self.run3(self.keys, "run3"), self.keys, self.package / "02-verify" / "run1.json")
-        self.assertEqual([name[:2].strip() for name, _, _ in results][:11], [str(i) for i in range(1, 12)])
+        before = tree_hashes(self.package)
+        results = check_run3.check(self.keys, self.run1)
+        self.assertEqual([name.split()[0] for name, _, _ in results][:12], [str(i) for i in range(12)])
         self.assertTrue(all(passed for _, passed, _ in results), results)
-        self.assertIn(self.minted["leaf_kid"], results[0][2])
+        self.assertIn("--trust-policy 01-copy/trust-policy.json --prior-state 01-copy/prior-state.json --policy", results[0][2])
+        self.assertIn(self.minted["leaf_kid"], results[1][2])
+        self.assertEqual(tree_hashes(self.package), before)  # nothing written inside the package (R5)
+        for name in ("run3.stdout.txt", "run3.verdict.cbor", "run3.sig_structure.bin", "run3.leaf-spki.der", "run3.signature.der"):
+            self.assertTrue((self.keys / name).is_file(), name)
+        good = self.keys / "run3.stdout.txt"
+        # Codex P1-2 residual: a transcript from a run WITHOUT --trust-policy, edited down to Result + CBOR hex,
+        # passes lines 1-10 under --stdout and is therefore headed UNVERIFIED; the controlled mode has no stdout to edit.
+        at = json.loads(self.run1.read_text())["evaluated_at"]
+        run = ep.run_verifier(self.package, "01-copy/bundle.cbor", at, None, "01-copy/prior-state.json",
+                              str(self.keys / "examiner-policy.json"), str(self.keys / "examiner.key"))
+        self.assertEqual(run["exit"], 0, run["stderr"])
+        edited = self.root / "edited.stdout.txt"
+        edited.write_text("\n".join(l for l in run["stdout"].splitlines() if l.startswith(("Result:", "  CBOR hex:"))) + "\n")
+        results = check_run3.check(self.keys, self.run1, edited)
+        self.assertTrue(all(passed for name, passed, _ in results if name.split()[0] in {str(i) for i in range(1, 11)}), results)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            check_run3.main(["--keys", str(self.keys), "--run1", str(self.run1), "--stdout", str(edited)])
+        self.assertTrue(out.getvalue().startswith(check_run3.UNVERIFIED))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(check_run3.main(["--keys", str(self.keys), "--run1", str(self.run1)]), 0)
+        self.assertNotIn("UNVERIFIED", out.getvalue())
+        self.assertTrue(out.getvalue().startswith("PASS  0 controlled invocation"))
         # (i) Codex P1-1: substituted leaf SPKI, original kid and credential signature kept.
         bad = self.root / "bad-spki"
         shutil.copytree(self.keys, bad)
@@ -115,20 +158,15 @@ class FullBuild(unittest.TestCase):
             credentials.append(dumps(envelope).hex())
         policy["verifier_credentials"] = credentials
         (bad / "examiner-policy.json").write_text(json.dumps(policy))
-        results = check_run3.check(self.root / "run3.stdout.txt", bad, self.package / "02-verify" / "run1.json")
+        results = check_run3.check(bad, self.run1, good)
         self.assertFalse(results[0][1], results)
         # (ii) a second chain's policy and key against chain A's verdict.
         other = self.root / "other"
-        mint_examiner_chain.mint(other, self.run1["evaluated_at"], self.package / "01-copy" / "trust-policy.json")
-        results = check_run3.check(self.root / "run3.stdout.txt", other, self.package / "02-verify" / "run1.json")
-        failed = {name for name, passed, _ in results if not passed}
-        self.assertTrue(any(name.startswith(("2 ", "3 ", "4 ")) for name in failed), results)
-        # (iii) Codex P1-2: run 3 without --trust-policy / --prior-state.
-        results = check_run3.check(self.run3(self.keys, "run3-nopins", trust=None, prior=None), self.keys, self.package / "02-verify" / "run1.json")
-        failed = {name for name, passed, _ in results if not passed}
-        self.assertTrue(any(name.startswith("8 ") for name in failed) and any(name.startswith("11 ") for name in failed), results)
-        # (iv) run-1 stdout fed as run 3.
-        results = check_run3.check(self.package / "02-verify" / "run1.stdout.txt", self.keys, self.package / "02-verify" / "run1.json")
+        mint_examiner_chain.mint(other, at, self.package / "01-copy" / "trust-policy.json")
+        failed = {name.split()[0] for name, passed, _ in check_run3.check(other, self.run1, good) if not passed}
+        self.assertTrue(failed & {"2", "3", "4"}, failed)
+        # (iii) run-1 stdout fed as a transcript.
+        results = check_run3.check(self.keys, self.run1, self.package / "02-verify" / "run1.stdout.txt")
         self.assertFalse(all(passed for _, passed, _ in results), results)
 
     @unittest.skipUnless(shutil.which("openssl") and shutil.which("bash"), "openssl and bash needed")
@@ -145,6 +183,12 @@ class FullBuild(unittest.TestCase):
                               env={**os.environ, "AAR": str(REPO)})
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("Verified OK", proc.stdout + proc.stderr)
+        self.assertIn("PASS  0 controlled invocation", proc.stdout)
         self.assertEqual(proc.stdout.count("FAIL"), 0, proc.stdout)
-        self.assertTrue((extract / "examiner-keys" / "examiner.key").exists())
-        self.assertFalse(any(p.name.startswith("run3") for p in (package / "02-verify").iterdir()))
+        self.assertNotIn("UNVERIFIED", proc.stdout)
+        self.assertTrue((extract / "examiner-keys" / "run3.stdout.txt").exists())
+        # R5: the extracted package tree still equals inventory.json after the run.
+        inventory = {row["path"]: row["sha256"] for row in json.loads((package / "01-copy" / "inventory.json").read_text())["files"]}
+        actual = tree_hashes(package)
+        self.assertEqual(set(actual), set(inventory) | {"01-copy/inventory.json"})
+        self.assertEqual({path: actual[path] for path in inventory}, inventory)
