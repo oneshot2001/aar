@@ -5,7 +5,7 @@
 import { CborValue, decodeCbor, encodeCbor, toHex } from "./cbor";
 import { deterministicId, domainHash, id16 } from "./crypto";
 import { promotedRoot } from "./merkle";
-import { artifacts, clone, keepReceipts, mutateLastEvent, payload, rebuildManifest, receiptList, resign, sortArtifacts } from "./mutate";
+import { artifacts, clone, keepReceipts, mutateLastEvent, mutateReceipt, payload, rebuildManifest, receiptList, resign, sortArtifacts } from "./mutate";
 import { receiptBy, replaceReceipt } from "./mutate-graph";
 import { buildD82PositiveFixtures } from "./negative-fixtures";
 import { base as stateful, exactEntries, priorJson, StatefulFixture, StatefulPriorJson } from "./stateful-fixtures";
@@ -42,6 +42,11 @@ export function buildD87Fixtures(): StatefulFixture[] {
   }, true); }))] };
   // repair-d82-verifier-key-not-found exactly as negative-fixtures builds it.
   const keyless = edit((bundle) => { artifacts(bundle).credentials = (artifacts(bundle).credentials as CborValue[]).filter((entry) => payload(entry).key_usage !== "verifier_signing"); });
+  // hash-mismatch exactly as negative-fixtures builds it (step 7), and an entry with the id and digest of one of its
+  // receipts that bundle-valid-subset also carries, but issuer_seq + 1 (D-86 rule 0(b) would refuse it at step 9).
+  const mismatched = edit((bundle) => mutateReceipt(bundle, "inference", (value) => { ((value.body as Obj).conclusion as Obj).digest = deterministicId("wrong-claim-digest"); }));
+  const shared = new Set(exactEntries(base).map((entry) => toHex(entry.receiptId)));
+  const contradicting = exactEntries(mismatched).find((entry) => shared.has(toHex(entry.receiptId)))!;
   // graph-dangling-parent exactly as negative-fixtures builds it (graphFixture over bundle-valid-subset).
   const dangling = edit((bundle) => {
     clearJournal(bundle); keepReceipts(bundle, (value) => value.kind === "observation" && (object(value.root) || (value.parents as CborValue[]).length > 0));
@@ -73,6 +78,8 @@ export function buildD87Fixtures(): StatefulFixture[] {
       "Pin: the d87-retained-competing-manifest bundle plus a derived observation whose parent nobody carries; the retained epoch would make it epoch/fork (class d) at step 20, the intrinsic defect is reported first.", 12),
     negative("d87-history-after-key-not-found", keyless, priorJson({ ...exactEntries(keyless)[0]!, envelopeDigest: deterministicId("prior:nonidentical-envelope") }), "key/not-found",
       "The repair-d82-verifier-key-not-found bytes (no verifier_signing credential) with a prior entry reusing a carried receipt ID: the step-20 key resolution runs before the history phase, so the result is indeterminate key/not-found as without history (v0.3.1: identity/reuse at step 9).", 20),
+    negative("d87-history-early-failure", mismatched, priorJson({ ...contradicting, issuerSeq: contradicting.issuerSeq + 1 }), "hash/mismatch",
+      "The hash-mismatch bytes (step 7) with a prior entry carrying one of its receipts' id and digest but issuer_seq + 1: rule 0(b) refuses such history only once step 9 runs, so this bundle gets its intrinsic verdict with the supplied history bound in prior_emissions_digest.", 7),
     positive("d87-late-for-epoch-not-selecting", undefined, "Rule 0: beside the epoch-42 receipts, a root observation bound to epoch 43 with late_for_epoch_id 42; no epoch-43 manifest is carried, and late_for_epoch_id never selects the epoch-42 manifest, so the receipt is not judged against its index: conformant.", edit((bundle) => extra(bundle, 43, (next) => { (next.binding as Obj).late_for_epoch_id = 42; })), unlisted),
   ];
 }

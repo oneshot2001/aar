@@ -1,6 +1,6 @@
 {
   "deterministic": true,
-  "deterministic_fixtures": 548,
+  "deterministic_fixtures": 549,
   "divergence_count": 0,
   "divergences": [],
   "entry_point_findings": 1,
@@ -6274,6 +6274,20 @@
     {
       "deterministic": true,
       "expected_class": null,
+      "expected_code": "hash/mismatch",
+      "expected_result": "nonconformant",
+      "first_failure_step": 7,
+      "fixture": "kats/negative/stateful/d87-history-early-failure.bundle.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "hash/mismatch",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "0bc5bb62a02d1fe7deb7d9d6ccf8f36110ab7b60b0602cf8660591f6bb11976c"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
       "expected_code": "graph/dangling-parent",
       "expected_result": "nonconformant",
       "first_failure_step": 12,
@@ -7971,8 +7985,8 @@
       "verdict_sha256": "081f485ad962cf8c2e79b48a3e77c36e3df6bbb4368bacb677a76a5275951aad"
     }
   ],
-  "fixtures_evaluated": 548,
-  "matches": 548,
+  "fixtures_evaluated": 549,
+  "matches": 549,
   "mismatches": 0,
   "schema_version": 1,
   "slice": "C2"

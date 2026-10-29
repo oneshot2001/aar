@@ -1,0 +1,6 @@
+{
+  "name": "d87-history-early-failure",
+  "expected_code": "hash/mismatch",
+  "expected_step": 7,
+  "mutation_description": "The hash-mismatch bytes (step 7) with a prior entry carrying one of its receipts' id and digest but issuer_seq + 1: rule 0(b) refuses such history only once step 9 runs, so this bundle gets its intrinsic verdict with the supplied history bound in prior_emissions_digest."
+}
