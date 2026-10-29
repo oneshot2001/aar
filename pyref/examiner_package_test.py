@@ -75,8 +75,13 @@ class SpecimenRule(unittest.TestCase):
     @unittest.skipUnless(CORPUS.is_dir(), "onvif-mcp corpus not present")
     def test_real_corpus_pick(self):
         pick, rows = ep.select_specimen(CORPUS / "aar", CORPUS, "q6358")
-        self.assertEqual((pick["dir"], pick["still"], pick["rank"]), (EXPECTED_PICK, EXPECTED_STILL, 1))
         eligible = sorted((row for row in rows if row["still"]), key=lambda row: row["rank"])
+        newest_q6358 = max((row for row in eligible if row["camera"] == "q6358"), key=lambda row: row["evaluated_at"])
+        self.assertIs(pick, newest_q6358)
+        self.assertTrue(pick["selected"] and pick["dir"].startswith(str(pick["evaluated_at"])))
+        # The 2026-10-29 lock-time specimen stays conformant and still-matched; a newer capture outranks it by rule.
+        known = next(row for row in rows if row["dir"] == EXPECTED_PICK)
+        self.assertEqual((known["exit"], known["still"]), (0, EXPECTED_STILL))
         self.assertEqual([row["evaluated_at"] for row in eligible], sorted((row["evaluated_at"] for row in eligible), reverse=True))
         refused = [row for row in rows if row["exit"] == 2]
         self.assertTrue(refused and all("prior_emissions must be strictly sorted" in row["reason"] for row in refused))
