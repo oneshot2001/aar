@@ -67,17 +67,27 @@ test.skipIf(process.platform !== "linux")("Linux: a no-op child's VmHWM excludes
   expect(result.peakMb).toBeLessThan(200);
 }, 60_000);
 
-test("policy credential 829f is \"indefinite-length CBOR is forbidden\" in the harness, the pyref library and the pyref CLI (first error in byte order)", () => {
+// Policy credentials report the first defect in byte order; these three agree in the harness, the
+// pyref library and the pyref CLI (other defects' wording differs: a pre-existing BACKLOG item).
+const POLICY_CREDENTIALS: [string, string][] = [
+  ["829f", "indefinite-length CBOR is forbidden"],
+  ["9b0000000100000000", "truncated CBOR item"], // a 2^32 array count (v0.3.1's harness threw a RangeError)
+  ["9b00000001000000009f", "indefinite-length CBOR is forbidden"],
+];
+
+test("policy credentials 829f, 9b0000000100000000, 9b00000001000000009f: one message each in the harness, the pyref library and the pyref CLI", () => {
   const rp = join(root, "kats", "relying-party");
   const directory = mkdtempSync(join(tmpdir(), "aar-d87-policy-"));
   try {
-    const policy = join(directory, "policy.json"); const key = join(rp, "rp-verifier.key");
-    writeFileSync(policy, JSON.stringify({ ...JSON.parse(readFileSync(join(rp, "rp-positive-strict-subset.policy.json"), "utf8")), verifier_credentials: ["829f"] }));
-    const message = "policy.verifier_credentials[0]: indefinite-length CBOR is forbidden";
-    let harness = "";
-    try { loadConfiguration(policy, key, AT); } catch (error) { if (!(error instanceof ConfigurationError)) throw error; harness = error.message; }
-    expect(harness).toBe(message);
-    const library = Bun.spawnSync(["python3", "-B", "-c", `
+    const key = join(rp, "rp-verifier.key");
+    for (const [credential, detail] of POLICY_CREDENTIALS) {
+      const policy = join(directory, `${credential}.json`);
+      writeFileSync(policy, JSON.stringify({ ...JSON.parse(readFileSync(join(rp, "rp-positive-strict-subset.policy.json"), "utf8")), verifier_credentials: [credential] }));
+      const message = `policy.verifier_credentials[0]: ${detail}`;
+      let harness = "";
+      try { loadConfiguration(policy, key, AT); } catch (error) { if (!(error instanceof ConfigurationError)) throw error; harness = error.message; }
+      expect(harness, credential).toBe(message);
+      const library = Bun.spawnSync(["python3", "-B", "-c", `
 import sys
 from pathlib import Path
 from pyref.relying_party import UsageError, load_configuration
@@ -86,10 +96,11 @@ try:
 except UsageError as exc:
     print(exc)
 `, policy, key], { cwd: root });
-    expect(library.stdout.toString().trim()).toBe(message);
-    const cli = Bun.spawnSync(["python3", "-B", "-m", "pyref", "verify", join(rp, "rp-positive-strict-subset.cbor"), "--at", String(AT), "--policy", policy, "--signing-key", key], { cwd: root });
-    expect(cli.exitCode).toBe(2);
-    expect(cli.stderr.toString()).toContain(`error: ${message}\n`);
+      expect(library.stdout.toString().trim(), credential).toBe(message);
+      const cli = Bun.spawnSync(["python3", "-B", "-m", "pyref", "verify", join(rp, "rp-positive-strict-subset.cbor"), "--at", String(AT), "--policy", policy, "--signing-key", key], { cwd: root });
+      expect(cli.exitCode, credential).toBe(2);
+      expect(cli.stderr.toString(), credential).toContain(`error: ${message}\n`);
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
