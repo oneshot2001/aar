@@ -132,6 +132,11 @@ honest list.
 - `adapters/` — VAPIX + VMS reference legs
 - `demo/` — sanitized end-to-end run evidence
 
+Examiner package (custody profile v0.1): `python3 -B -m pyref.examiner_package …` packages one producer
+bundle with the unchanged verifier's raw outputs, limits first, for a digital-evidence examiner to
+re-run under their own key; it is not part of the verifier and adds no wire object. Spec, file formats
+and failure behaviour: `docs/custody-profile/examiner-package-v0.1.md`.
+
 ## Release gate
 
 Every tag runs, and must pass, `scripts/release-check.sh`:
