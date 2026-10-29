@@ -2021,23 +2021,22 @@ function validateEvidence(bundle: Obj, parsed: Parsed): EvidenceLimits | B1Failu
 
 type Evaluated = { bundle: Obj; parsed: Parsed; observations: string[]; evidence: EvidenceLimits; inputOrigins: ReturnType<typeof validateInputOrigins> };
 
-// Steps 1 to 19. A failure after step 3 carries the schema-valid bundle so the
-// failure verdict may bind its scope (D-82 part 1); earlier failures carry nothing.
-// A D-87 retained bundle stops here, with no synthetic verifier-signing use at step 8.
-export function evaluateSteps(input: Uint8Array, options: VerifyB1Options, verifierUse = true): Evaluated | { issue: B1Failure; bundle?: Obj } {
+// Steps 1-19; past step 3 a failure carries the bundle for its verdict's scope (D-82).
+// A D-87 retained bundle stops here, at its own time, with no verifier-signing use.
+export function evaluateSteps(input: Uint8Array, options: VerifyB1Options, retained = false): Evaluated | { issue: B1Failure; bundle?: Obj } {
   if (input.length > LIMITS.bundleBytes) return { issue: failure(1, "resource/bundle-too-large", "bundle") };
   const decoded = profileDecode(input, 2, "bundle");
   if (isFailure(decoded)) return { issue: decoded };
   const schemaIssue = validateBundleSchema(decoded);
   if (schemaIssue) return { issue: schemaIssue };
   const bundle = decoded as Obj;
-  const early = validateResourceCounts(bundle) ?? validateTrustInputs(bundle, options.evaluationTime, options.configuration);
+  const early = validateResourceCounts(bundle) ?? validateTrustInputs(bundle, retained ? (bundle.trust_inputs as Obj).evaluation_time as number : options.evaluationTime, options.configuration);
   if (early) return { issue: early, bundle };
   const parsed = validateEnvelopes(bundle);
   if (isFailure(parsed)) return { issue: parsed, bundle };
   const observations: string[] = [];
   let inputOrigins!: ReturnType<typeof validateInputOrigins>;
-  const issue = validateContent(bundle, parsed) ?? validateCredentialLifecycle(bundle, parsed, options.configuration, verifierUse) ?? validateEmission(parsed, options.priorEmissions)
+  const issue = validateContent(bundle, parsed) ?? validateCredentialLifecycle(bundle, parsed, options.configuration, !retained) ?? validateEmission(parsed, options.priorEmissions)
     ?? validateReceiptSemantics(bundle, parsed) ?? validateMediatorCountersignatures(parsed, observations) ?? validateReplay(parsed) ?? validateGraph(parsed)
     ?? validateDominance(bundle, parsed, observations) ?? (inputOrigins = validateInputOrigins(parsed, observations), validateEpochs(parsed)) ?? validateManifestIndexes(parsed)
     ?? validateMerkle(bundle, parsed, observations) ?? validateAnchors(bundle, parsed, observations) ?? validateRanges(bundle, parsed, observations);

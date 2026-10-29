@@ -196,7 +196,8 @@ class Decoder {
       for (let i = 0; i < argument; i += 1) {
         const key = this.item(depth + 1);
         if (!isScalar(key)) throw new Error("compound CBOR map keys are outside the AAR profile");
-        const keyId = toHex(encodeCbor(key));
+        // One identity per distinct encoding without re-encoding the key (text keys are well-formed UTF-8 here).
+        const keyId = typeof key === "string" ? `t${key}` : key instanceof Uint8Array ? `b${toHex(key)}` : `${typeof key}:${String(key)}`;
         if (keys.has(keyId)) throw new Error("duplicate CBOR map key");
         keys.add(keyId);
         stringsOnly &&= typeof key === "string";
@@ -235,8 +236,10 @@ export function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
   return left.length === right.length && left.every((byte, index) => byte === right[index]);
 }
 
+// Linear memory, same text as before (lowercase, no separators): spreading the bytes built one
+// string per byte, gigabytes for a 16 MiB map key (D-87 review).
 export function toHex(bytes: Uint8Array): string {
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("hex");
 }
 
 // Linear in the input: a grouped regex backtracks and gives up on multi-MiB strings (a retained bundle is up to 32 Mi digits).

@@ -1,11 +1,11 @@
 // D-87 rule 3: relying-party-retained bundles (prior-state retained_epochs), checked
 // before evaluation begins in CONFORMANCE section 5 order. Every failure is a usage
 // error (a throw, no verdict). pyref/retained.py mirrors this module.
-import { CborValue, decodeCbor, fromHex, toHex } from "./cbor";
+import { fromHex, toHex } from "./cbor";
 import { domainHash, hash } from "./crypto";
 import { Emission, emissionOf, fromPrior, sameCoordinates } from "./emission-identity";
 import { epochKey } from "./manifest-index";
-import { evaluateSteps, Obj, uint, VerifyB1Options } from "./verifier";
+import { evaluateSteps, Obj, VerifyB1Options } from "./verifier";
 
 export const RETAINED_BUNDLES = 16;
 export const RETAINED_BYTES = 16_777_216;
@@ -56,15 +56,6 @@ export function retainedEpochsDigest(options: VerifyB1Options): Uint8Array {
   return domainHash("AAR-VERDICT-RETAINED-v1", { bundles: checkRetained(options.retainedEpochs ?? []).map(fromHex) });
 }
 
-// A bundle that cannot be read this far fails steps 1 to 3 at any time.
-function ownTime(bundle: Uint8Array, fallback: number): number {
-  try {
-    const value = decodeCbor(bundle) as Obj;
-    const time = (value.trust_inputs as Obj).evaluation_time as CborValue;
-    return uint(time) ? time : fallback;
-  } catch { return fallback; }
-}
-
 export function loadRetained(input: Uint8Array, options: VerifyB1Options): Retained | undefined {
   if (options.retainedEpochs === undefined) return undefined;
   if (options.priorEmissions === undefined) throw new Error(`${LABEL} requires priorEmissions (the prior state it belongs to)`);
@@ -76,10 +67,10 @@ export function loadRetained(input: Uint8Array, options: VerifyB1Options): Retai
   const receipts: Emission[] = [];
   // Section 5 check (4) for every bundle, in array order, before any merge (5).
   const validated = bundles.map((bundle, index) => {
-    const at = ownTime(bundle, options.evaluationTime);
-    const steps = evaluateSteps(bundle, { evaluationTime: at, configuration: options.configuration }, false);
+    // Evaluated at its own trust_inputs time, read once step 3 has typed it (no decode before the guarded scan).
+    const steps = evaluateSteps(bundle, { evaluationTime: options.evaluationTime, configuration: options.configuration }, true);
     if ("issue" in steps) throw new Error(`${LABEL}[${index}] fails step ${steps.issue.step} (${steps.issue.reason})`);
-    if (at > options.evaluationTime) throw new Error(`${LABEL}[${index}] evaluation time is later than the current evaluation time`);
+    if (((steps.bundle.trust_inputs as Obj).evaluation_time as number) > options.evaluationTime) throw new Error(`${LABEL}[${index}] evaluation time is later than the current evaluation time`);
     return steps.parsed;
   });
   validated.forEach((parsed, index) => {
