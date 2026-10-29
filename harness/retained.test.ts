@@ -95,6 +95,22 @@ describe("D-87 retained evidence", () => {
     expect(toHex(fixture("d87-history-independence-dangling-parent").bundle)).toBe(toHex(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "kats", "negative", "graph-dangling-parent.cbor"))));
   });
 
+  test("valid at its own earlier time but not now: a retained bundle whose credentials expire between its time and now is accepted in the harness, pyref library and pyref CLI", () => {
+    const now = 1_738_281_601; // one second after every carrier credential's valid_until (1738281600)
+    const retime = (bytes: Uint8Array): Uint8Array => edit(bytes, (bundle) => { (bundle.trust_inputs as Obj).evaluation_time = now; });
+    const alone = verifyBundle(retime(kept), { evaluationTime: now });
+    expect(alone.ok ? null : [alone.reason, alone.step]).not.toBeNull(); // the same carrier at now fails
+    const current = retime(zero); const value = { retained_epochs: [toHex(kept)] };
+    const harness = verifyBundle(current, { evaluationTime: now, ...harnessPrior(value) });
+    withBundle(current, (directory, path) => {
+      expect(pyrefLibrary(directory, path, [value], now)[0]!.slice(0, 2)).toEqual(["verdict", harness.ok ? null : harness.reason]);
+      const cli = pyrefCli(directory, path, value, now);
+      expect(cli.exitCode).not.toBe(2);
+      expect(/retained_epochs_digest: ([0-9a-f]{64})/.exec(cli.stdout)?.[1]).toBe(toHex((harness.verdict!.trust_policy as Obj).retained_epochs_digest as Uint8Array));
+    });
+    console.log(`carrier alone at now: ${alone.ok ? "conformant" : `${alone.reason}@${alone.step}`}; current bundle at now with it retained: ${harness.ok ? "conformant" : `${harness.reason}@${harness.step}`}`);
+  }, 60_000);
+
   test("typed boundary: retainedEpochs needs priorEmissions and byte arrays", () => {
     expect(() => verifyBundle(base, { evaluationTime: AT, retainedEpochs: [kept] })).toThrow(`${LABEL} requires priorEmissions`);
     expect(() => verifyBundle(base, { evaluationTime: AT, priorEmissions: [], retainedEpochs: [toHex(kept) as unknown as Uint8Array] })).toThrow(`${LABEL}[0] must be a Uint8Array`);
