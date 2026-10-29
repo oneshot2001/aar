@@ -8,7 +8,7 @@ are signed, so the audit diffs decoded fields, not bytes.
 **Method.** pyref at `6ff6b51` (v0.3.1) evaluated every row of its own
 `pyref.kat` enumeration (532 rows) with the row's own inputs
 (`KAT_EVALUATION_TIME`, the row's prior and replay state, or its
-relying-party inputs sidecar); pyref at the D-87 build did the same over its
+relying-party inputs sidecar); pyref at fix round 2 did the same over its
 enumeration (549 rows). Both verdict envelopes were decoded; payload maps were
 flattened and diffed field by field, the protected headers compared, and
 result, reason and first failing step compared. Rows are paired by path; the
@@ -16,7 +16,7 @@ four rows D-87 relocates from `negative/stateful/` to `positive/stateful/`
 are paired by name (their bundle and prior bytes are identical). The harness
 needs no separate column: the full-corpus gate (`harness/crossimpl.test.ts`)
 holds it byte-identical to pyref on every row, before and after (0 splits
-over 549 rows at the D-87 build). The 17 rows D-87 adds were also run through
+over 549 rows at fix round 2). The 17 rows D-87 adds were also run through
 both v0.3.1 verifiers.
 
 ## The 532 existing rows

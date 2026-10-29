@@ -2453,8 +2453,7 @@ stays at step 9 because, once a bundle passes step 9's coordinate type
 checks, it refuses to sign a verdict over history the verifier can see
 contradicts a carried receipt; a bundle that fails before that gets its
 intrinsic verdict with that history bound in `prior_emissions_digest` (the
-bundle has not completed steps 1 to 8, or its receipt coordinates are not
-well-typed). The signing-key resolution precedes the history phase for
+bundle has not completed steps 1 to 8). The signing-key resolution precedes the history phase for
 the same reason the phase is last: `key/not-found` depends on the bundle and
 configuration only.
 
