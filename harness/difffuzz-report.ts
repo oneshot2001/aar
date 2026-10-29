@@ -3,8 +3,35 @@
 // outcome, a CLI disagreement or a leg operator error cannot stay in a JSON
 // file while the run line reads clean. Pure functions; the synthetic test
 // feeds them directly.
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { Comparison } from "./difffuzz-compare";
 import type { StepCounts } from "./difffuzz-mutants";
+
+// Porcelain v1 paths are repo-relative; rename/copy records name both paths.
+export function dirtyOutsideOutput(root: string, porcelain: string, out: string): boolean {
+  const output = resolve(root, out);
+  const escapes: Record<string, string> = { a: "\x07", b: "\b", t: "\t", n: "\n", v: "\v", f: "\f", r: "\r", '"': '"', "\\": "\\" };
+  return porcelain.split("\n").some((line) => {
+    if (line === "") return false;
+    const rename = /[RC]/.test(line.slice(0, 2)) ? line.slice(3).match(/^("(?:[^"\\]|\\.)*"|.*?) -> ("(?:[^"\\]|\\.)*"|.*)$/) : null;
+    const paths = rename === null ? [line.slice(3)] : [rename[1]!, rename[2]!];
+    return paths.some((path) => {
+      if (path.startsWith('"')) {
+        // Git quotes special characters and non-ASCII UTF-8 bytes (octal).
+        const bytes: number[] = [];
+        for (const token of path.slice(1, -1).matchAll(/\\([0-7]{1,3}|.)|([^\\]+)/gs)) {
+          if (token[2] !== undefined) bytes.push(...Buffer.from(token[2]));
+          else if (/^[0-7]/.test(token[1]!)) bytes.push(parseInt(token[1]!, 8));
+          else if (escapes[token[1]!] !== undefined) bytes.push(...Buffer.from(escapes[token[1]!]!));
+          else return true;
+        }
+        path = Buffer.from(bytes).toString("utf8");
+      }
+      const fromOutput = relative(output, resolve(root, path));
+      return fromOutput === ".." || fromOutput.startsWith(".." + sep) || isAbsolute(fromOutput);
+    });
+  });
+}
 
 export type LegOutcome = "pass" | "masked" | "corruption-accepted" | "claim-weakening-unmoved" | "removal-accepted" | "split" | "unexpected" | "unsupported" | "operator-error";
 export const LEG_FINDING_CLASSES: readonly LegOutcome[] = ["corruption-accepted", "claim-weakening-unmoved", "removal-accepted"];

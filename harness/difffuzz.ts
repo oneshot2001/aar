@@ -14,7 +14,7 @@ import { Finding, MutantRun, runMutants, seedViews, tagHashSeedSensitivity, writ
 import { OPERATORS } from "./difffuzz-operators";
 import { saturation } from "./difffuzz-premises";
 import { AdapterError, PyrefBatch, Site, root } from "./difffuzz-pyref";
-import { aggregate, formatAccept } from "./difffuzz-report";
+import { aggregate, dirtyOutsideOutput, formatAccept } from "./difffuzz-report";
 import { RNG_SPEC, Rng } from "./difffuzz-rng";
 import { loadSeeds } from "./difffuzz-seeds";
 
@@ -29,7 +29,7 @@ function args(): { seed: number; mutants: number; out: string; chunk: number; la
 // pyref is CPU-bound and single-threaded: the baseline, the mutant stream and the legs are spread over --lanes batch processes (default 3).
 // The leg stream derives from the seed with a fixed domain offset ("LEGS"), so leg counts do not move with --mutants.
 const LEG_RNG_DOMAIN = 0x4C454753;
-const git = (...command: string[]): string => Bun.spawnSync(["git", ...command], { cwd: root }).stdout.toString().trim();
+const git = (...command: string[]): string => Bun.spawnSync(["git", ...command], { cwd: root }).stdout.toString();
 const now = (): number => Date.now();
 const progress = (message: string): void => { console.error(`[difffuzz] ${message}`); };
 
@@ -81,7 +81,7 @@ async function main(): Promise<number> {
     const accept = formatAccept(summary);
     const report = {
       stable: {
-        source_revision: git("rev-parse", "HEAD"), dirty: git("status", "--porcelain").length > 0,
+        source_revision: git("rev-parse", "HEAD").trim(), dirty: dirtyOutsideOutput(root, git("status", "--porcelain"), options.out),
         seed: options.seed, mutants: options.mutants, lanes: options.lanes, rng: RNG_SPEC, operators: Object.fromEntries(OPERATORS.map((operator) => [operator.name, { version: operator.version, layer: operator.layer, target_step: operator.targetStep, repair_boundary: operator.repairBoundary }])),
         summary, controls: controls.map((control) => ({ name: control.name, passed: control.passed })),
         per_step: mutants.perStep, per_operator: mutants.perOperator, verdict_noops: Object.values(mutants.perStep).reduce((total, counts) => total + counts.verdict_noop, 0), masked: Object.values(mutants.perStep).reduce((total, counts) => total + counts.masked, 0),

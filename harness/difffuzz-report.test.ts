@@ -4,7 +4,47 @@
 // with the right count, in the right field or channel.
 import { expect, test } from "bun:test";
 import type { StepCounts } from "./difffuzz-mutants";
-import { aggregate, formatAccept, zeroLegCounts } from "./difffuzz-report";
+import { aggregate, dirtyOutsideOutput, formatAccept, zeroLegCounts } from "./difffuzz-report";
+
+const repoRoot = "/repo";
+const output = "docs/fuzz-runs/X";
+
+test("fuzz report hygiene: empty porcelain is clean", () => {
+  expect(dirtyOutsideOutput(repoRoot, "", output)).toBe(false);
+});
+
+test("fuzz report hygiene: only an untracked output directory is clean", () => {
+  expect(dirtyOutsideOutput(repoRoot, "?? docs/fuzz-runs/X/\n", output)).toBe(false);
+});
+
+test("fuzz report hygiene: an absolute output path is clean", () => {
+  expect(dirtyOutsideOutput(repoRoot, "?? docs/fuzz-runs/X/\n", "/repo/docs/fuzz-runs/X")).toBe(false);
+});
+
+test("fuzz report hygiene: changes outside output are dirty", () => {
+  expect(dirtyOutsideOutput(repoRoot, "?? docs/fuzz-runs/X/\n M harness/difffuzz.ts\n", output)).toBe(true);
+  expect(dirtyOutsideOutput(repoRoot, " M harness/difffuzz.ts\n", output)).toBe(true);
+});
+
+test("fuzz report hygiene: a sibling sharing the output prefix is dirty", () => {
+  expect(dirtyOutsideOutput(repoRoot, "?? docs/fuzz-runs/X2/\n", output)).toBe(true);
+});
+
+test("fuzz report hygiene: tracked and nested output changes are clean", () => {
+  expect(dirtyOutsideOutput(repoRoot, " M docs/fuzz-runs/X/report.json\n?? docs/fuzz-runs/X/finding/bundle.cbor\n", output + "/")).toBe(false);
+});
+
+test("fuzz report hygiene: quoted output paths decode Git escapes", () => {
+  expect(dirtyOutsideOutput(repoRoot, '?? "docs/fuzz-runs/space name/"\n', "docs/fuzz-runs/space name")).toBe(false);
+  expect(dirtyOutsideOutput(repoRoot, '?? "docs/fuzz-runs/\\303\\251/"\n', "docs/fuzz-runs/é")).toBe(false);
+  expect(dirtyOutsideOutput(repoRoot, '?? "docs/fuzz-runs/X/line\\nbreak"\n', output)).toBe(false);
+});
+
+test("fuzz report hygiene: renames crossing the output boundary are dirty", () => {
+  expect(dirtyOutsideOutput(repoRoot, "R  docs/fuzz-runs/X/a -> docs/fuzz-runs/X/b\n", output)).toBe(false);
+  expect(dirtyOutsideOutput(repoRoot, "R  harness/source.ts -> docs/fuzz-runs/X/b\n", output)).toBe(true);
+  expect(dirtyOutsideOutput(repoRoot, "R  docs/fuzz-runs/X/a -> harness/source.ts\n", output)).toBe(true);
+});
 
 const step = (planned: number, targeted: number, noop: number, unsupported: number): StepCounts => ({ planned, targeted, reached: targeted, noop, unsupported, masked: 0, verdict_noop: 0, findings: 0 });
 
