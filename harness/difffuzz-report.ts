@@ -8,8 +8,8 @@ import type { Comparison } from "./difffuzz-compare";
 import type { StepCounts } from "./difffuzz-mutants";
 
 // Porcelain v1 paths are repo-relative; rename/copy records name both paths.
-export function dirtyOutsideOutput(root: string, porcelain: string, out: string): boolean {
-  const output = resolve(root, out);
+export function dirtyOutsideOutput(root: string, porcelain: string, out: string, cwd: string = root): boolean {
+  const output = resolve(cwd, out);
   const escapes: Record<string, string> = { a: "\x07", b: "\b", t: "\t", n: "\n", v: "\v", f: "\f", r: "\r", '"': '"', "\\": "\\" };
   return porcelain.split("\n").some((line) => {
     if (line === "") return false;

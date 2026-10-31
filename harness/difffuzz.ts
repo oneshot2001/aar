@@ -81,7 +81,7 @@ async function main(): Promise<number> {
     const accept = formatAccept(summary);
     const report = {
       stable: {
-        source_revision: git("rev-parse", "HEAD").trim(), dirty: dirtyOutsideOutput(root, git("status", "--porcelain"), options.out),
+        source_revision: git("rev-parse", "HEAD").trim(), dirty: dirtyOutsideOutput(root, git("status", "--porcelain"), options.out, process.cwd()),
         seed: options.seed, mutants: options.mutants, lanes: options.lanes, rng: RNG_SPEC, operators: Object.fromEntries(OPERATORS.map((operator) => [operator.name, { version: operator.version, layer: operator.layer, target_step: operator.targetStep, repair_boundary: operator.repairBoundary }])),
         summary, controls: controls.map((control) => ({ name: control.name, passed: control.passed })),
         per_step: mutants.perStep, per_operator: mutants.perOperator, verdict_noops: Object.values(mutants.perStep).reduce((total, counts) => total + counts.verdict_noop, 0), masked: Object.values(mutants.perStep).reduce((total, counts) => total + counts.masked, 0),

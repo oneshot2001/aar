@@ -21,6 +21,14 @@ test("fuzz report hygiene: an absolute output path is clean", () => {
   expect(dirtyOutsideOutput(repoRoot, "?? docs/fuzz-runs/X/\n", "/repo/docs/fuzz-runs/X")).toBe(false);
 });
 
+test("fuzz report hygiene: --out relative to a subdirectory cwd is clean", () => {
+  expect(dirtyOutsideOutput(repoRoot, "?? docs/fuzz-runs/X/\n", "../docs/fuzz-runs/X", "/repo/harness")).toBe(false);
+});
+
+test("fuzz report hygiene: --out relative to a subdirectory cwd preserves outside changes", () => {
+  expect(dirtyOutsideOutput(repoRoot, "?? docs/fuzz-runs/X/\n M harness/difffuzz.ts\n", "../docs/fuzz-runs/X", "/repo/harness")).toBe(true);
+});
+
 test("fuzz report hygiene: changes outside output are dirty", () => {
   expect(dirtyOutsideOutput(repoRoot, "?? docs/fuzz-runs/X/\n M harness/difffuzz.ts\n", output)).toBe(true);
   expect(dirtyOutsideOutput(repoRoot, " M harness/difffuzz.ts\n", output)).toBe(true);
