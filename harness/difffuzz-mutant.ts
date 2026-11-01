@@ -110,5 +110,5 @@ export const dispatchedAuthorization = (bundle: Obj): ((value: Obj) => boolean) 
   return target === undefined ? null : (value) => toHex(value.receipt_id as Uint8Array) === toHex(target.receipt_id as Uint8Array);
 };
 
-export const op = (name: string, layer: Operator["layer"], targetStep: number | null, repairBoundary: string, applicable: (seed: SeedView) => boolean, apply: (seed: SeedView, rng: Rng) => Mutant | null): Operator => ({ name, version: 1, layer, targetStep, repairBoundary, applicable, apply });
+export const op = (name: string, layer: Operator["layer"], targetStep: number | null, repairBoundary: string, applicable: (seed: SeedView) => boolean, apply: (seed: SeedView, rng: Rng) => Mutant | null, version = 1): Operator => ({ name, version, layer, targetStep, repairBoundary, applicable, apply });
 export const fresh = (seed: SeedView): Obj => clone(seed.bundle);

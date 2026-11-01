@@ -71,14 +71,16 @@ const GENERIC: Operator[] = [
     resignAt(bundle, category, index, (next) => { next[field] = longer ? Uint8Array.from([...value, 0]) : value.slice(0, -1); });
     return encode(bundle, `artifacts.${category}.*.payload.${field}`, `${category}[${index}].${field} length ${longer ? "+" : "-"}1`);
   }),
-  op("payload/field-drop", "payload", null, "re-id + re-sign + sort", always, (seed, rng) => {
+  op("payload/field-drop", "payload", null, "re-id + re-sign + sort; receipt binding/emission/issuer_role/issuer_principal_type deletions replace payload only (id, COSE and order kept)", always, (seed, rng) => {
     const bundle = fresh(seed); const { category, index } = rng.pick(envelopes(bundle));
     const keys = Object.keys(payload(list(bundle, category)[index]!)).filter((key) => !key.endsWith("_id") || key === "subject_credential_id"); // the id field is recomputed by the repair, dropping it is a no-op
     if (keys.length === 0) return null;
     const field = rng.pick(keys);
-    resignAt(bundle, category, index, (next) => { delete next[field]; });
+    if (category === "receipts" && ["binding", "emission", "issuer_role", "issuer_principal_type"].includes(field)) {
+      const envelope = list(bundle, category)[index] as CborValue[]; const next = payload(envelope); delete next[field]; envelope[0] = encodeCbor(next);
+    } else resignAt(bundle, category, index, (next) => { delete next[field]; });
     return encode(bundle, `artifacts.${category}.*.payload.${field}`, `${category}[${index}] drop ${field}`);
-  }),
+  }, 2),
   op("payload/id-swap", "payload", null, "re-id + re-sign + sort", always, (seed, rng) => {
     const bundle = fresh(seed); const pool = ids(bundle);
     // an artifact's own id field is recomputed by the repair, so swapping it would be a no-op

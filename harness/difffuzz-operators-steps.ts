@@ -1,7 +1,7 @@
 // Step-targeted operators (Codex's deep table, D-02): each names the step it
 // aims at and the repair boundary it runs, so a mutant that dies earlier is
 // counted as masked rather than as coverage of that step.
-import { CborValue, toHex } from "./cbor";
+import { CborValue, equalBytes, toHex } from "./cbor";
 import { Mutant, Operator, SeedView, dispatchedAuthorization, encode, evaluationTime, fresh, getAt, list, op, resignAt } from "./difffuzz-mutant";
 import { Rng } from "./difffuzz-rng";
 import { Obj, artifacts, mutateArtifact, mutateLastEvent, payload, rebuildManifest, recalcSelector, sortArtifacts } from "./mutate";
@@ -66,22 +66,28 @@ export const STEP_OPERATORS: readonly Operator[] = [
   }),
   op("delegation/embedded", "payload", 13, "delegation re-id + decision commitment + descendant receipt cascade (mutateEmbeddedDelegation on the dispatched authorization)", (seed) => dispatchedAuthorization(seed.bundle) !== null, (seed, rng) => {
     const bundle = fresh(seed); const authorization = dispatchedAuthorization(bundle)!; const attempts = receipts(bundle).filter((value) => value.kind === "action_attempt").map((value) => (value.emission as Obj).committed_at as number);
-    const choice = rng.int(4); let detail = "";
+    let detail = "";
     mutateEmbeddedDelegation(bundle, (delegation) => {
+      const choice = Array.isArray((delegation.scope as Obj | null)?.actions) ? rng.int(4) : 1 + rng.int(3);
       if (choice === 0) { const actions = (delegation.scope as Obj).actions as string[]; const next = actions.includes("camera.ptz.preset") ? ["camera.view"] : ["camera.ptz.preset"]; (delegation.scope as Obj).actions = next; detail = `scope.actions -> ${next[0]}`; }
       else if (choice === 1) { delegation.not_before = rng.near(attempts.length ? Math.min(...attempts) : (delegation.not_after as number) - 1); detail = `not_before = ${delegation.not_before}`; }
       else if (choice === 2) { delegation.not_after = rng.near(attempts.length ? Math.max(...attempts) : 1); detail = `not_after = ${delegation.not_after}`; }
       else { delegation.parent_delegations = [rng.bytes(32)]; detail = "parent_delegations -> unknown"; }
     }, authorization);
     return encode(bundle, "artifacts.receipts.*.payload.body.delegation", `embedded delegation ${detail}`);
-  }),
-  op("epoch/event", "payload", 14, "mutateArtifact (re-id + re-sign + sort); chain not relinked", (seed) => list(seed.bundle, "epoch_events").length > 1, (seed, rng) => {
-    const bundle = fresh(seed);
-    if (rng.bool()) { mutateArtifact(bundle, "epoch_events", (value) => value.event_seq === 1, (value) => { value.previous_event_digest = rng.bytes(32); }); return encode(bundle, "artifacts.epoch_events.*.payload.previous_event_digest", "event_seq 1 previous_event_digest random"); }
+  }, 2),
+  op("epoch/event", "payload", 14, "mutateArtifact (re-id + re-sign + sort); chain not relinked", (seed) => list(seed.bundle, "epoch_events").map(payload).some((value) => value.event_seq === 1 || value.event === "anchor_submitted"), (seed, rng) => {
+    const bundle = fresh(seed); const events = list(bundle, "epoch_events").map(payload); const first = events.some((value) => value.event_seq === 1); const last = events.some((value) => value.event === "anchor_submitted");
+    if (!first && !last) return null;
+    if (first && (!last || rng.bool())) { mutateArtifact(bundle, "epoch_events", (value) => value.event_seq === 1, (value) => { value.previous_event_digest = rng.bytes(32); }); return encode(bundle, "artifacts.epoch_events.*.payload.previous_event_digest", "event_seq 1 previous_event_digest random"); }
     let detail = ""; mutateLastEvent(bundle, (value) => { value.occurred_at = (value.occurred_at as number) + (rng.bool() ? 1 : -1); detail = `last event occurred_at = ${value.occurred_at}`; });
     return encode(bundle, "artifacts.epoch_events.*.payload.occurred_at", detail);
-  }),
-  op("manifest/index", "payload", 15, "rebuildManifest(keepAnchor) + rebuildEventChain + rebuildAnchor", (seed) => list(seed.bundle, "epoch_manifests").length > 0 && (((payload(list(seed.bundle, "epoch_manifests")[0]!).receipt_index as Obj)?.entries as CborValue[] | undefined)?.length ?? 0) > 1, (seed, rng) => {
+  }, 2),
+  op("manifest/index", "payload", 15, "rebuildManifest(keepAnchor) + rebuildEventChain + rebuildAnchor", (seed) => {
+    const manifests = list(seed.bundle, "epoch_manifests"); if (!manifests.length) return false;
+    const manifest = payload(manifests[0]!); const anchors = list(seed.bundle, "anchors");
+    return (((manifest.receipt_index as Obj)?.entries as CborValue[] | undefined)?.length ?? 0) > 1 && (!anchors.length || anchors.map(payload).some((a) => a.manifest_id instanceof Uint8Array && manifest.manifest_id instanceof Uint8Array && equalBytes(a.manifest_id, manifest.manifest_id)));
+  }, (seed, rng) => {
     const bundle = fresh(seed); const choice = rng.int(6); let detail = "";
     rebuildManifest(bundle, (manifest) => {
       const index = manifest.receipt_index as Obj; const entries = index.entries as Obj[]; const i = rng.int(entries.length); const j = (i + 1) % entries.length;
@@ -93,7 +99,7 @@ export const STEP_OPERATORS: readonly Operator[] = [
       else { index.leaf_count = (index.leaf_count as number) + (rng.bool() ? 1 : -1); detail = "leaf_count +-1"; }
     }, true);
     return encode(bundle, "artifacts.epoch_manifests.*.payload.receipt_index", `manifest ${detail}`);
-  }),
+  }, 2),
   op("merkle/sibling", "payload", 16, "none", (seed) => list(seed.bundle, "merkle_proofs").length > 0, (seed, rng) => {
     const bundle = fresh(seed); const proofs = artifacts(bundle).merkle_proofs as Obj[]; const index = rng.int(proofs.length); const proof = proofs[index]!; const siblings = proof.siblings as Uint8Array[];
     const choice = siblings.length > 0 ? rng.int(3) : 1 + rng.int(2); let detail = "";
