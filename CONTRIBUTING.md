@@ -22,6 +22,7 @@ harness must agree byte for byte), fires eight controls, then mutates seeds with
 `harness/difffuzz-operators*.ts`. `--legs` runs the leg oracle over every positive row; `--premises` records which
 pyref rejection sites fired (`pyref/batch.py --premises`, inventory from `pyref/premises.py`) and writes
 `saturation.json`; `--cli-lane N` sends N sampled mutants plus the relying-party rows through both CLIs.
+`DIR/cli/` holds only the bundles of disagreeing CLI-lane rows and they are not finding packages.
 Findings land under `DIR/<id>/` (`bundle.cbor`, every file input copied under its sha256 name, `inputs.json`, `both.json`);
 `DIR/legs.json` breaks `unsupported` (and every other leg outcome) out per leg and per leg/class; `DIR/report.json`
 carries the run line, whose one shape is

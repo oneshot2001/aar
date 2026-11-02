@@ -8,7 +8,8 @@
 // payload with the identity-dependent members (verifier, verdict_id) removed
 // and the signature left out. Seeds whose inputs name a prior/replay state or
 // a trust-policy pin have no harness CLI twin and are counted not applicable.
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CborValue, decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
 import { BaselineRow } from "./difffuzz-baseline";
@@ -54,27 +55,36 @@ export function classify(id: string, kind: CliRow["kind"], pyref: CliOutput, har
 // Only the flags both CLIs share can be passed; anything else makes the row not applicable to the lane.
 export const laneApplicable = (inputs: Inputs): boolean => inputs.prior_state === null && (inputs.replay_state === null || ((inputs.replay_state as { entries?: unknown[] }).entries ?? []).length === 0) && inputs.trust_policy === null;
 
-function one(id: string, kind: CliRow["kind"], bundle: Uint8Array, inputs: Inputs, directory: string): CliRow {
+function one(id: string, kind: CliRow["kind"], bundle: Uint8Array, inputs: Inputs, directory: string, out: string): CliRow {
   const file = join(directory, `${id}.cbor`); writeFileSync(file, bundle);
   const shared = ["--at", String(inputs.evaluated_at), ...(inputs.policy !== null ? ["--policy", inputs.policy, "--signing-key", inputs.signing_key!] : [])];
   const pyref = Bun.spawnSync(["python3", "-B", "-m", "pyref", "verify", file, ...shared], { cwd: root });
   const harness = Bun.spawnSync(["bun", "run", "harness/verify.ts", file, ...shared], { cwd: root });
-  return classify(id, kind, { exitCode: pyref.exitCode, stdout: pyref.stdout.toString() }, { exitCode: harness.exitCode, stdout: harness.stdout.toString() });
+  const row = classify(id, kind, { exitCode: pyref.exitCode, stdout: pyref.stdout.toString() }, { exitCode: harness.exitCode, stdout: harness.stdout.toString() });
+  if (row.disagreement) {
+    const retained = join(out, "cli"); mkdirSync(retained, { recursive: true });
+    writeFileSync(join(retained, `${id}.cbor`), bundle);
+  }
+  return row;
 }
 
 export function runCliLane(sample: number, executed: readonly Planned[], rows: readonly BaselineRow[], rng: Rng, out: string): CliLane {
-  const directory = join(out, "cli"); mkdirSync(directory, { recursive: true });
   const applicableMutants = executed.filter((item) => laneApplicable(item.entry.row.seed.inputs));
   const pool = [...applicableMutants]; const picked: Planned[] = [];
   while (picked.length < sample && pool.length > 0) picked.push(...pool.splice(rng.int(pool.length), 1));
   const rp = rows.filter((row) => row.seed.inputs.policy !== null);
   const applicableRp = rp.filter((row) => laneApplicable(row.seed.inputs));
-  const result = [
-    ...picked.map((item) => one(item.id, "mutant", item.mutant.bytes, item.entry.row.seed.inputs, directory)),
-    ...applicableRp.map((row, index) => one(`rp-${String(index).padStart(2, "0")}`, "rp-seed", row.seed.raw, row.seed.inputs, directory)),
-  ];
-  return {
-    sampled_mutants: picked.length, rp_seeds: applicableRp.length, pool_not_applicable: executed.length - applicableMutants.length, rp_not_applicable: rp.length - applicableRp.length, rows: result,
-    disagreements: result.filter((row) => row.disagreement).map((row) => `${row.id}: ${row.reasons.join("; ")}`),
-  };
+  const directory = mkdtempSync(join(tmpdir(), "difffuzz-cli-"));
+  try {
+    const result = [
+      ...picked.map((item) => one(item.id, "mutant", item.mutant.bytes, item.entry.row.seed.inputs, directory, out)),
+      ...applicableRp.map((row, index) => one(`rp-${String(index).padStart(2, "0")}`, "rp-seed", row.seed.raw, row.seed.inputs, directory, out)),
+    ];
+    return {
+      sampled_mutants: picked.length, rp_seeds: applicableRp.length, pool_not_applicable: executed.length - applicableMutants.length, rp_not_applicable: rp.length - applicableRp.length, rows: result,
+      disagreements: result.filter((row) => row.disagreement).map((row) => `${row.id}: ${row.reasons.join("; ")}`),
+    };
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
