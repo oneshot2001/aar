@@ -407,6 +407,11 @@ prepared from this crosswalk may say:
   `ingress_completeness` is not established.
 - "Independently verified" while the verifier identity is the published test
   key (D-58).
+- "Produced by [provider]'s model" while `maximum_provenance_class` reads
+  `not_evaluated` or below `provider_attested`; the inference receipt's model
+  identity is the producer's own label. At `provider_attested`, say only that a provider
+  artifact is carried: the verifier does not interpret its content
+  (CONFORMANCE step 19).
 - "Nobody else does this" — say "not found in the related-work corpus."
 
 ## 6. Consolidated gaps, with an owner
