@@ -12,6 +12,7 @@ import { SeedEntry } from "./difffuzz-mutants";
 import { referencedPayloads } from "./difffuzz-operators-steps";
 import { Inputs } from "./difffuzz-pyref";
 import { Rng } from "./difffuzz-rng";
+import { parsePriorState } from "./emission-identity";
 import { Obj, artifacts, clone, flipSignature, mutateReceiptWhere, payload, protectedMap, sortArtifacts } from "./mutate";
 import { mutateEmbeddedDelegation } from "./mutate-graph";
 import { loadConfiguration } from "./relying-party";
@@ -58,6 +59,26 @@ const unusedCredentials = (bundle: Obj, policy: boolean): number[] => {
 };
 const dispatchedActions = (bundle: Obj): Set<string> => new Set(receipts(bundle).filter((value) => value.kind === "action_attempt").map((value) => ((value.body as Obj).action as Obj).action_name as string));
 
+// On a conformant baseline, history ID equality already proves an exact copy.
+// Count carried witnesses, not prior entries; never consult the mutant verdict.
+const removedHistoryObservations = (entry: SeedEntry, index: number): string[] => {
+  if (!entry.view.conformant || entry.row.harness.result !== "conformant") return [];
+  const prior = entry.row.seed.inputs.prior_state;
+  const history = prior === null ? [] : parsePriorState(prior);
+  const known = new Set(history.map((item) => toHex(item.receiptId)));
+  const witnesses = list(entry.view.bundle, "receipts").map((envelope) => {
+    const value = payload(envelope);
+    if (known.has(toHex(value.receipt_id as Uint8Array))) return "duplicate_exact";
+    const binding = value.binding as Obj; const emission = value.emission as Obj;
+    const kid = toHex(protectedMap(envelope).get(4) as Uint8Array);
+    return history.some((item) => (toHex(item.issuerKid) === kid && (emission.issuer_seq as number) < item.issuerSeq) ||
+      (toHex(item.epochOwnerKid) === toHex(binding.epoch_owner_kid as Uint8Array) && item.epochId === binding.epoch_id && (binding.epoch_seq as number) < item.epochSeq))
+      ? "sequence_below_observed_history" : null;
+  });
+  const removed = witnesses[index];
+  return removed != null && !witnesses.some((witness, i) => i !== index && witness === removed) ? [removed] : [];
+};
+
 // Relying-party ceiling: drop one allowed_key_usages entry from the policy's artifact root; required when a carried
 // credential of that usage signs something, in which case the policy must reject (relying_party.py:254).
 const rpRemoval: Apply = (entry, rng, work, id) => {
@@ -98,7 +119,7 @@ export const LEGS: readonly Leg[] = [
     removal: (entry) => { const bundle = fresh(entry); const anchored = where(bundle, (value) => ((value.evidence as Obj).time as Obj).class === "externally_anchored").length > 0; artifacts(bundle).anchors = []; return done(bundle, `anchors removed (${anchored ? "an externally_anchored receipt names one" : "unused by any receipt"})`, anchored ? reject("evidence/time-class-unsatisfied@19") : stays("anchor_existence_order_only")); } } },
   { leg: "outcome-independence", step: 10, applicable: (bundle) => where(bundle, (value) => value.kind === "outcome_observation").length > 0, classes: {
     corruption: (entry, rng) => { const bundle = fresh(entry); const index = rng.pick(where(bundle, (value) => value.kind === "outcome_observation")); byReceiptId(bundle, index, (value) => { (value.body as Obj).subject_id = rng.bytes(32); }); return done(bundle, `outcome_observation[${index}].body.subject_id -> unknown`, reject("receipt/outcome-subject-mismatch@10")); },
-    removal: (entry, rng) => { const bundle = fresh(entry); const parents = new Set(receipts(bundle).flatMap((value) => (value.parents as Obj[]).map((edge) => toHex(edge.parent_id as Uint8Array)))); const leaves = where(bundle, (value) => value.kind === "outcome_observation" && !parents.has(toHex(value.receipt_id as Uint8Array))); if (leaves.length === 0) return null; const index = rng.pick(leaves); list(bundle, "receipts").splice(index, 1); sortArtifacts(bundle, "receipts"); return done(bundle, `terminal outcome_observation[${index}] removed`, stays()); } } },
+    removal: (entry, rng) => { const bundle = fresh(entry); const parents = new Set(receipts(bundle).flatMap((value) => (value.parents as Obj[]).map((edge) => toHex(edge.parent_id as Uint8Array)))); const leaves = where(bundle, (value) => value.kind === "outcome_observation" && !parents.has(toHex(value.receipt_id as Uint8Array))); if (leaves.length === 0) return null; const index = rng.pick(leaves); list(bundle, "receipts").splice(index, 1); sortArtifacts(bundle, "receipts"); return done(bundle, `terminal outcome_observation[${index}] removed`, stays(...removedHistoryObservations(entry, index))); } } },
   { leg: "mediator-countersignature", step: 6, applicable: (bundle) => list(bundle, "mediator_countersignatures").length > 0, classes: {
     corruption: (entry) => { const bundle = fresh(entry); flipIn(bundle, "mediator_countersignatures", 0); return done(bundle, "mediator countersignature signature flipped", reject("countersign/invalid@6")); },
     removal: (entry) => { const bundle = fresh(entry); delete artifacts(bundle).mediator_countersignatures; return done(bundle, "mediator countersignatures removed", stays("mediator_countersigned")); } } },
