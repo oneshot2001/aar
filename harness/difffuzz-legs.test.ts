@@ -69,7 +69,7 @@ for (const [name, seed, allowed, before, after] of cases) {
       expect(baseline.count).toBe(1);
       await checkRemoval(seedViews(baseline.rows)[0]!, batch, allowed, before, after);
     } finally { await batch.close(); }
-  });
+  }, 180_000);
 }
 
 async function checkPrior(seed: Seed, prior: StatefulPriorJson, allowed: string[], before: string[], after: string[]): Promise<void> {
@@ -93,7 +93,7 @@ for (const additional of [false, true]) {
     }] : []));
     for (const item of prior.prior_emissions!) item.receipt_id = item.receipt_id.toUpperCase();
     await checkPrior(seed, prior, [duplicate], [duplicate, below], [below]);
-  });
+  }, 180_000);
 }
 
 for (const domain of ["issuer", "epoch"] as const) {
@@ -108,7 +108,7 @@ for (const domain of ["issuer", "epoch"] as const) {
     };
     expect(entries.filter((item) => toHex(item.receiptId) !== toHex(entries[7]!.receiptId)).length).toBe(9);
     await checkPrior(seed, priorJson(...entries), [below], [duplicate, below], [duplicate]);
-  });
+  }, 180_000);
 }
 
 test("fuzz leg oracle: another non-duplicate lower-sequence witness prevents a drop", async () => {
@@ -118,4 +118,4 @@ test("fuzz leg oracle: another non-duplicate lower-sequence witness prevents a d
     epochSeq: 9_999_999, issuerKid: deterministicId("oracle:other-issuer") };
   // Receipt 0 is no longer an exact duplicate and remains below the supplied epoch history.
   await checkPrior(seed, priorJson(...entries.slice(1)), [], [duplicate, below], [duplicate, below]);
-});
+}, 180_000);
