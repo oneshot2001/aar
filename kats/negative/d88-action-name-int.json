@@ -1,0 +1,7 @@
+{
+  "name": "d88-action-name-int",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The refused attempt's normalized action_name is the integer 7.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

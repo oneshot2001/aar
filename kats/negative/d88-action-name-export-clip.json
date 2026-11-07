@@ -1,0 +1,7 @@
+{
+  "name": "d88-action-name-export-clip",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "The refused attempt's normalized action_name is camera.export_clip.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -80,7 +80,7 @@ def fill_acquisition(record: dict[str, Any], files: list[dict[str, Any]], specim
         record["files"] = files
         record["copy_method"] = "python3 shutil.copyfile (byte copy); SHA-256 of source and destination with hashlib (stdlib)"
         record["tool_versions"] = {"python": platform.python_version(), "copy": "shutil.copyfile", "hash": "hashlib.sha256",
-                                   "pyref": "v0.4.0 CLI at the commit recorded in 03-source-and-run.md"}
+                                   "pyref": "v0.4.1 CLI at the commit recorded in 03-source-and-run.md"}
         record["collection_time_utc"] = _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat()
         record["platform"] = platform.platform()
         return record

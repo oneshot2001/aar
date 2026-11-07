@@ -1,0 +1,7 @@
+{
+  "name": "d88-scope-non-text-member",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The approval authorization's unused embedded delegation scope.actions is [7].",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

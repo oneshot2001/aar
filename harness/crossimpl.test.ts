@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { decodeCbor, encodeCbor, fromHex, toHex } from "./cbor";
 import { buildD78ItemVariants, buildD78ReportVariants, buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildD82PositiveFixtures, buildEvidenceCommitFixtures, buildNegativeFixtures, buildPresentationEnumVariants } from "./negative-fixtures";
 import { verifyBundle } from "./verifier";
+import { buildD88Probes } from "./d88-fixtures";
 import { rpOptions } from "./relying-party-inputs";
 import { statefulOptions } from "./stateful-fixtures";
 
@@ -45,6 +46,7 @@ function cases(): Case[] {
     ...buildNegativeFixtures().filter((fixture) => fixture.filename.startsWith("repair-")).map((fixture) => ({
       name: fixture.filename, bytes: fixture.bytes, at: AT, code: fixture.descriptor.expected_code, step: fixture.descriptor.expected_step ?? repairStep(fixture.filename),
     })),
+    ...buildD88Probes().map((probe) => ({ ...probe, at: AT, code: null, step: null })),
   ];
 }
 

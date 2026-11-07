@@ -1,0 +1,7 @@
+{
+  "name": "d88-order-scope-before-not-before",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "An added top-level delegation with scope.actions [camera.export_clip] AND not_before text; scope actions precede the not_before rule.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

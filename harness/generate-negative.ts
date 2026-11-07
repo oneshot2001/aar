@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildD78Fixtures, buildD77PositiveFixtures, buildD80D81PositiveFixtures, buildD82PositiveFixtures, buildClassBoundaryFixtures, buildNegativeFixtures, buildTerminalOutcomeFixtures } from "./negative-fixtures";
 import { buildD87Fixtures } from "./d87-fixtures";
+import { buildD88Fixtures } from "./d88-fixtures";
 import { buildStatefulFixtures } from "./stateful-fixtures";
 import { buildFixtures } from "./fixtures";
 
@@ -14,7 +15,7 @@ for (const entry of await readdir(outputDirectory)) {
   if (entry.endsWith(".cbor") || entry.endsWith(".json")) await rm(join(outputDirectory, entry));
 }
 
-const fixtures = buildNegativeFixtures();
+const fixtures = [...buildNegativeFixtures(), ...buildD88Fixtures()];
 for (const fixture of fixtures) {
   await writeFile(join(outputDirectory, `${fixture.filename}.cbor`), fixture.bytes);
   await writeFile(join(outputDirectory, `${fixture.filename}.json`), `${JSON.stringify(fixture.descriptor, null, 2)}\n`);

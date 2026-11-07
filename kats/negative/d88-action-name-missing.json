@@ -1,0 +1,7 @@
+{
+  "name": "d88-action-name-missing",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "The refused attempt's normalized action has no action_name.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

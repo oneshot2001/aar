@@ -142,7 +142,9 @@ normative as the step order itself (D-54).
       present `revoked_at` or `compromise_at` that is not a `unix-time` is
       `schema/bad-type` (D-81). More generally (D-82), in CDDL field order
       within each production, validate every closed scalar enum (credential
-      `key_usage` and `principal_role`; delegation `use`; epoch event `event`;
+      `key_usage` and `principal_role`; delegation `use`; the action names
+      of a normalized action, a command manifest, and a map-shaped delegation
+      `scope`'s array `actions` (D-88); epoch event `event`;
       manifest `close_reason`, `late_arrival_policy`, and `fork_policy`;
       transformation `operation`; `phase`; `format`; `reversibility`; outcome
       `state`; evidence `time.class`, `provenance.class`, and `outcome.level`;

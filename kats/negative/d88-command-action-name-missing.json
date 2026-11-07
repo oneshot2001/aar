@@ -1,0 +1,7 @@
+{
+  "name": "d88-command-action-name-missing",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "The refused attempt's command manifest has no action_name (command_id recomputed); the normalized action is valid.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

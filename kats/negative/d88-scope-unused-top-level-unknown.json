@@ -1,0 +1,7 @@
+{
+  "name": "d88-scope-unused-top-level-unknown",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "An added, unused top-level delegation whose scope.actions is [camera.export_clip].",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

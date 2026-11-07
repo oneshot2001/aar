@@ -1,0 +1,7 @@
+{
+  "name": "d88-refusal-export-clip-consistent",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "A consistent refusal of camera.export_clip (oneshot2001/aar#1 item 3): the permit's embedded delegation scope adds it, and the refused attempt's action, command manifest and canonical command carry it, command_digest and command_id recomputed; both v0.4.0 verifiers said conformant.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

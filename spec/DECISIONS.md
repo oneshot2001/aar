@@ -2489,3 +2489,71 @@ reported `identity/reuse` at step 9; row `d87-history-after-key-not-found`).
 
 The declared spec becomes v0.4.0. Every signed verdict re-pins; the decoded
 old/new delta is `docs/verifier-delta-audit-v0.4.0.md`.
+
+## D-88 — Action names are a closed enum at step 6
+
+**Decision.** Step 6.6 validates the three action-name productions of
+`aar-core.cddl` as closed scalar enums (`"camera.stream.view"` /
+`"camera.ptz.preset"`), in the order each verifier already validates the
+production:
+
+1. **Normalized action** (an action-attempt body's `action`):
+   `action_name` for presence (`schema/missing-field`), type
+   (`schema/bad-type`), then value (`schema/enum-unknown`), before
+   `informational_reversibility`.
+2. **Command manifest** (an action-attempt body's `command`):
+   `action_name` in the same order, after the action's reversibility checks
+   and before `excluded_fields`. The command map gains no presence pre-pass.
+3. **Delegation scope** (every delegation envelope step 6 validates: each
+   top-level delegation, used or not, and each delegation embedded in an
+   authorization receipt; a `body.delegation` on any other receipt stays
+   ignored, amendment m): when `scope` is a text-keyed map whose `actions`
+   is an array, each member in array order: a non-text member is
+   `schema/bad-type`, an unlisted text member `schema/enum-unknown`. This
+   runs after the delegation's closed-map presence check and before its
+   `not_before` rule and fixed-size identifiers. Any other `scope` or
+   `actions` shape keeps its existing later-step behavior (a used embedded
+   delegation's is `delegation/scope`@13 under amendment l; a referenced
+   parent's is `delegation/chain-invalid`), as D-78 left a non-map
+   consumption item to step 10. `purpose_ids` and `allowed_profiles` keep
+   amendments o and ag.
+
+The fourth copy of the enum, `canonical-command-payload.operation`, needs no
+new check: step 10 already requires it to equal the validated
+`action_name`. No wire change. Every value the CDDL already admits keeps its
+outcome; no existing corpus row carries a missing, mistyped or unlisted name
+at the three sites, so the change shows only in the rows D-88 adds.
+
+**Why.** An outside emitter (ALEETH ICA, 2026-11-06, oneshot2001/aar#1,
+item 3) produced a refusal of `camera.export_clip` that both verifiers
+reported `conformant`. The name sat in a delegation scope, a normalized
+action and a command manifest. D-82 said "every closed scalar enum", but
+its list did not name these three. The steps that do read action names
+judge agreement, not membership: step 10 compares the action, the command
+and the canonical command with each other, step 7 recomputes `command_id`
+over whatever name the manifest carries, and step 13 scope membership runs
+only for dispatches, so a refusal never reaches it. Differential fuzzing
+compares the verifiers with each other, so a check missing from both never
+splits them.
+
+**Alternatives considered.** Judge the name at step 13 as
+`delegation/scope` (rejected: a value outside the CDDL is a schema failure,
+not an authorization one, a refusal never reaches step 13, and a command
+manifest has no scope to fail). Type the whole delegation `scope` at
+step 6 (rejected here: it reverses amendment l for non-map scopes and
+belongs to the BACKLOG step-6 traversal item). Check only the two
+receipt-body sites (rejected: the scope is where an emitter first declares
+the action, and the ICA bundle carries it there too).
+
+**Residuals.** The `action-names` occurrence bound stays with the step-6
+traversal item: an array of 17 listed names still passes, and an empty one
+is untouched. The CDDL requires neither uniqueness nor order for
+`action-names`, and D-88 adds neither. `life_safety_action_names` in the
+trust inputs stays bounded text, request envelopes carry only an intent
+digest, and relying-party policy has no action list; none is an action-name
+site. The demo wire builder copies the name it is given, so a verifier
+remains the only enforcement. A new action name needs a CDDL change and a
+spec version, as before.
+
+The declared spec becomes v0.4.1. Every signed verdict re-pins; the decoded
+old/new delta is `docs/verifier-delta-audit-v0.4.1.md`.

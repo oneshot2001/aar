@@ -1,0 +1,7 @@
+{
+  "name": "d88-order-command-before-excluded",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "The refused attempt's command manifest action_name camera.export_clip AND no excluded_fields (command_id recomputed); action_name comes first.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

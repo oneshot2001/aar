@@ -1,0 +1,7 @@
+{
+  "name": "d88-order-reversibility-before-command",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "The refused attempt's informational_reversibility partially AND its command manifest without action_name (command_id recomputed); the action's checks come first.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

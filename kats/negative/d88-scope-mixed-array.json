@@ -1,0 +1,7 @@
+{
+  "name": "d88-scope-mixed-array",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "The permit authorization's embedded delegation scope.actions is [camera.stream.view, camera.export_clip, 7]: members in array order.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

@@ -1,0 +1,7 @@
+{
+  "name": "d88-order-closed-map-first",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "The top-level delegation without not_before AND scope.actions [camera.export_clip]; the closed-map presence check comes first.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}
