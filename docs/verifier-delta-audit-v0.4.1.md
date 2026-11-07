@@ -8,12 +8,12 @@ signed, so the audit diffs decoded fields, not bytes.
 `pyref.kat` enumeration (550 rows) with the row's own inputs
 (`KAT_EVALUATION_TIME`, the row's prior and replay state, or its
 relying-party inputs sidecar); pyref at the D-88 build did the same over its
-enumeration (564 rows). Both verdict envelopes were decoded; payload maps were
+enumeration (565 rows). Both verdict envelopes were decoded; payload maps were
 flattened and diffed field by field, the protected headers and signatures
 compared, and result, reason and first failing step compared. Rows are paired
 by path. The harness needs no separate column for the existing rows: the
 full-corpus gate (`harness/crossimpl.test.ts`) holds it byte-identical to
-pyref on every row, before and after. The 14 rows v0.4.1 adds, and the one
+pyref on every row, before and after. The 15 rows v0.4.1 adds, and the one
 probe it pins outside the corpus, were also run through both v0.4.0 verifiers.
 
 ## The 550 existing rows
@@ -37,7 +37,7 @@ Rows by directory: `negative` 417 (`negative/stateful` included),
 No existing row carries a missing, mistyped or unlisted action name at the
 three D-88 sites, as D-88 states.
 
-## The 14 rows v0.4.1 adds, and one probe
+## The 15 rows v0.4.1 adds, and one probe
 
 Old codes are what each v0.4.0 verifier returns for the same bytes (no prior
 or replay state; evaluation time `1735689800`). Every row starts from
@@ -63,6 +63,7 @@ purpose, to pin which check fires first.
 | `negative/d88-scope-mixed-array` (`["camera.stream.view", "camera.export_clip", 7]`) | conformant | conformant | `schema/enum-unknown`@6 (array order) |
 | `negative/d88-order-scope-before-not-before` (and `not_before` text) | `schema/bad-type`@6 | same | `schema/enum-unknown`@6 |
 | `negative/d88-order-closed-map-first` (and no `not_before`) | `schema/missing-field`@6 | same | `schema/missing-field`@6, unchanged |
+| `negative/d88-order-action-name-before-reversibility` (no action `action_name`, and `partially`; review follow-up) | `schema/enum-unknown`@6 | same | `schema/missing-field`@6 |
 | `negative/d88-order-reversibility-before-command` (`partially`, and no command `action_name`) | `schema/enum-unknown`@6 | same | `schema/enum-unknown`@6, unchanged (the reversibility failure) |
 | `negative/d88-order-command-before-excluded` (and no `excluded_fields`) | `schema/missing-field`@6 | same | `schema/enum-unknown`@6 |
 | `negative/d88-refusal-export-clip-consistent` | conformant | conformant | `schema/enum-unknown`@6 |
@@ -86,6 +87,6 @@ It is a cross-implementation probe, not a corpus row, because the CDDL oracle
 the extra body member is not; closing it stays with the BACKLOG step-6
 traversal item.
 
-Corpus after re-pin: 564 rows (`pyref/results-c2.json`), 564 matched, 564
-deterministic, 0 divergences (469 nonconformant, 90 conformant, 5
+Corpus after re-pin: 565 rows (`pyref/results-c2.json`), 565 matched, 565
+deterministic, 0 divergences (470 nonconformant, 90 conformant, 5
 indeterminate); C1 84 fixtures, unchanged.

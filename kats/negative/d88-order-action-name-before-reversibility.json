@@ -1,0 +1,7 @@
+{
+  "name": "d88-order-action-name-before-reversibility",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "The refused attempt's normalized action without action_name AND informational_reversibility partially; action_name comes first.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

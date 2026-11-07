@@ -1,6 +1,6 @@
 {
   "deterministic": true,
-  "deterministic_fixtures": 564,
+  "deterministic_fixtures": 565,
   "divergence_count": 0,
   "divergences": [],
   "entry_point_findings": 1,
@@ -1501,6 +1501,20 @@
       "produced_result": "nonconformant",
       "stateful_properties": "not_evaluated",
       "verdict_sha256": "6dfdeee2819fe0a274110caec098763d8d6d1af0594bf26ba0df97672cde99c3"
+    },
+    {
+      "deterministic": true,
+      "expected_class": null,
+      "expected_code": "schema/missing-field",
+      "expected_result": "nonconformant",
+      "first_failure_step": 6,
+      "fixture": "kats/negative/d88-order-action-name-before-reversibility.cbor",
+      "matched": true,
+      "produced_class": null,
+      "produced_code": "schema/missing-field",
+      "produced_result": "nonconformant",
+      "stateful_properties": "not_evaluated",
+      "verdict_sha256": "5832eba61c67079d0c05c6bbafe1eec499e47cd13d7e435f3a931bb77f5e818e"
     },
     {
       "deterministic": true,
@@ -8195,8 +8209,8 @@
       "verdict_sha256": "b42d02668f8dd7f060cf0957391dae5b243afe419ca27bd5ac5667355a789dd4"
     }
   ],
-  "fixtures_evaluated": 564,
-  "matches": 564,
+  "fixtures_evaluated": 565,
+  "matches": 565,
   "mismatches": 0,
   "schema_version": 1,
   "slice": "C2"
