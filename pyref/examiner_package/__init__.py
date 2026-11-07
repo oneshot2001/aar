@@ -39,19 +39,19 @@ OUTSIDE_REPRODUCIBLE_SET = ("03-source-and-run.md", "01-copy/inventory.json")
 
 
 def source_inventory() -> list[dict[str, Any]]:
-    """Every tracked file under pyref/ plus the two spec files: working-file hash, blob at HEAD, status vs v0.4.0."""
+    """Every tracked file under pyref/ plus the two spec files: working-file hash, blob at HEAD, status vs v0.4.1."""
     paths = ("pyref", "spec/CONFORMANCE.md", "spec/aar-core.cddl")
     head_blobs = dict(line.split()[2:4][::-1] for line in git("ls-tree", "-r", "HEAD", *paths).splitlines())
-    tag_blobs = dict(line.split()[2:4][::-1] for line in git("ls-tree", "-r", "v0.4.0", *paths).splitlines())
+    tag_blobs = dict(line.split()[2:4][::-1] for line in git("ls-tree", "-r", "v0.4.1", *paths).splitlines())
     rows = []
     for path in sorted(head_blobs):
         file = REPO / path
         if not file.is_file():
             continue
         head, tag = head_blobs[path], tag_blobs.get(path)
-        status = "same as v0.4.0" if head == tag else ("added since v0.4.0" if tag is None else "changed since v0.4.0")
+        status = "same as v0.4.1" if head == tag else ("added since v0.4.1" if tag is None else "changed since v0.4.1")
         rows.append({"path": path, "mode": oct(file.stat().st_mode & 0o777), "bytes": file.stat().st_size,
-                     "sha256": file_sha256(file), "blob": head, "vs_v0_4_0": status})
+                     "sha256": file_sha256(file), "blob": head, "vs_v0_4_1": status})
     return rows
 
 
