@@ -412,6 +412,16 @@ prepared from this crosswalk may say:
   identity is the producer's own label. At `provider_attested`, say only that a provider
   artifact is carried: the verifier does not interpret its content
   (CONFORMANCE step 19).
+- "OCSF-conformant" or "carries an OCSF `record_integrity` attestation": AAR
+  emits no OCSF events, and no mapping onto OCSF 1.9.0's `ai_operation`
+  profile (`ai_agent`, `ai_model`, `delegation`) or `record_integrity`
+  profile (`attestation_list[]` of `attestation` objects: `fingerprint`,
+  `signatures`, `authority_uid`, `chain_uid`, `prev_event`) has been written
+  or tested. Say only that a receipt records the same kinds of facts. When
+  comparing another product's OCSF attestation, do not repeat the profile's
+  "non-repudiation": populating the attestation fields alone does not
+  establish it, and a deployment-secret HMAC does not provide third-party
+  non-repudiation even when tied to an identified producer.
 - "Nobody else does this" — say "not found in the related-work corpus."
 
 ## 6. Consolidated gaps, with an owner
