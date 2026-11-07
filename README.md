@@ -9,8 +9,8 @@
 <p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/code-Apache--2.0-6B665C.svg?labelColor=24221E" alt="Code: Apache-2.0"></a>
   <a href="LICENSE-SPEC"><img src="https://img.shields.io/badge/spec-CC%20BY%204.0-6B665C.svg?labelColor=24221E" alt="Spec: CC BY 4.0"></a>
-  <a href="spec/aar-core.cddl"><img src="https://img.shields.io/badge/release-v0.4.1-6A5600.svg?labelColor=24221E" alt="Release: v0.4.1 (bundle wire v0.2, verdict v0.4)"></a>
-  <a href="pyref/"><img src="https://img.shields.io/badge/verifier-offline%20%C2%B7%20stdlib--only-6A5600.svg?labelColor=24221E" alt="Verifier: offline, stdlib-only"></a>
+  <a href="spec/aar-core.cddl"><img src="https://img.shields.io/badge/release-v0.4.1-FFD60A.svg?labelColor=24221E" alt="Release: v0.4.1 (bundle wire v0.2, verdict v0.4)"></a>
+  <a href="pyref/"><img src="https://img.shields.io/badge/verifier-offline%20%C2%B7%20stdlib--only-FFD60A.svg?labelColor=24221E" alt="Verifier: offline, stdlib-only"></a>
   <a href="kats/"><img src="https://img.shields.io/badge/KATs-byte--pinned-6B665C.svg?labelColor=24221E" alt="KATs: byte-pinned"></a>
   <a href="#status"><img src="https://img.shields.io/badge/status-stable%20experimental%20spec-6B665C.svg?labelColor=24221E" alt="Status: stable experimental spec"></a>
 </p>
