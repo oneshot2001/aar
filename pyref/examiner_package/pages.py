@@ -232,10 +232,10 @@ Stateless experiment, no history or pin inputs (`harness/verify.ts:14` accepts n
 
 
 def page_03(run1, pinned, files, source_rows, commit) -> str:
-    tag_object = git("rev-parse", "v0.4.1")
-    tag_target = git("rev-parse", "v0.4.1^{}")
+    tag_object = git("rev-parse", "v0.4.2")
+    tag_target = git("rev-parse", "v0.4.2^{}")
     head_tree = git("rev-parse", "HEAD:pyref")
-    tag_tree = git("rev-parse", "v0.4.1^{}:pyref")
+    tag_tree = git("rev-parse", "v0.4.2^{}:pyref")
     status = git("status", "--porcelain")
     executable = Path(sys.executable).resolve()
     lines = ["# 03 — source and run", "",
@@ -244,8 +244,8 @@ def page_03(run1, pinned, files, source_rows, commit) -> str:
              "build host's interpreter and platform.", "",
              "## Source identifiers (labels from the build host's git)", "",
              f"- commit at package time (the declared bootstrap target): `{commit}`",
-             f"- tag `v0.4.1`: tag object `{tag_object}` → commit `{tag_target}`; Git object format `{git('rev-parse', '--show-object-format')}`",
-             f"- `pyref/` tree at package time `{head_tree}`; at `v0.4.1` `{tag_tree}`; equal: {'yes' if head_tree == tag_tree else 'no'}"
+             f"- tag `v0.4.2`: tag object `{tag_object}` → commit `{tag_target}`; Git object format `{git('rev-parse', '--show-object-format')}`",
+             f"- `pyref/` tree at package time `{head_tree}`; at `v0.4.2` `{tag_tree}`; equal: {'yes' if head_tree == tag_tree else 'no'}"
              " (`git rev-parse COMMIT:pyref` names the stored tree, not working files; working files are hashed below).",
              f"- working tree status (`git status --porcelain`): " + (f"\n```\n{status}\n```" if status else "clean, no untracked files"),
              "- builder label: the collector named in `01-copy/acquisition.json`; verifier identity for run 1: the published "
@@ -262,10 +262,10 @@ def page_03(run1, pinned, files, source_rows, commit) -> str:
              f"stderr `02-verify/run1.stderr.txt` (SHA-256 `{sha256_hex(run1['stderr'].encode())}`); raw verdict envelope "
              f"`02-verify/run1.verdict.cbor` (SHA-256 `{pinned.get('verdict_cbor_sha256')}`)",
              "", "## Source inventory (working files, hashed at package time)", "",
-             "| path | mode | bytes | sha256 | blob at package commit | vs v0.4.1 |", "|---|---|---|---|---|---|"]
-    lines += [f"| `{r['path']}` | {r['mode']} | {r['bytes']} | `{r['sha256']}` | `{r['blob']}` | {r['vs_v0_4_1']} |" for r in source_rows]
+             "| path | mode | bytes | sha256 | blob at package commit | vs v0.4.2 |", "|---|---|---|---|---|---|"]
+    lines += [f"| `{r['path']}` | {r['mode']} | {r['bytes']} | `{r['sha256']}` | `{r['blob']}` | {r['vs_v0_4_2']} |" for r in source_rows]
     lines += ["", "## Offline tag check", "",
-              "`git tag -v v0.4.1` needs the tag and its object closure, the tagger's SSH public key, an `allowed_signers` "
+              "`git tag -v v0.4.2` needs the tag and its object closure, the tagger's SSH public key, an `allowed_signers` "
               "file naming it, and a fingerprint obtained independently of this package. It proves the tag's assertions "
               "(which commit the tagger signed) and nothing about CI execution.",
               "", "## Absent, in writing", "",
