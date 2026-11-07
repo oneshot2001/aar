@@ -56,8 +56,10 @@ signer, the enclosing receipt re-signed and re-indexed. Outside the
 | `negative/d89-order-state-before-ordinals` (and artifact ordinals `[1, 0]`) | `receipt/manifest-inconsistent`@10 | same | `receipt/decision-presentation`@10 |
 
 The same recipe with the state left at `human_approved`, in either signer
-mode, is conformant in both verifiers before and after; it is a probe, not a
-corpus row.
+mode, is conformant in both verifiers before and after. The EP-session
+`human_approved` path stays pinned by the existing
+`repair-d77-presentation-ep-session-positive` case in
+`harness/crossimpl.test.ts`.
 
 Corpus after re-pin: 570 rows (`pyref/results-c2.json`), 570 matched, 570
 deterministic, 0 divergences (475 nonconformant, 90 conformant, 5
