@@ -1,0 +1,7 @@
+{
+  "name": "d89-pwa-state-delivered-ep-session",
+  "expected_code": "receipt/decision-presentation",
+  "mutation_description": "The approval presentation is EP-authenticated-session (signed by the enclosing authorization's EP key) with state delivered; the rule holds for both signer modes.",
+  "expected_result": "nonconformant",
+  "expected_step": 10
+}

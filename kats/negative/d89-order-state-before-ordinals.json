@@ -1,0 +1,7 @@
+{
+  "name": "d89-order-state-before-ordinals",
+  "expected_code": "receipt/decision-presentation",
+  "mutation_description": "The approval presentation has state delivered AND artifact ordinals [1, 0]; the state check precedes the artifact-ordinal check (was receipt/manifest-inconsistent on v0.4.1).",
+  "expected_result": "nonconformant",
+  "expected_step": 10
+}

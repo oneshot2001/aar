@@ -2557,3 +2557,64 @@ spec version, as before.
 
 The declared spec becomes v0.4.1. Every signed verdict re-pins; the decoded
 old/new delta is `docs/verifier-delta-audit-v0.4.1.md`.
+
+## D-89 — `permit_with_approval` records a completed approval
+
+**Decision.** At step 10, the presentation of a `permit_with_approval`
+authorization MUST have `state` `"human_approved"`. Any other state is
+`receipt/decision-presentation`. The rule is the same for both signer
+modes. It runs in the existing per-authorization slot, after the
+decision/presentation presence checks and the presenter/approver equality
+check and before the presentation's artifact ordinals are checked. Every
+earlier failure still wins, including a state outside the enum, which
+stays `schema/enum-unknown` at step 6. A schema-conforming bundle carries
+a presentation only on a `permit_with_approval` authorization, so
+`assembled`, `delivered` and `rendered` can no longer appear in a
+schema-conforming conformant bundle. They stay in the CDDL and step 6
+still admits them. No wire change. Every existing corpus row keeps its
+outcome, so the change shows only in the rows D-89 adds.
+
+**Why.** An outside emitter's report (oneshot2001/aar#1, item 2,
+2026-11-06) led to a probe: a `permit_with_approval` authorization whose
+presentation said `delivered` verified `conformant` in both verifiers. The
+threat model already treats the four states as a ladder of distinct
+claims (T-P5), but no rule said which one an authorization must carry. An
+action attempt cites its authorization directly through `authorized_by`,
+and no step-12 edge lets a later receipt complete an earlier
+authorization. An attempt that relies on an approval therefore has to
+cite an authorization that already carries it. Otherwise an
+`eligible_for_dispatch` attempt would verify against a decision no
+approver signed off on.
+
+**Alternatives considered.** Also accept `rendered` (rejected: rendering
+shows the artifacts, it does not approve them, so the dispatch hole stays
+open). Narrow the CDDL `state` to `"human_approved"` (rejected here: a wire
+change that moves the failure to step 6 as a schema error and removes
+values a held-state ruling may need; D-74 judges schema membership, not
+whether a state is enough for a given decision). A new failure code
+(rejected: the existing row already covers presentation fields that
+disagree with the decision enum, and a new code grows the D-82 table
+without giving a relying party anything different to do). Rule only when
+a dispatched attempt cites the authorization (rejected: the authorization
+receipt stands on its own, and a refusal under an unapproved
+`permit_with_approval` still records an approval that did not happen).
+Wait for the held-state ruling (rejected: this gap stands whatever shape a
+hold takes).
+
+**Residuals.** `human_approved` is the signer's declaration: the
+approver's key for an approver-originated presentation, the EP for an
+EP-authenticated-session one (D-35, T-P5). A verdict shows who signed the
+state, not that a person decided. `approval_scope_digest` is signed, but
+no step compares it with the decision or the action, so what was approved
+stays producer-declared. Until the step-6 body traversal lands (BACKLOG),
+a `presentation` placed as an undeclared member of a non-authorization
+receipt is not rejected, and D-89 does not reach it. A held or pending
+state (aar#1 item 2) and two-person approval (item 6) stay open; a held
+record shaped as a lower-state presentation would also need the presence
+rule relaxed for other decisions, so D-89 leaves the three lower values in
+the CDDL for that ruling. An emitter that maps a hold or step-up verdict
+onto `permit_with_approval` with an unapproved presentation now fails at
+step 10, as intended.
+
+The declared spec becomes v0.4.2. Every signed verdict re-pins; the
+decoded old/new delta is `docs/verifier-delta-audit-v0.4.2.md`.

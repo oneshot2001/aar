@@ -456,6 +456,8 @@ presentation-manifest-fields = (
   approval_scope_digest: digest32,
   state: "assembled" / "delivered" / "rendered" / "human_approved",
 )
+; D-89: an authorization's presentation must be "human_approved" (step 10);
+; the lower states are reserved.
 
 ; presentation_id = SHA-256(deterministic-CBOR([
 ;   "AAR-PRESENTATION-MANIFEST-v1", presentation-manifest-id-input

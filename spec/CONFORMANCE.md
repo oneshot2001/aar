@@ -371,7 +371,9 @@ normative as the step order itself (D-54).
     `receipt/consumption-ref-unresolved`;
     decision/presentation conditional fields and presentation signer mode
     (a presentation's `presenter_credential_id` MUST equal the decision's
-    `approver_credential_id`, else `receipt/decision-presentation`);
+    `approver_credential_id`, and its `state` MUST be `human_approved`, else
+    `receipt/decision-presentation`, D-89; both run before that presentation's
+    artifact ordinals are checked);
     action-attempt/refusal conditional fields; reject an unknown `hazard_class`
     enum with `schema/enum-unknown`; require every
     `hazard_class="life_safety"` marker's normalized `action_name` to occur in
@@ -833,7 +835,7 @@ one input has several defects, section 2 selects the first verifier code.
 | `receipt/signer-role-mismatch` | Receipt kind, protected/payload role, or required credential key usage violates the closed signer matrix. |
 | `receipt/manifest-inconsistent` | Consumption, presentation, decision, or command manifest ordinals, counts, or cross-references disagree after direct byte/digest checks. |
 | `receipt/consumption-ref-unresolved` | An inference `consumption_manifest_id` resolves to neither a `derived_from` parent observation's consumption-manifest digest nor a carried canonical-manifest-payload digest. |
-| `receipt/decision-presentation` | Presentation presence or approver fields disagree with the decision enum. |
+| `receipt/decision-presentation` | Presentation presence, approver fields, or presentation state disagree with the decision enum. |
 | `receipt/attempt-disposition` | `not_dispatched` lacks `refusal_reason`; `eligible_for_dispatch` carries one; `journal/unavailable` appears outside a `not_dispatched` refusal; or a `degraded` marker is not exactly the life-safety exception described at step 10. |
 | `receipt/hazard-class-unbound` | A normalized action carries `hazard_class="life_safety"`, but its `action_name` does not occur in the bound trust policy's `life_safety_action_names` list, including when that optional list is absent. |
 | `receipt/action-command-mismatch` | Normalized action and command action/target/parameter commitment disagree. |

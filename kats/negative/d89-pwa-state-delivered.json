@@ -1,0 +1,7 @@
+{
+  "name": "d89-pwa-state-delivered",
+  "expected_code": "receipt/decision-presentation",
+  "mutation_description": "The approval authorization's approver-originated presentation has state delivered (re-identified, re-signed); permit_with_approval requires human_approved.",
+  "expected_result": "nonconformant",
+  "expected_step": 10
+}

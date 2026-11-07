@@ -1361,16 +1361,14 @@ def _receipt_semantics(state: State) -> None:
             if not _type_ok(decision, "map"):
                 _fail("schema/bad-type", 10)
             presentation = body.get("presentation")
-            if (decision.get("decision") == "permit_with_approval") != (presentation is not None):
-                _fail("receipt/decision-presentation", 10)
-            if decision.get("decision") == "permit_with_approval" and "approver_credential_id" not in decision:
-                _fail("receipt/decision-presentation", 10)
-            if decision.get("decision") != "permit_with_approval" and "approver_credential_id" in decision:
+            approval = decision.get("decision") == "permit_with_approval"
+            if approval != (presentation is not None) or approval != ("approver_credential_id" in decision):
                 _fail("receipt/decision-presentation", 10)
             if presentation is not None:
                 nested = next((item for item in state.envelopes["presentations"]
                                if item.index == envelope.index), None)
-                if nested is None or nested.payload["presenter_credential_id"] != decision.get("approver_credential_id"):
+                if (nested is None or nested.payload["presenter_credential_id"] != decision.get("approver_credential_id")
+                        or nested.payload["state"] != "human_approved"):
                     _fail("receipt/decision-presentation", 10)
                 artifacts = nested.payload["artifacts"]
                 if not isinstance(artifacts, list) or [item.get("ordinal") if _type_ok(item, "map") and _uint(item.get("ordinal")) else None

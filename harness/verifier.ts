@@ -1233,17 +1233,13 @@ function validateReceiptSemantics(bundle: Obj, parsed: Parsed): B1Failure | unde
     if (payload.kind === "authorization") {
       if (!object(body.decision)) return failure(10, "schema/bad-type", "receipt.body.decision");
       const decision = body.decision;
-      const hasPresentation = body.presentation !== undefined;
-      if ((decision.decision === "permit_with_approval") !== hasPresentation || (decision.decision === "permit_with_approval") !== (decision.approver_credential_id !== undefined)) return failure(10, "receipt/decision-presentation", "receipt.body");
+      const hasPresentation = body.presentation !== undefined, approval = decision.decision === "permit_with_approval";
+      if (approval !== hasPresentation || approval !== (decision.approver_credential_id !== undefined)) return failure(10, "receipt/decision-presentation", "receipt.body");
       if (hasPresentation) {
         const presentation = parsed.presentation.find((entry) => same(entry.envelope, body.presentation));
-        if (presentation === undefined || !same(presentation.payload.presenter_credential_id, decision.approver_credential_id)) return failure(10, "receipt/decision-presentation", "receipt.body.presentation");
+        if (presentation === undefined || !same(presentation.payload.presenter_credential_id, decision.approver_credential_id) || presentation.payload.state !== "human_approved") return failure(10, "receipt/decision-presentation", "receipt.body.presentation");
         const artifacts = presentation.payload.artifacts;
-        if (!Array.isArray(artifacts)) return failure(10, "receipt/manifest-inconsistent", "receipt.body.presentation.artifacts");
-        for (let index = 0; index < artifacts.length; index += 1) {
-          const item = artifacts[index];
-          if (!object(item) || item.ordinal !== index) return failure(10, "receipt/manifest-inconsistent", "receipt.body.presentation.artifacts");
-        }
+        if (!Array.isArray(artifacts) || artifacts.some((item, index) => !object(item) || item.ordinal !== index)) return failure(10, "receipt/manifest-inconsistent", "receipt.body.presentation.artifacts");
       }
     }
     if (payload.kind === "action_attempt") {
