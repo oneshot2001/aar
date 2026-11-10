@@ -41,6 +41,7 @@ async function checkRemoval(entry: SeedEntry, batch: PyrefBatch, allowed: string
   expect(mutant).not.toBeNull();
   expect(mutant!.detail).toBe("terminal outcome_observation[7] removed");
   expect(mutant!.allowed.observationsMayDrop).toEqual(allowed);
+  expect(mutant!.allowed.observationsMustDrop).toEqual(allowed);
   const result = await evaluate(entry.row.seed, mutant!.bytes, batch);
   for (const side of ["harness", "pyref"] as const) {
     expect(historyObservations(entry.row[side])).toEqual([...before].sort());
@@ -96,18 +97,55 @@ for (const additional of [false, true]) {
   }, 180_000);
 }
 
+function lastLowerSequencePrior(seed: Seed, domain: "issuer" | "epoch"): StatefulPriorJson {
+  const entries = exactEntries(seed.bundle); const leaf = entries[7]!;
+  expect(entries.length).toBe(10);
+  entries[7] = { ...leaf, receiptId: deterministicId("oracle:higher-id"), envelopeDigest: deterministicId("oracle:higher-digest"),
+    ...(domain === "issuer"
+      ? { issuerSeq: 9_999_999, epochOwnerKid: deterministicId("oracle:other-owner") }
+      : { epochSeq: 9_999_999, issuerKid: deterministicId("oracle:other-issuer") }),
+  };
+  expect(entries.filter((item) => toHex(item.receiptId) !== toHex(entries[7]!.receiptId)).length).toBe(9);
+  return priorJson(...entries);
+}
+
 for (const domain of ["issuer", "epoch"] as const) {
   test(`fuzz leg oracle: last ${domain}-only lower-sequence witness`, async () => {
     const seed = stateful("d86-history-full-reobservation");
-    const entries = exactEntries(seed.bundle); const leaf = entries[7]!;
-    expect(entries.length).toBe(10);
-    entries[7] = { ...leaf, receiptId: deterministicId("oracle:higher-id"), envelopeDigest: deterministicId("oracle:higher-digest"),
-      ...(domain === "issuer"
-        ? { issuerSeq: 9_999_999, epochOwnerKid: deterministicId("oracle:other-owner") }
-        : { epochSeq: 9_999_999, issuerKid: deterministicId("oracle:other-issuer") }),
-    };
-    expect(entries.filter((item) => toHex(item.receiptId) !== toHex(entries[7]!.receiptId)).length).toBe(9);
-    await checkPrior(seed, priorJson(...entries), [below], [duplicate, below], [duplicate]);
+    await checkPrior(seed, lastLowerSequencePrior(seed, domain), [below], [duplicate, below], [duplicate]);
+  }, 180_000);
+}
+
+for (const witness of ["exact", "issuer", "epoch", "remaining"] as const) {
+  const title = witness === "remaining"
+    ? "fuzz leg oracle: original bytes pass when another witness remains"
+    : `fuzz leg oracle: a kept last witness observation is unexpected (${witness})`;
+  test.serial(title, async () => {
+    const batch = await PyrefBatch.start();
+    const removal = leg.classes.removal!;
+    try {
+      const seed = stateful(witness === "exact" ? "d86-partial-history-epoch-rollback" : "d86-history-full-reobservation");
+      const prior = witness === "issuer" || witness === "epoch" ? lastLowerSequencePrior(seed, witness) : null;
+      const changed = prior === null ? seed : { ...seed, inputs: { ...seed.inputs, prior_state: prior }, options: { ...seed.options, ...statefulOptions(prior) } };
+      const row = await evaluate(changed, changed.bundle, batch);
+      const drops = witness === "remaining" ? [] : [witness === "exact" ? duplicate : below];
+      leg.classes.removal = (...args) => {
+        const mutant = removal(...args);
+        expect(mutant).not.toBeNull();
+        expect(mutant!.allowed.observationsMustDrop).toEqual(drops);
+        return { ...mutant!, bytes: args[0].view.bytes };
+      };
+      const run = await runLegs(seedViews([row]), new Rng(1), [batch], batch.handshake.identity);
+      const counts = run.perLeg["outcome-independence/removal"]!;
+      expect(counts.unexpected).toBe(witness === "remaining" ? 0 : 1);
+      expect(counts.pass).toBe(witness === "remaining" ? 1 : 0);
+      expect(counts.split).toBe(0);
+      expect(run.operatorErrors).toEqual({});
+      expect(run.findings.map((finding) => [finding.class, finding.outcome, finding.channel])).toEqual(
+        witness === "remaining" ? [] : [["removal", "unexpected", "agree"]]);
+      if (witness !== "remaining") expect(run.findings[0]!.leg).toBe("outcome-independence");
+      if (witness === "exact") expect(run.findings[0]!.detail).toBe("terminal outcome_observation[7] removed | moved: none; dropped: none");
+    } finally { leg.classes.removal = removal; await batch.close(); }
   }, 180_000);
 }
 

@@ -66,7 +66,7 @@ export async function runLegs(entries: readonly SeedEntry[], rng: Rng, batches: 
       const dropped = (before.observations as string[]).filter((observation) => !(after.observations as string[]).includes(observation));
       if (!allowed.results.includes("conformant")) outcome = item.klass === "corruption" ? "corruption-accepted" : item.klass === "removal" ? "removal-accepted" : "unexpected";
       else if (allowed.mustMove.some((path) => field(before, path) === field(after, path))) outcome = "claim-weakening-unmoved";
-      else outcome = dropped.some((observation) => !allowed.observationsMayDrop.includes(observation)) || (!allowed.limitsUnchangedOk && allowed.mustMove.length === 0 && moved.length === 0) ? "unexpected" : "pass";
+      else outcome = (allowed.observationsMustDrop ?? []).some((observation) => (after.observations as string[]).includes(observation)) || dropped.some((observation) => !allowed.observationsMayDrop.includes(observation)) || (!allowed.limitsUnchangedOk && allowed.mustMove.length === 0 && moved.length === 0) ? "unexpected" : "pass";
       if (outcome !== "pass") detail += ` | moved: ${moved.join(",") || "none"}; dropped: ${dropped.join(",") || "none"}`;
     }
     bump(item.leg.leg, item.klass, outcome);
