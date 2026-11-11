@@ -22,8 +22,10 @@ function args(): { seed: number; mutants: number; out: string; chunk: number; la
   const argv = process.argv.slice(2); const flag = (name: string): string | undefined => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
   const seed = Number(flag("--seed")); const mutants = Number(flag("--mutants")); const out = flag("--out");
   const lanes = Number(flag("--lanes") ?? 3);
-  if (!Number.isInteger(seed) || !Number.isInteger(mutants) || mutants < 0 || out === undefined || !Number.isInteger(lanes) || lanes < 1) { console.error("usage: bun run harness/difffuzz.ts --seed N --mutants N --out DIR [--chunk 250] [--lanes 3] [--premises] [--legs] [--cli-lane N]"); process.exit(1); }
-  return { seed, mutants, out, chunk: Number(flag("--chunk") ?? 250), lanes, premises: argv.includes("--premises"), legs: argv.includes("--legs"), cliLane: Number(flag("--cli-lane") ?? 0) };
+  const chunk = argv.includes("--chunk") ? Number(flag("--chunk")) : 250;
+  const cliLane = argv.includes("--cli-lane") ? Number(flag("--cli-lane")) : 0;
+  if (!Number.isInteger(seed) || !Number.isInteger(mutants) || mutants < 0 || out === undefined || !Number.isInteger(lanes) || lanes < 1 || !Number.isInteger(chunk) || chunk < 1 || !Number.isInteger(cliLane) || cliLane < 0) { console.error("usage: bun run harness/difffuzz.ts --seed N --mutants N --out DIR [--chunk 250] [--lanes 3] [--premises] [--legs] [--cli-lane N]"); process.exit(1); }
+  return { seed, mutants, out, chunk, lanes, premises: argv.includes("--premises"), legs: argv.includes("--legs"), cliLane };
 }
 
 // pyref is CPU-bound and single-threaded: the baseline, the mutant stream and the legs are spread over --lanes batch processes (default 3).

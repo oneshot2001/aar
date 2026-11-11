@@ -5,7 +5,7 @@
 // cross-implementation tests is 3-4x over a ~150 s local run with the default
 // lanes; the test prints its wall time.
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { root } from "./difffuzz-pyref";
@@ -27,3 +27,33 @@ test("difffuzz --seed 1 --mutants 200 exits 0 with controls 8/8 and the full bas
   for (const finding of stable.findings) console.log(`  finding ${finding.id} [${finding.channel}] ${finding.operator} on ${finding.seed}: ${finding.detail}`);
   rmSync(out, { recursive: true, force: true });
 }, 600_000);
+
+for (const flags of [
+  ["--chunk", "0"], ["--chunk", "-1"], ["--chunk", "abc"], ["--chunk", "1.5"], ["--chunk"],
+  ["--cli-lane", "abc"], ["--cli-lane", "-5"], ["--cli-lane", "1.5"], ["--cli-lane"],
+]) {
+  test(`fuzz cli arguments: rejects ${flags.join(" ")} before creating output`, () => {
+    const dir = mkdtempSync(join(tmpdir(), "difffuzz-args-"));
+    const out = join(dir, "out");
+    try {
+      const proc = Bun.spawnSync(["bun", "run", "harness/difffuzz.ts", "--seed", "1", "--mutants", "0", "--out", out, ...flags], { cwd: root, timeout: 20_000 });
+      expect(proc.exitCode, proc.stderr.toString()).toBe(1);
+      expect(proc.stderr.toString()).toContain("usage:");
+      expect(existsSync(out)).toBe(false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }, 30_000);
+}
+
+for (const [chunk, cliLane] of [[1, 0], [100, 2]] as const) {
+  test(`fuzz cli arguments: accepts --chunk ${chunk} --cli-lane ${cliLane}`, () => {
+    const dir = mkdtempSync(join(tmpdir(), "difffuzz-args-"));
+    const out = join(dir, "out");
+    try {
+      const proc = Bun.spawnSync(["bun", "run", "harness/difffuzz.ts", "--seed", "1", "--mutants", "20", "--out", out, "--chunk", String(chunk), "--cli-lane", String(cliLane)], { cwd: root, timeout: 600_000 });
+      expect(proc.exitCode, proc.stderr.toString()).toBe(0);
+      const { stable } = JSON.parse(readFileSync(join(out, "report.json"), "utf8"));
+      if (cliLane === 0) expect(stable.cli_lane).toBeNull();
+      else expect(stable.cli_lane.sampled_mutants).toBe(2);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }, 600_000);
+}
