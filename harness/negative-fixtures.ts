@@ -5,7 +5,7 @@ import { buildCountersignFixtures } from "./countersign-fixtures";
 import { promotedProofWithDomain, promotedRoot, rfc6962Leaf } from "./merkle";
 import { TEST_KEYS, TestKeyName } from "./testkeys";
 import { object, clone, same, artifacts, payload, cose, protectedMap, signerFor, contentType, resign, mutateArtifact, mutateReceipt, mutateReceiptWhere, sortArtifacts, compare, recalcSelector, recalcTrust, modifyCose, receiptList, keepReceipts, withoutField, rebuildEventChain, rfcRootFromProof, rebuildManifest, addSecondEpoch, flipSignature, relinkEventChain, mutateLastEvent, mutateMerkleBatch, addManifestWithAnchor, crossEpochChild, addTopLevelDelegation } from "./mutate";
-import { mutateEmbeddedDelegation, receiptBy, reindexCarried, replaceReceipt } from "./mutate-graph";
+import { mutateEmbeddedDelegation, receiptBy, reindexCarried, replaceReceipt, rewriteD78Receipts } from "./mutate-graph";
 
 type Obj = Record<string, CborValue>;
 
@@ -188,7 +188,7 @@ function bigint32(value: bigint): Uint8Array {
   return out;
 }
 
-function clearJournal(bundle: Obj): void {
+export function clearJournal(bundle: Obj): void {
   const value = artifacts(bundle);
   value.epoch_events = [];
   value.epoch_manifests = [];
@@ -210,7 +210,7 @@ function addOpaquePayload(bundle: Obj, label: string): Uint8Array {
   return digest;
 }
 
-function updateAttemptFlow(bundle: Obj, mutation: (attempt: Obj, receipts: Obj[]) => void): void {
+export function updateAttemptFlow(bundle: Obj, mutation: (attempt: Obj, receipts: Obj[]) => void): void {
   const attemptEnvelope = receiptBy(bundle, (value) => value.kind === "action_attempt" && (value.body as Obj).disposition === "eligible_for_dispatch");
   const oldAttempt = payload(attemptEnvelope);
   const nextAttempt = clone(oldAttempt);
@@ -427,44 +427,6 @@ export function buildPresentationEnumVariants() {
   });
 }
 
-// Rewrite dependencies before children so every changed receipt and consumption
-// commitment is re-signed, including paths that do not follow epoch_seq order.
-function rewriteD78Receipts(bundle: Obj, mutation: (receipt: Obj, originals: Obj[]) => void): void {
-  const originals = receiptList(bundle).map(payload);
-  const sources = new Map(receiptList(bundle).map((envelope) => [toHex(payload(envelope).receipt_id as Uint8Array), envelope]));
-  const rewritten = new Map<string, Obj>();
-  const manifests = new Map<string, Uint8Array>();
-  function visit(id: string): Obj {
-    if (rewritten.has(id)) return rewritten.get(id)!;
-    const envelope = sources.get(id)!;
-    const next = clone(payload(envelope));
-    mutation(next, originals);
-    const body = next.body as Obj;
-    for (const edge of next.parents as Obj[]) {
-      const parent = visit(toHex(edge.parent_id as Uint8Array));
-      edge.parent_id = parent.receipt_id!;
-      edge.parent_kind = parent.kind!;
-      edge.parent_epoch_id = (parent.binding as Obj).epoch_id!;
-    }
-    for (const field of ["authorization_id", "attempt_id", "subject_id"]) {
-      if (body[field] instanceof Uint8Array && sources.has(toHex(body[field]))) body[field] = visit(toHex(body[field])).receipt_id!;
-    }
-    if (next.kind === "observation") {
-      const consumption = body.consumption as Obj;
-      const oldDigest = consumption.manifest_digest as Uint8Array;
-      consumption.manifest_digest = domainHash("AAR-CONSUMPTION-MANIFEST-v1", { items: consumption.items! });
-      manifests.set(toHex(oldDigest), consumption.manifest_digest as Uint8Array);
-    }
-    if (next.kind === "inference") body.consumption_manifest_id = manifests.get(toHex(body.consumption_manifest_id as Uint8Array)) ?? body.consumption_manifest_id!;
-    (next.freshness as Obj).intended_parents = (next.parents as Obj[]).map((edge) => edge.parent_id!);
-    const replacement = replaceReceipt(bundle, envelope, next);
-    const value = payload(replacement);
-    rewritten.set(id, value);
-    return value;
-  }
-  for (const id of sources.keys()) visit(id);
-}
-
 export function buildD78Fixtures() {
   type Descriptor = {
     name: string; object_type: "bundle"; expected_result: "conformant" | "nonconformant";
@@ -511,6 +473,7 @@ export function buildD78Fixtures() {
       edge.parent_id = authorization.receipt_id!;
       attempt.parents = [edge];
       (attempt.body as Obj).authorization_id = authorization.receipt_id!;
+      (attempt.body as Obj).decision_commitment = ((authorization.body as Obj).decision as Obj).decision_commitment!; // D-90
     });
     const untrusted = !noInput && ((origins ?? []).some((origin) => ["third_party", "device_sensed", "unknown"].includes(origin))
       || (!discarded && itemOrigin !== undefined && ["third_party", "device_sensed", "unknown"].includes(itemOrigin)));

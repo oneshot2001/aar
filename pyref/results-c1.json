@@ -2,17 +2,17 @@
   "checks": {
     "id_digest_recomputation": {
       "failed": 0,
-      "passed": 84,
+      "passed": 85,
       "skipped": 0
     },
     "round_trip": {
       "failed": 0,
-      "passed": 84,
+      "passed": 85,
       "skipped": 0
     },
     "signature_recomputation": {
       "failed": 0,
-      "passed": 84,
+      "passed": 85,
       "skipped": 0
     }
   },
@@ -966,6 +966,22 @@
     {
       "checks": {
         "id_digest_recomputation": {
+          "commitments_checked": 51,
+          "status": "passed"
+        },
+        "round_trip": {
+          "status": "passed"
+        },
+        "signature_recomputation": {
+          "signatures_checked": 25,
+          "status": "passed"
+        }
+      },
+      "fixture": "kats/positive/d90-deny-refusal-no-dispatch.cbor"
+    },
+    {
+      "checks": {
+        "id_digest_recomputation": {
           "commitments_checked": 2,
           "status": "passed"
         },
@@ -1364,7 +1380,7 @@
       "fixture": "kats/terminal-state/outcome-terminals-unknown-before-contradicted.cbor"
     }
   ],
-  "fixtures_checked": 84,
+  "fixtures_checked": 85,
   "schema_version": 1,
   "slice": "C1"
 }

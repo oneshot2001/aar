@@ -2618,3 +2618,76 @@ step 10, as intended.
 
 The declared spec becomes v0.4.2. Every signed verdict re-pins; the
 decoded old/new delta is `docs/verifier-delta-audit-v0.4.2.md`.
+
+## D-90 — A dispatch must descend from a permit through an eligible attempt
+
+**Decision.** Step 13 adds checks in four places.
+(1) For every dispatch, after its attempt's single `authorized_by`
+authorization resolves and the attempt's `authorization_id` names it (already
+required, now stated), and before the delegation is resolved: the attempt's
+`decision_commitment` MUST be a 32-byte digest equal both to the
+authorization's `decision.decision_commitment` and to the decision-record
+commitment recomputed over that `decision`; the attempt's `disposition` MUST be
+`eligible_for_dispatch`; and `decision.decision` MUST be `permit` or
+`permit_with_approval`. Each failure is `graph/dominator-missing`.
+(2) After the parent-delegation check, a dispatch consumes every distinct
+`one_time` delegation on its chain: the embedded delegation and every carried
+delegation its `parent_delegations` reach. A `one_time` delegation an earlier
+dispatch in the bundle already consumed is `delegation/scope`. Two dispatches
+of one attempt are two uses. D-66 still runs last for each dispatch, before
+the next one.
+(3) After every dispatch, each `eligible_for_dispatch` attempt no dispatch
+names passes the checks in (1), in artifact order. A `not_dispatched` refusal
+needs none of them, under any decision.
+(4) At step 6, `decision.decision` (when `decision` is a text-keyed map) and an
+action attempt's `disposition` (after its action names) are closed enums,
+checked for presence, type and value.
+No wire change. Every existing corpus row keeps its result, code and step.
+Thirty rows whose fixtures had left an attempt's `decision_commitment` stale
+after editing the decision were regenerated with the commitment carried
+through. Only their bytes changed.
+
+**Why.** An outside emitter's held-state report (oneshot2001/aar#1, item 2)
+led to two probes on 2026-11-08: a dispatch under a signed `deny`, and a
+dispatch citing a `not_dispatched` attempt. Both verified `conformant` in both
+verifiers. A review on 2026-11-10 found the same hole from four directions,
+plus a `one_time` delegation authorizing two dispatches. Step 13 required a
+dominating authorization but never said it had to permit, so a verdict could
+not show that a refusal or a deny was honored. The attempt's signed
+`decision_commitment` was never compared with anything, so nothing tied the
+attempt to the decision it claimed. A commitment equal to the authorization's
+is not enough on its own: step 7 recomputes the authorization's commitment
+only when the decision record carries the fields it hashes, so equal stale
+values would pass. The recomputation is therefore repeated here. A
+`one_time` parent can issue several `one_time` children, so counting only the
+embedded delegation would let one grant authorize several sends. An eligible
+attempt under a `deny` is a signed claim that contradicts the decision it
+cites. D-89 rejected judging an authorization only when a dispatch cites it,
+for the same reason.
+
+**Alternatives considered.** A new failure code such as
+`graph/decision-not-permit` (rejected: `graph/dominator-missing` already means
+"no permitting path reaches this dispatch". The relying-party map already
+turns it into `Unauthorised`, and a new code grows the D-82 table without
+giving a relying party anything different to do). Judge decision and
+disposition at step 10 on every attempt (rejected: a dispatch under `deny`
+would then read `receipt/attempt-disposition`, which leaves the
+relying-party axis `Indeterminate`). Count one-time use per attempt (rejected:
+each dispatch records its own send, `dispatched_at` and
+`adapter_invocation_id`, and no rule makes two dispatches one retry). Leave
+the undispatched eligible attempt to the held-state ruling (rejected: a hold
+is a `not_dispatched` attempt whatever its wire shape, so this rule does not
+constrain that ruling). Enforce one-time across bundles now (deferred: it
+needs a delegation-keyed replay-state entry at step 20, a shape D-87 does not
+have).
+
+**Residuals.** One-time reuse across bundles is not caught. Step 13 judges
+the signed records: an enforcement point that moves a camera and signs no
+dispatch is outside any verdict, and the demo enforcement point's own
+producer findings are separate BACKLOG items. Presence and type checks for the
+rest of the authorization and attempt bodies stay with the step-6 body
+traversal item. A held state (aar#1 item 2) and two-person approval (item 6)
+stay open.
+
+The declared spec becomes v0.4.3. Every signed verdict re-pins; the decoded
+old/new delta is `docs/verifier-delta-audit-v0.4.3.md`.

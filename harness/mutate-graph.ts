@@ -39,6 +39,8 @@ export function mutateEmbeddedDelegation(bundle: Obj, mutation: (value: Obj) => 
   const replacement = replaceReceipt(bundle, authorizationEnvelope, nextAuthorization);
 
   const replacements = new Map([[toHex(oldAuthorization.receipt_id as Uint8Array), payload(replacement).receipt_id as Uint8Array]]);
+  const commitments: Commitments = new Map();
+  relinkCommitment(commitments, toHex(oldAuthorization.receipt_id as Uint8Array), oldAuthorization, nextAuthorization);
   let changed = true;
   while (changed) {
     changed = false;
@@ -51,11 +53,13 @@ export function mutateEmbeddedDelegation(bundle: Obj, mutation: (value: Obj) => 
         if (parentId !== undefined) { edge.parent_id = parentId; replace = true; }
       }
       const nextBody = next.body as Obj;
+      const cited = nextBody.authorization_id;
       for (const field of ["authorization_id", "attempt_id", "subject_id"] as const) {
         if (!(nextBody[field] instanceof Uint8Array)) continue;
         const id = replacements.get(toHex(nextBody[field]));
         if (id !== undefined) { nextBody[field] = id; replace = true; }
       }
+      if (followCommitment(commitments, cited, nextBody)) replace = true;
       if (!replace) continue;
       (next.freshness as Obj).intended_parents = (next.parents as Obj[]).map((edge) => edge.parent_id!);
       const nextEnvelope = replaceReceipt(bundle, envelope, next);
@@ -63,6 +67,65 @@ export function mutateEmbeddedDelegation(bundle: Obj, mutation: (value: Obj) => 
       changed = true;
     }
   }
+}
+
+// D-90: an authorization's decision_commitment change, keyed by its original receipt id.
+// Only an attempt citing that authorization and still carrying its old commitment follows
+// it; a commitment the mutation planted, or one citing another authorization, stays.
+type Commitments = Map<string, [Uint8Array, Uint8Array]>;
+function relinkCommitment(commitments: Commitments, id: string, before: Obj, after: Obj): void {
+  const old = ((before.body as Obj).decision as Obj | undefined)?.decision_commitment;
+  const next = ((after.body as Obj).decision as Obj | undefined)?.decision_commitment;
+  if (old instanceof Uint8Array && next instanceof Uint8Array) commitments.set(id, [old, next]);
+}
+function followCommitment(commitments: Commitments, cited: CborValue | undefined, body: Obj): boolean {
+  const change = cited instanceof Uint8Array ? commitments.get(toHex(cited)) : undefined;
+  if (change === undefined || !(body.decision_commitment instanceof Uint8Array) || toHex(body.decision_commitment) !== toHex(change[0])) return false;
+  body.decision_commitment = change[1];
+  return true;
+}
+
+// Rewrite dependencies before children so every changed receipt and consumption
+// commitment is re-signed, including paths that do not follow epoch_seq order.
+// An attempt carrying its authorization's old decision_commitment follows it (D-90).
+export function rewriteD78Receipts(bundle: Obj, mutation: (receipt: Obj, originals: Obj[]) => void): void {
+  const originals = receiptList(bundle).map(payload);
+  const sources = new Map(receiptList(bundle).map((envelope) => [toHex(payload(envelope).receipt_id as Uint8Array), envelope]));
+  const rewritten = new Map<string, Obj>();
+  const manifests = new Map<string, Uint8Array>();
+  const commitments: Commitments = new Map();
+  function visit(id: string): Obj {
+    if (rewritten.has(id)) return rewritten.get(id)!;
+    const envelope = sources.get(id)!;
+    const next = clone(payload(envelope));
+    mutation(next, originals);
+    const body = next.body as Obj;
+    const cited = body.authorization_id;
+    for (const edge of next.parents as Obj[]) {
+      const parent = visit(toHex(edge.parent_id as Uint8Array));
+      edge.parent_id = parent.receipt_id!;
+      edge.parent_kind = parent.kind!;
+      edge.parent_epoch_id = (parent.binding as Obj).epoch_id!;
+    }
+    for (const field of ["authorization_id", "attempt_id", "subject_id"]) {
+      if (body[field] instanceof Uint8Array && sources.has(toHex(body[field]))) body[field] = visit(toHex(body[field])).receipt_id!;
+    }
+    if (next.kind === "observation") {
+      const consumption = body.consumption as Obj;
+      const oldDigest = consumption.manifest_digest as Uint8Array;
+      consumption.manifest_digest = domainHash("AAR-CONSUMPTION-MANIFEST-v1", { items: consumption.items! });
+      manifests.set(toHex(oldDigest), consumption.manifest_digest as Uint8Array);
+    }
+    if (next.kind === "authorization") relinkCommitment(commitments, id, payload(envelope), next);
+    followCommitment(commitments, cited, body);
+    if (next.kind === "inference") body.consumption_manifest_id = manifests.get(toHex(body.consumption_manifest_id as Uint8Array)) ?? body.consumption_manifest_id!;
+    (next.freshness as Obj).intended_parents = (next.parents as Obj[]).map((edge) => edge.parent_id!);
+    const replacement = replaceReceipt(bundle, envelope, next);
+    const value = payload(replacement);
+    rewritten.set(id, value);
+    return value;
+  }
+  for (const id of sources.keys()) visit(id);
 }
 
 // D-87 rule 0: after a cascade re-identifies carried receipts, re-point each index

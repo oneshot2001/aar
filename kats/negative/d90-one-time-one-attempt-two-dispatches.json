@@ -1,0 +1,7 @@
+{
+  "name": "d90-one-time-one-attempt-two-dispatches",
+  "expected_code": "delegation/scope",
+  "mutation_description": "The embedded delegation is one_time and the one eligible attempt is dispatched twice (distinct adapter invocations).",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

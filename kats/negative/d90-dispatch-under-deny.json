@@ -1,0 +1,7 @@
+{
+  "name": "d90-dispatch-under-deny",
+  "expected_code": "graph/dominator-missing",
+  "mutation_description": "The authorization the dispatched attempt cites says deny (commitment recomputed and carried into the attempts); a dispatch needs a permit.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

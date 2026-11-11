@@ -1,0 +1,7 @@
+{
+  "name": "d90-one-time-two-attempts",
+  "expected_code": "delegation/scope",
+  "mutation_description": "The embedded delegation is one_time; the refused attempt becomes eligible and a second dispatch sends it. A one_time delegation authorizes one dispatch.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

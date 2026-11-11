@@ -1,0 +1,7 @@
+{
+  "name": "d90-life-safety-degraded-under-deny",
+  "expected_code": "graph/dominator-missing",
+  "mutation_description": "AAR-3 life-safety degraded dispatch (journal/unavailable) under a deny; the life-safety exception waives journal commitment, never permission.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

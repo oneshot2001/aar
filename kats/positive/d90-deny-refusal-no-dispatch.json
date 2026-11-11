@@ -1,0 +1,8 @@
+{
+  "name": "d90-deny-refusal-no-dispatch",
+  "object_type": "bundle",
+  "expectation": "conformant",
+  "expected_result": "conformant",
+  "expected_code": null,
+  "mutation_description": "A deny authorization, both attempts not_dispatched with a refusal_reason, no dispatch: a recorded refusal under a deny stays conformant."
+}

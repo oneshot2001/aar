@@ -1,0 +1,7 @@
+{
+  "name": "d90-disposition-missing",
+  "expected_code": "schema/missing-field",
+  "mutation_description": "The dispatched attempt's disposition is missing; the disposition enum is closed at step 6.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

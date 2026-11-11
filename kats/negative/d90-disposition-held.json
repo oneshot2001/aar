@@ -1,0 +1,7 @@
+{
+  "name": "d90-disposition-held",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "The dispatched attempt's disposition is held; the disposition enum is closed at step 6.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

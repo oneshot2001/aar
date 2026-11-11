@@ -2,6 +2,9 @@
 // pins no line numbers. It fails only if pyref.premises errors or if a _fail
 // site has neither a literal code nor a place in the dynamic list below.
 import { expect, test } from "bun:test";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { inventory } from "./difffuzz-premises";
 
 // Every _fail call whose reason code is computed at runtime, by the expression that computes it.
@@ -25,4 +28,15 @@ test("pyref.premises inventory: every _fail site has a literal code or is in the
   }
   for (const site of excluded) expect(site.reason.includes("unreachable")).toBe(true);
   console.log(`rejection-site inventory: ${counts["pyref/verifier.py"]} verifier.py / ${counts["pyref/emission_identity.py"]} emission_identity.py / ${counts["pyref/relying_party.py"]} relying_party.py / ${counts["pyref/cbor.py"]} cbor.py (${excluded.length} excluded as documented unreachable)`);
+});
+
+// D-90 review: step 13 moved to pyref/dominance.py and its sites dropped out of the inventory
+// unnoticed. Every pyref module that calls _fail (bare or as verifier._fail) must be inventoried.
+test("pyref.premises inventory: every pyref module with a _fail call is inventoried", () => {
+  const { counts } = inventory();
+  const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "pyref");
+  const callers = readdirSync(dir).filter((name) => name.endsWith(".py") && name !== "premises.py"
+    && /(^|[^\w])_fail\(/mu.test(readFileSync(join(dir, name), "utf8"))).map((name) => `pyref/${name}`);
+  expect(callers).toContain("pyref/dominance.py");
+  for (const file of callers) expect(counts[file], file).toBeGreaterThan(0);
 });

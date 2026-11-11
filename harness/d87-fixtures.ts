@@ -57,7 +57,7 @@ export function buildD87Fixtures(): StatefulFixture[] {
   const equivocating = { ...exactEntries(dangling)[0]!, receiptId: deterministicId("d87:other-receipt"), envelopeDigest: deterministicId("d87:other-envelope"), epochOwnerKid: deterministicId("d87:other-owner") };
   return [
     negative("d87-receipt-unindexed-in-bundle", buildD82PositiveFixtures(false).find((fixture) => fixture.filename === "d82-chain-two-levels")!.bytes, undefined, "manifest/receipt-unindexed",
-      "Rule 0: the pre-D-87 bytes of kats/positive/d82-chain-two-levels (the embedded delegation re-signed, so the authorization and its descendants carry new receipt IDs) while the carried epoch-42 manifest still indexes the old ones.", 15),
+      "Rule 0: kats/positive/d82-chain-two-levels without the D-87 re-index (the embedded delegation re-signed, so the authorization and its descendants carry new receipt IDs; regenerated under D-90 with the attempt carrying the recomputed decision commitment) while the carried epoch-42 manifest still indexes the old ones.", 15),
     positive("d87-retained-superset", retained, "The retained bundle carries epoch 42 with no receipts; the bundle carries every receipt that index lists, so each carried receipt is listed by a retained epoch.", base, listed),
     negative("d87-retained-forged-insertion", edit((bundle) => { clearJournal(bundle); extra(bundle, 42); }), retained, "manifest/receipt-unindexed",
       "The bundle drops its journal (so rule 0 has no carried manifest) and adds a root observation bound to epoch 42 that the retained index does not list: class (e) membership."),

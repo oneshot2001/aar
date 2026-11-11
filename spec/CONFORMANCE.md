@@ -144,7 +144,10 @@ normative as the step order itself (D-54).
       within each production, validate every closed scalar enum (credential
       `key_usage` and `principal_role`; delegation `use`; the action names
       of a normalized action, a command manifest, and a map-shaped delegation
-      `scope`'s array `actions` (D-88); epoch event `event`;
+      `scope`'s array `actions` (D-88); an authorization decision record's
+      `decision`, when `decision` is a text-keyed map (a non-map `decision`
+      stays `schema/bad-type` at step 10), and an action attempt's
+      `disposition`, after its action names (D-90); epoch event `event`;
       manifest `close_reason`, `late_arrival_policy`, and `fork_policy`;
       transformation `operation`; `phase`; `format`; `reversibility`; outcome
       `state`; evidence `time.class`, `provenance.class`, and `outcome.level`;
@@ -432,7 +435,15 @@ normative as the step order itself (D-54).
     `kind` is absent or unlisted is `graph/root-forbidden`.
 13. **Authorization dominance.** For every dispatch, resolve its single
     `attempted_as` action attempt. The attempt MUST have exactly one
-    `authorized_by` authorization ancestor, and that authorization MUST carry
+    `authorized_by` authorization ancestor, whose `receipt_id` the attempt's
+    `authorization_id` names. Then, in this order and before the delegation
+    is resolved (D-90): the attempt's `decision_commitment` MUST be a 32-byte
+    digest equal both to that authorization's `decision.decision_commitment`
+    and to the decision-record commitment recomputed over its `decision`
+    (whether or not step 7 recomputed it); the attempt's `disposition` MUST
+    be `eligible_for_dispatch`; and `decision.decision` MUST be `permit` or
+    `permit_with_approval`. Any of these failures is
+    `graph/dominator-missing`. That authorization MUST carry
     exactly one valid delegation whose scope contains that attempt's action,
     target, purpose, profile, invocation, tenant, and site. Removing that
     authorization node or its delegation MUST disconnect the dispatch from a
@@ -465,9 +476,14 @@ normative as the step order itself (D-54).
     followed in `parent_delegations` array order, depth first; each carried
     delegation's chain is evaluated at most once per verification, so the
     traversal is bounded by the number of carried delegations whatever the
-    sharing of ancestors. For each dispatch in array order, after that dispatch's
-    dominance, embedded-delegation, scope, time and parent-delegation checks
-    succeed, apply D-66 before moving to the next dispatch (D-54). On an AAR-3
+    sharing of ancestors. After its parent-delegation check, a dispatch
+    consumes every distinct `one_time` delegation on its chain: the embedded
+    delegation and each carried delegation its `parent_delegations` reach. A
+    `one_time` delegation an earlier dispatch in the bundle already consumed
+    is `delegation/scope` (D-90); two dispatches of one attempt are two uses.
+    For each dispatch in array order, after that dispatch's
+    dominance, embedded-delegation, scope, time, parent-delegation and
+    one-time checks succeed, apply D-66 before moving to the next dispatch (D-54). On an AAR-3
     profile, the linked `action_attempt` is committed
     before the action-bearing send only if (a) its signed binding supplies the
     same epoch owner and epoch as the dispatch, (b) its `epoch_seq` is lower than
@@ -479,7 +495,11 @@ normative as the step order itself (D-54).
     `degraded.reason="journal/unavailable"`; that dispatch remains conformant and
     records `degraded_dispatch`. This exemption comes only from the bound trust
     policy and is never established by an EP assertion alone. Anchoring is
-    asynchronous and MUST NOT enter this check. An AAR-3 `not_dispatched` attempt with
+    asynchronous and MUST NOT enter this check. After every dispatch, each
+    `eligible_for_dispatch` attempt that no dispatch names, in artifact order,
+    MUST pass the same `authorized_by`, `authorization_id`, commitment and
+    decision checks (D-90); a `not_dispatched` refusal under any decision
+    needs none of them. An AAR-3 `not_dispatched` attempt with
     `refusal_reason="journal/unavailable"` and no dispatch naming it records
     `refused_pre_dispatch`.
 
@@ -866,7 +886,7 @@ one input has several defects, section 2 selects the first verifier code.
 | `replay/one-time-reused` | A one-time replay-domain/invocation coordinate was used for different content earlier in the bundle (step 11) or in the supplied replay state (step 20 history phase, D-87). |
 | `delegation/not-yet-valid` | Attempt precedes delegation `not_before`. |
 | `delegation/expired` | Attempt is at or after delegation `not_after`. |
-| `delegation/scope` | The delegation's subject is not the enforcement point that signed the attempt (D-79), or action, target, purpose, tenant, site, profile, or invocation is outside delegation scope. |
+| `delegation/scope` | The delegation's subject is not the enforcement point that signed the attempt (D-79), or action, target, purpose, tenant, site, profile, or invocation is outside delegation scope, or a `one_time` delegation on the dispatch's chain was already consumed by an earlier dispatch in the bundle (D-90). |
 | `delegation/chain-invalid` | A parent delegation on the transitive chain is missing, already on the path, does not contain the child's window or its four scope lists, differs in tenant or site, or widens `use` or `invocation_id` (D-82). |
 | `graph/dangling-parent` | A parent id cannot be resolved in the bundle when closure is required. |
 | `graph/parent-metadata-mismatch` | Parent kind/tenant/site/epoch metadata differs from the resolved parent. |
@@ -876,7 +896,7 @@ one input has several defects, section 2 selects the first verifier code.
 | `graph/tenant-site-splice` | Parent and child have different tenant or site. |
 | `graph/cross-epoch-forbidden` | Cross-epoch edge type/reason is unlisted or an unequal epoch lacks `cross_epoch`. |
 | `graph/cross-epoch-unanchored` | Cross-epoch source is not earlier, closed, and bound to the named valid anchor/manifest; or the named manifest does not belong to the parent's owner/epoch/tenant/site, or the named anchor does not bind that manifest (D-82). |
-| `graph/dominator-missing` | Dispatch lacks its one exact dominating authorization/delegation path. |
+| `graph/dominator-missing` | Dispatch lacks its one exact dominating authorization/delegation path: an eligible attempt carrying its permitting authorization's recomputed decision commitment, then that authorization's delegation; or an undispatched eligible attempt lacks that authorization (D-90). |
 | `graph/dominator-ambiguous` | More than one authorization or delegation dominates a dispatch. |
 | `epoch/event-chain` | Event sequence or previous-event digest does not form one owner/epoch chain. |
 | `epoch/id-nonmonotonic` | Epoch ID is not greater than its predecessor epoch ID. |

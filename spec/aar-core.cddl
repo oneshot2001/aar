@@ -416,6 +416,7 @@ decision-record-fields = (
   effective_policy_epoch: uint,
   evaluated_inputs: evaluated-inputs,
   decision: "permit" / "deny" / "permit_with_approval",
+  ; D-90: closed at step 6; a dispatch, or an eligible attempt, needs permit or permit_with_approval (step 13).
   counter_state_digest: digest32,
   status_snapshot_ids: optional-digest-ids,
   profile: profile,
@@ -477,6 +478,7 @@ action-attempt-body = {
   authorization_id: digest32,
   decision_commitment: digest32,
   disposition: "eligible_for_dispatch" / "not_dispatched",
+  ; D-90: closed at step 6; only an eligible attempt may be dispatched, and its decision_commitment must be its authorization's (step 13).
   ? refusal_reason: bounded-text,
   ? degraded: degraded-marker,
 }

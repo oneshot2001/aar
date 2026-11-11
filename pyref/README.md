@@ -272,9 +272,9 @@ neither signature must be treated as third-party assurance or used as a
 deployment credential.
 
 The implementation-defined verifier identity preimages are stable constants:
-`pyref-aar-v0.4.2-d89-approval-state-build-v1` for `build_digest` and
+`pyref-aar-v0.4.3-d90-dispatch-dominance-build-v1` for `build_digest` and
 `pyref-aar-v0.2-gate4-c2-fixed-conformance-config-v1` for `config_digest`.
 
-Both verifiers report version `v0.4.2`. The harness build digest is SHA-256 of
-UTF-8 `harness-aar-v0.4.2-d89-approval-state-build-v1`; its config digest keeps
+Both verifiers report version `v0.4.3`. The harness build digest is SHA-256 of
+UTF-8 `harness-aar-v0.4.3-d90-dispatch-dominance-build-v1`; its config digest keeps
 the preimage `AAR-KAT-OPAQUE-ID:verifier-config:aar-reference-verifier@0.2.0-default`.

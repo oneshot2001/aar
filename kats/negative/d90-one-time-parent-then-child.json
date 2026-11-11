@@ -1,0 +1,7 @@
+{
+  "name": "d90-one-time-parent-then-child",
+  "expected_code": "delegation/scope",
+  "mutation_description": "One authorization embeds a one_time child of a carried one_time parent; the other embeds the parent itself. The parent is consumed twice.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

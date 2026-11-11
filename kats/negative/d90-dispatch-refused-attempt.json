@@ -1,0 +1,7 @@
+{
+  "name": "d90-dispatch-refused-attempt",
+  "expected_code": "graph/dominator-missing",
+  "mutation_description": "The dispatched attempt is not_dispatched with a refusal_reason; a dispatch needs an eligible attempt.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

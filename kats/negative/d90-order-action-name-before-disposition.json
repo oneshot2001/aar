@@ -1,0 +1,7 @@
+{
+  "name": "d90-order-action-name-before-disposition",
+  "expected_code": "schema/enum-unknown",
+  "mutation_description": "The dispatched attempt's action_name is camera.export_clip and its disposition is absent; action names come before disposition in CDDL order.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

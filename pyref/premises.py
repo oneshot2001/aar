@@ -1,5 +1,5 @@
 """Rejection-site inventory (Packet D): every ``_fail(`` call in verifier.py, field_rules.py,
-relying_party.py, emission_identity.py, manifest_index.py and history.py, and every ``CBORError(``
+relying_party.py, emission_identity.py, manifest_index.py, history.py and dominance.py, and every ``CBORError(``
 construction in cbor.py, by AST.
 Decoder checks the source documents as unreachable are listed under EXCLUDED
 with that comment as the reason. ``python3 -B -m pyref.premises`` prints JSON.
@@ -15,7 +15,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 FAIL_FILES = ("pyref/verifier.py", "pyref/field_rules.py", "pyref/relying_party.py", "pyref/emission_identity.py",
-              "pyref/manifest_index.py", "pyref/history.py")
+              "pyref/manifest_index.py", "pyref/history.py", "pyref/dominance.py")
 CBOR_FILE = "pyref/cbor.py"
 UNREACHABLE_MARK = "unreachable"
 

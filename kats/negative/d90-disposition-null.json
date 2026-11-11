@@ -1,0 +1,7 @@
+{
+  "name": "d90-disposition-null",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The dispatched attempt's disposition is null; the disposition enum is closed at step 6.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

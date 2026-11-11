@@ -1,0 +1,7 @@
+{
+  "name": "d90-commitment-not-recomputed",
+  "expected_code": "graph/dominator-missing",
+  "mutation_description": "The permit decision lacks policy_set_root, so step 7 does not recompute its commitment; attempt and authorization still carry the same stale value.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

@@ -1,0 +1,7 @@
+{
+  "name": "d90-decision-null",
+  "expected_code": "schema/bad-type",
+  "mutation_description": "The permit authorization's decision.decision is null (commitment recomputed); the decision enum is closed at step 6.",
+  "expected_result": "nonconformant",
+  "expected_step": 6
+}

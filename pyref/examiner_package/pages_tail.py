@@ -77,7 +77,7 @@ Frye to the expert method under Pa.R.E. 702. These are separate questions.
 | tool versions | {json.dumps(acquisition.get('tool_versions'), sort_keys=True)}; platform `{acquisition.get('platform')}` | |
 | verifier identity | run 1: published corpus test key, kid `{pinned.get('verdict_kid')}`; run 3: the examiner's own leaf (not pinned here) | |
 | time evidence class | `maximum_time_class = {limits.get('maximum_time_class')}`; evaluation time `{pinned['evaluated_at']}` from a producer file | |
-| spec version | wire `application/aar-receipt+cbor;v=0.2`, verdict `application/aar-verdict+cbor;v=0.4` (v 6), verifier pyref `v0.4.2` | |
+| spec version | wire `application/aar-receipt+cbor;v=0.2`, verdict `application/aar-verdict+cbor;v=0.4` (v 6), verifier pyref `v0.4.3` | |
 | who can certify collection | the collector label is "{acquisition.get('source', {}).get('collector_label')}" (a label, not a certification) | name: |
 | who can explain verification | — | name: |
 | qualified person's statement | — | |

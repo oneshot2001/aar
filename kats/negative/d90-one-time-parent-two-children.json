@@ -1,0 +1,7 @@
+{
+  "name": "d90-one-time-parent-two-children",
+  "expected_code": "delegation/scope",
+  "mutation_description": "A carried one_time parent has two one_time children embedded in two authorizations; each child authorizes one dispatch. Consumption covers the whole chain.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

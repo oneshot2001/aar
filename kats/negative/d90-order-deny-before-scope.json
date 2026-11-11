@@ -1,0 +1,7 @@
+{
+  "name": "d90-order-deny-before-scope",
+  "expected_code": "graph/dominator-missing",
+  "mutation_description": "The permit becomes deny and its delegation's targets no longer contain the action's target; the decision check precedes the delegation checks (was delegation/scope).",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

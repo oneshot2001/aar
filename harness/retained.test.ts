@@ -90,8 +90,10 @@ describe("D-87 retained evidence", () => {
     expect(carried.ok ? null : [carried.reason, carried.step]).toEqual(["identity/coordinate-equivocation", 20]);
   }, 60_000);
 
-  test("the rule-0 row is the v0.3.1 d82-chain-two-levels bytes and the history-independence row is graph-dangling-parent", () => {
-    expect(toHex(hash(fixture("d87-receipt-unindexed-in-bundle").bundle))).toBe("09a17bd25a6e85de5d794c6a068fe17ba3f1742516927581d86de5a16ff00f57");
+  // D-90 re-pin: the v0.3.1 bytes (09a17bd2…) left the attempt's decision_commitment stale and now stop at
+  // graph/dominator-missing@13 before rule 0; the regenerated row carries the recomputed commitment.
+  test("the rule-0 row is d82-chain-two-levels without the D-87 re-index and the history-independence row is graph-dangling-parent", () => {
+    expect(toHex(hash(fixture("d87-receipt-unindexed-in-bundle").bundle))).toBe("0a2222c0221f14dac7e5cc36c65d2a511274a2959aad7ca2e728850c196eb014");
     expect(toHex(fixture("d87-history-independence-dangling-parent").bundle)).toBe(toHex(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "kats", "negative", "graph-dangling-parent.cbor"))));
   });
 

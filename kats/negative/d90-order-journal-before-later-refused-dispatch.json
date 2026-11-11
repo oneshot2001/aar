@@ -1,0 +1,7 @@
+{
+  "name": "d90-order-journal-before-later-refused-dispatch",
+  "expected_code": "journal/uncommitted-dispatch",
+  "mutation_description": "AAR-3: the first dispatch's attempt is committed after it; a later dispatch cites the refused attempt. Dispatches are judged one at a time in array order.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

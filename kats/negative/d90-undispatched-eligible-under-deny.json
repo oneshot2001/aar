@@ -1,0 +1,7 @@
+{
+  "name": "d90-undispatched-eligible-under-deny",
+  "expected_code": "graph/dominator-missing",
+  "mutation_description": "No dispatch or outcome is carried; the permit becomes deny and the attempt stays eligible_for_dispatch; an eligible attempt needs a permitting authorization even when nothing was sent.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}

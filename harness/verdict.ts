@@ -24,8 +24,8 @@ const VERDICT_LIMITS: Obj = {
 };
 
 // D-81 build identity hashes the literal UTF-8 preimage; config identity is unchanged.
-const DEFAULT_VERSION = "v0.4.2";
-const DEFAULT_BUILD_DIGEST = hash(new TextEncoder().encode("harness-aar-v0.4.2-d89-approval-state-build-v1"));
+const DEFAULT_VERSION = "v0.4.3";
+const DEFAULT_BUILD_DIGEST = hash(new TextEncoder().encode("harness-aar-v0.4.3-d90-dispatch-dominance-build-v1"));
 const VERDICT_CONTENT_TYPE = "application/aar-verdict+cbor;v=0.4";
 const DEFAULT_CONFIG_DIGEST = deterministicId("verifier-config:aar-reference-verifier@0.2.0-default");
 const ZERO_DIGEST = new Uint8Array(32);

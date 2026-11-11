@@ -1,0 +1,7 @@
+{
+  "name": "d90-attempt-commitment-other",
+  "expected_code": "graph/dominator-missing",
+  "mutation_description": "The dispatched attempt's decision_commitment is other (re-signed, cascaded); it must be the authorization's recomputed 32-byte commitment.",
+  "expected_result": "nonconformant",
+  "expected_step": 13
+}
