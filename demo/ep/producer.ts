@@ -1,7 +1,7 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { DemoAdapter, DispatchResult, ScenarioId } from "../../adapters/shared/types";
-import { fromHex, toHex } from "../../harness/cbor";
+import { decodeCbor, fromHex, toHex, type CborValue } from "../../harness/cbor";
 import { hash } from "../../harness/crypto";
 import type { LocalRfc6962Log } from "../anchor/log";
 import type { DemoKey, DemoKeyRole } from "../keys/keys";
@@ -52,6 +52,20 @@ export interface ProducerResult {
 
 function validateId(name: string, value: Uint8Array, length: number): void {
   if (value.length !== length) throw new Error(`${name} must be ${length} bytes`);
+}
+
+// The credential arrives in the dispatch response, after the device acted, so an
+// unusable one is dropped rather than allowed to stop the bundle being emitted.
+function usableCredential(envelope: readonly CborValue[] | undefined): readonly CborValue[] | undefined {
+  if (envelope === undefined || !(envelope[0] instanceof Uint8Array)) return undefined;
+  try {
+    const payload = decodeCbor(envelope[0], { strict: true });
+    const isTextKeyedMap = typeof payload === "object" && payload !== null
+      && !Array.isArray(payload) && !(payload instanceof Map) && !(payload instanceof Uint8Array);
+    return isTextKeyedMap && payload.credential_id instanceof Uint8Array ? envelope : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function atomicWrite(path: string, bytes: Uint8Array | string): Promise<void> {
@@ -105,7 +119,10 @@ export async function produce(input: ProducerInput): Promise<ProducerResult> {
     outcomeLevel: result.effect.outcome_level,
     outcomeState: result.effect.state,
     observationDigest: fromHex(result.effect.observation_digest),
-    mediatorCountersignature: result.mediatorCountersignature,
+    mediatorCountersignature: result.mediatorCountersignature === undefined ? undefined : {
+      envelope: result.mediatorCountersignature.envelope,
+      credentialEnvelope: usableCredential(result.mediatorCountersignature.credentialEnvelope),
+    },
   });
 
   if (!authorization.authorized) {
