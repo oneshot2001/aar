@@ -1,7 +1,7 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { DemoAdapter, DispatchResult, ScenarioId } from "../../adapters/shared/types";
-import { decodeCbor, fromHex, toHex, type CborValue } from "../../harness/cbor";
+import { decodeCbor, encodeCbor, fromHex, toHex, type CborValue } from "../../harness/cbor";
 import { hash } from "../../harness/crypto";
 import type { LocalRfc6962Log } from "../anchor/log";
 import type { DemoKey, DemoKeyRole } from "../keys/keys";
@@ -68,6 +68,25 @@ function usableCredential(envelope: readonly CborValue[] | undefined): readonly 
   }
 }
 
+const DEFAULT_REFUSAL_REASON = "adapter-refused-before-transport";
+const utf8 = new TextEncoder();
+
+// CDDL bounded-text: 1..128 UTF-8 bytes (spec/aar-core.cddl:42).
+function isBoundedText(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const length = utf8.encode(value).length;
+  return length >= 1 && length <= 128;
+}
+
+function requireBoundedText(name: string, value: string): void {
+  if (!isBoundedText(value)) throw new Error(`${name} must be 1..128 UTF-8 bytes`);
+}
+
+function refusalReasonOf(result: DispatchResult): string {
+  const status = result.effect.backend_evidence.application_status;
+  return isBoundedText(status) ? status : DEFAULT_REFUSAL_REASON;
+}
+
 async function atomicWrite(path: string, bytes: Uint8Array | string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.tmp-${process.pid}`;
@@ -84,6 +103,21 @@ export async function produce(input: ProducerInput): Promise<ProducerResult> {
   validateId("tenantId", input.tenantId, 16);
   validateId("siteId", input.siteId, 16);
   validateId("targetId", input.targetId, 16);
+  requireBoundedText("adapter.id", input.adapter.id);
+  requireBoundedText("adapter.version", input.adapter.version);
+  // The wire builder emits transport_id as `gate5:<adapter id>`; the producer never supplies a narrative.
+  requireBoundedText("transport_id", `gate5:${input.adapter.id}`);
+  if (input.sourceDeviceMetadata !== undefined) {
+    requireBoundedText("sourceDeviceMetadata.manufacturer", input.sourceDeviceMetadata.manufacturer);
+    requireBoundedText("sourceDeviceMetadata.model", input.sourceDeviceMetadata.model);
+    requireBoundedText("sourceDeviceMetadata.firmware", input.sourceDeviceMetadata.firmware);
+  }
+  if (encodeCbor(input.parameters).length > 65_536) throw new Error("parameters must encode to at most 65536 bytes");
+  const command = buildCommandManifest({
+    actionName: input.actionName, targetId: input.targetId, targetLogicalName: input.targetLogicalName,
+    parameters: input.parameters, invocationId: input.invocationId,
+  }, input.adapter.id, input.adapter.version);
+  if (command.canonical_command.length > 65_536) throw new Error("canonical_command must be at most 65536 bytes");
   const invocationIdHex = toHex(input.invocationId);
 
   const request = buildSignedAgentRequest(input);
@@ -104,10 +138,6 @@ export async function produce(input: ProducerInput): Promise<ProducerResult> {
     data: { authorized: authorization.authorized, not_before: authorization.selected.notBefore, not_after: authorization.selected.notAfter, profile: "AAR-3", policy_root: toHex(authorization.policyRoot) },
   });
 
-  const command = buildCommandManifest({
-    actionName: input.actionName, targetId: input.targetId, targetLogicalName: input.targetLogicalName,
-    parameters: input.parameters, invocationId: input.invocationId,
-  }, input.adapter.id, input.adapter.version);
   let dispatchCount = 0;
   let dispatchResult: DispatchResult | undefined;
   let resumedWithoutRedispatch = false;
@@ -188,7 +218,7 @@ export async function produce(input: ProducerInput): Promise<ProducerResult> {
         });
         return { dispatch: wireDispatch(dispatchResult) };
       }
-      const reason = String(dispatchResult.effect.backend_evidence.application_status ?? "adapter-refused-before-transport");
+      const reason = refusalReasonOf(dispatchResult);
       await input.journal.append({
         invocation_id: invocationIdHex, at: input.evaluatedAt, event: "pre_transport_refusal_observed",
         data: { reason },
@@ -206,7 +236,7 @@ export async function produce(input: ProducerInput): Promise<ProducerResult> {
     dispatch: dispatchResult?.dispatched ? wireDispatch(dispatchResult) : undefined,
     beforeDispatch,
     refusalReason: beforeDispatch === undefined && dispatchResult && !dispatchResult.dispatched
-      ? String(dispatchResult.effect.backend_evidence.application_status ?? "adapter-refused-before-transport")
+      ? refusalReasonOf(dispatchResult)
       : undefined,
   });
   await atomicWrite(input.bundlePath, wire.bundle);
