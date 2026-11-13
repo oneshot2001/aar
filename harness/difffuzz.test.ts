@@ -31,6 +31,8 @@ test("difffuzz --seed 1 --mutants 200 exits 0 with controls 8/8 and the full bas
 for (const flags of [
   ["--chunk", "0"], ["--chunk", "-1"], ["--chunk", "abc"], ["--chunk", "1.5"], ["--chunk"],
   ["--cli-lane", "abc"], ["--cli-lane", "-5"], ["--cli-lane", "1.5"], ["--cli-lane"],
+  ["--cli-lane", ""], ["--chunk", "1e2"], ["--chunk", "0x10"], ["--cli-lane", "0b1"],
+  ["--lanes"], ["--lanes", "0x2"],
 ]) {
   test(`fuzz cli arguments: rejects ${flags.join(" ")} before creating output`, () => {
     const dir = mkdtempSync(join(tmpdir(), "difffuzz-args-"));
@@ -49,7 +51,7 @@ for (const [chunk, cliLane] of [[1, 0], [100, 2]] as const) {
     const dir = mkdtempSync(join(tmpdir(), "difffuzz-args-"));
     const out = join(dir, "out");
     try {
-      const proc = Bun.spawnSync(["bun", "run", "harness/difffuzz.ts", "--seed", "1", "--mutants", "20", "--out", out, "--chunk", String(chunk), "--cli-lane", String(cliLane)], { cwd: root, timeout: 600_000 });
+      const proc = Bun.spawnSync(["bun", "run", "harness/difffuzz.ts", "--seed", "1", "--mutants", "20", "--out", out, "--chunk", String(chunk), "--cli-lane", String(cliLane), ...(chunk === 1 ? ["--lanes", "1"] : [])], { cwd: root, timeout: 600_000 });
       expect(proc.exitCode, proc.stderr.toString()).toBe(0);
       const { stable } = JSON.parse(readFileSync(join(out, "report.json"), "utf8"));
       if (cliLane === 0) expect(stable.cli_lane).toBeNull();

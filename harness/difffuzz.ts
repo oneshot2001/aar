@@ -21,9 +21,13 @@ import { loadSeeds } from "./difffuzz-seeds";
 function args(): { seed: number; mutants: number; out: string; chunk: number; lanes: number; premises: boolean; legs: boolean; cliLane: number } {
   const argv = process.argv.slice(2); const flag = (name: string): string | undefined => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
   const seed = Number(flag("--seed")); const mutants = Number(flag("--mutants")); const out = flag("--out");
-  const lanes = Number(flag("--lanes") ?? 3);
-  const chunk = argv.includes("--chunk") ? Number(flag("--chunk")) : 250;
-  const cliLane = argv.includes("--cli-lane") ? Number(flag("--cli-lane")) : 0;
+  const decimalFlag = (name: string, fallback: number): number => {
+    if (!argv.includes(name)) return fallback;
+    const value = flag(name); return value !== undefined && /^\d+$/.test(value) ? Number(value) : NaN;
+  };
+  const lanes = decimalFlag("--lanes", 3);
+  const chunk = decimalFlag("--chunk", 250);
+  const cliLane = decimalFlag("--cli-lane", 0);
   if (!Number.isInteger(seed) || !Number.isInteger(mutants) || mutants < 0 || out === undefined || !Number.isInteger(lanes) || lanes < 1 || !Number.isInteger(chunk) || chunk < 1 || !Number.isInteger(cliLane) || cliLane < 0) { console.error("usage: bun run harness/difffuzz.ts --seed N --mutants N --out DIR [--chunk 250] [--lanes 3] [--premises] [--legs] [--cli-lane N]"); process.exit(1); }
   return { seed, mutants, out, chunk, lanes, premises: argv.includes("--premises"), legs: argv.includes("--legs"), cliLane };
 }
