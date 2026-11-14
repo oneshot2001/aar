@@ -1,11 +1,14 @@
 import { expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { CborValue, decodeCbor, fromHex, toHex } from "./cbor";
 import { deterministicId } from "./crypto";
 import { BaselineRow, request, runBaseline } from "./difffuzz-baseline";
 import { Side, compare, harnessSide, sideOf } from "./difffuzz-compare";
 import { LEGS } from "./difffuzz-leg-table";
 import { runLegs } from "./difffuzz-legs";
-import { SeedEntry, seedViews } from "./difffuzz-mutants";
+import { SeedEntry, seedViews, writeFinding } from "./difffuzz-mutants";
 import { PyrefBatch } from "./difffuzz-pyref";
 import { Rng } from "./difffuzz-rng";
 import { Seed, loadSeeds } from "./difffuzz-seeds";
@@ -156,4 +159,62 @@ test("fuzz leg oracle: another non-duplicate lower-sequence witness prevents a d
     epochSeq: 9_999_999, issuerKid: deterministicId("oracle:other-issuer") };
   // Receipt 0 is no longer an exact duplicate and remains below the supplied epoch history.
   await checkPrior(seed, priorJson(...entries.slice(1)), [], [duplicate, below], [duplicate, below]);
+}, 180_000);
+
+// A policy-leg finding is re-executed and written by the driver after runLegs returns,
+// so its rewritten policy file must still exist then; the driver removes the directory.
+test.serial("fuzz leg oracle: policy scratch outlives runLegs", async () => {
+  const ceiling = LEGS.find((item) => item.leg === "relying-party-ceiling")!;
+  const removal = ceiling.classes.removal!;
+  const batch = await PyrefBatch.start();
+  const out = mkdtempSync(join(tmpdir(), "difffuzz-legs-out-"));
+  let work: string | null = null;
+  try {
+    const picked = seeds.filter((seed) => seed.inputs.policy !== null && seed.pinned.result === "conformant").slice(0, 3);
+    const baseline = await runBaseline(picked, [batch], batch.handshake.identity);
+    expect(baseline.mismatches).toEqual([]);
+    // An empty allowed set turns every ceiling mutant into a finding.
+    ceiling.classes.removal = (...args) => { const mutant = removal(...args); return mutant === null ? null : { ...mutant, allowed: { ...mutant.allowed, results: [], codes: [] } }; };
+    const run = await runLegs(seedViews(baseline.rows), new Rng(1), [batch], batch.handshake.identity);
+    work = run.workDirectory;
+    const findings = run.findings.filter((finding) => finding.leg === "relying-party-ceiling");
+    expect(findings.length).toBeGreaterThan(0);
+    for (const finding of findings) {
+      const policy = finding.request.inputs.policy!;
+      expect(existsSync(policy)).toBe(true);
+      expect(policy.startsWith(work!)).toBe(true);
+    }
+    const fresh = await PyrefBatch.start();
+    try {
+      const responses = await fresh.run([{ ...findings[0]!.request, identity: fresh.handshake.identity }]);
+      expect(responses.length).toBe(1);
+    } finally { await fresh.close(); }
+    writeFinding(out, findings[0]!);
+    const written = JSON.parse(readFileSync(join(out, findings[0]!.id, "inputs.json"), "utf8")).policy as string;
+    expect(written).toMatch(/^[0-9a-f]{64}\.json$/);
+    expect(readFileSync(join(out, findings[0]!.id, written))).toEqual(readFileSync(findings[0]!.request.inputs.policy!));
+  } finally {
+    ceiling.classes.removal = removal; await batch.close();
+    rmSync(out, { recursive: true, force: true }); if (work) rmSync(work, { recursive: true, force: true });
+  }
+}, 180_000);
+
+test.serial("fuzz leg oracle: policy scratch is removed when runLegs throws", async () => {
+  const ceiling = LEGS.find((item) => item.leg === "relying-party-ceiling")!;
+  const removal = ceiling.classes.removal!;
+  const batch = await PyrefBatch.start();
+  const allocated = new Set<string>();
+  try {
+    const picked = seeds.filter((seed) => seed.inputs.policy !== null && seed.pinned.result === "conformant").slice(0, 3);
+    const baseline = await runBaseline(picked, [batch], batch.handshake.identity);
+    expect(baseline.mismatches).toEqual([]);
+    ceiling.classes.removal = (entry, rng, work, id) => { const mutant = removal(entry, rng, work, id); if (mutant !== null) allocated.add(work()); return mutant; };
+    const failing = { run: async () => { throw new Error("injected batch failure"); } } as unknown as PyrefBatch;
+    await expect(runLegs(seedViews(baseline.rows), new Rng(1), [failing], batch.handshake.identity)).rejects.toThrow("injected batch failure");
+    expect(allocated.size).toBe(1);
+    for (const directory of allocated) expect(existsSync(directory)).toBe(false);
+  } finally {
+    ceiling.classes.removal = removal; await batch.close();
+    for (const directory of allocated) rmSync(directory, { recursive: true, force: true });
+  }
 }, 180_000);

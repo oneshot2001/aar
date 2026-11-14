@@ -4,7 +4,7 @@
 // 3 = a control did not fire; 4 = adapter (transport/handshake) failure.
 // Nothing under kats/ is written; a run reports only with every number, in the
 // run line difffuzz-report.ts formats from the aggregate of every lane.
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Baseline, runBaseline, runControls } from "./difffuzz-baseline";
 import { runCliLane } from "./difffuzz-cli-lane";
@@ -55,7 +55,7 @@ async function main(): Promise<number> {
   let batches: PyrefBatch[];
   try { batches = await Promise.all(Array.from({ length: options.lanes }, () => PyrefBatch.start({ chunk: options.chunk, premises: options.premises }))); } catch (error) { console.error(`adapter: ${(error as Error).message}`); return 4; }
   const batch = batches[0]!; const identity = batch.handshake.identity;
-  let baseline: Baseline;
+  let baseline: Baseline; let legsWork: string | null = null;
   try {
     const t = now(); baseline = await runBaseline(seeds, batches, identity); times.baseline_ms = now() - t; progress(`baseline ${baseline.count - baseline.mismatches.length}/${baseline.count} in ${times.baseline_ms} ms`);
     if (baseline.mismatches.length > 0) { console.error(`baseline: ${baseline.mismatches.length} of ${baseline.count} seeds do not reproduce their pinned row; nothing else is reported`); for (const line of baseline.mismatches.slice(0, 20)) console.error(`  ${line}`); return 2; }
@@ -66,7 +66,7 @@ async function main(): Promise<number> {
     const t2 = now(); const mutants: MutantRun = await runMutants(options.mutants, OPERATORS, entries, rng, batches, identity); times.mutants_ms = now() - t2; progress(`${mutants.executed.length} mutants executed, ${mutants.findings.length} findings in ${times.mutants_ms} ms`);
     const sites: Site[] = [...baseline.sites, ...mutants.sites];
     let legs = null;
-    if (options.legs) { const t3 = now(); legs = await runLegs(entries, new Rng(options.seed ^ LEG_RNG_DOMAIN), batches, identity); times.legs_ms = now() - t3; progress(`legs ${JSON.stringify(legs.counts)} in ${times.legs_ms} ms`); sites.push(...legs.sites); }
+    if (options.legs) { const t3 = now(); legs = await runLegs(entries, new Rng(options.seed ^ LEG_RNG_DOMAIN), batches, identity); legsWork = legs.workDirectory; times.legs_ms = now() - t3; progress(`legs ${JSON.stringify(legs.counts)} in ${times.legs_ms} ms`); sites.push(...legs.sites); }
     const findings: Finding[] = [...mutants.findings, ...(legs?.findings ?? [])];
     const t4 = now(); const sensitive = await hashSeedReexecution(findings, options.chunk, options.premises); times.hash_seed_ms = now() - t4; progress(`hash-seed re-execution: ${sensitive} of ${findings.length} findings sensitive in ${times.hash_seed_ms} ms`);
     // Written only now, so every both.json carries its hash-seed tag.
@@ -106,7 +106,7 @@ async function main(): Promise<number> {
   } catch (error) {
     if (error instanceof AdapterError) { console.error(`adapter: ${error.message}`); return 4; }
     throw error;
-  }
+  } finally { if (legsWork !== null) rmSync(legsWork, { recursive: true, force: true }); }
 }
 
 process.exit(await main());
