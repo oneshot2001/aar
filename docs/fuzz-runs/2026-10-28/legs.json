@@ -1,0 +1,369 @@
+{
+  "counts": {
+    "pass": 803,
+    "masked": 102,
+    "corruption-accepted": 0,
+    "claim-weakening-unmoved": 0,
+    "removal-accepted": 0,
+    "split": 1,
+    "unexpected": 0,
+    "unsupported": 914,
+    "operator-error": 0
+  },
+  "per_leg": {
+    "range-proof": {
+      "pass": 0,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 273,
+      "operator-error": 0
+    },
+    "range-proof/corruption": {
+      "pass": 0,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 91,
+      "operator-error": 0
+    },
+    "range-proof/removal": {
+      "pass": 0,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 91,
+      "operator-error": 0
+    },
+    "range-proof/claimWeakening": {
+      "pass": 0,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 91,
+      "operator-error": 0
+    },
+    "anchor": {
+      "pass": 128,
+      "masked": 2,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 52,
+      "operator-error": 0
+    },
+    "anchor/corruption": {
+      "pass": 64,
+      "masked": 1,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 26,
+      "operator-error": 0
+    },
+    "anchor/removal": {
+      "pass": 64,
+      "masked": 1,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 26,
+      "operator-error": 0
+    },
+    "mediator-countersignature": {
+      "pass": 2,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 180,
+      "operator-error": 0
+    },
+    "mediator-countersignature/corruption": {
+      "pass": 1,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 90,
+      "operator-error": 0
+    },
+    "mediator-countersignature/removal": {
+      "pass": 1,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 90,
+      "operator-error": 0
+    },
+    "relying-party-ceiling": {
+      "pass": 4,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 1,
+      "unexpected": 0,
+      "unsupported": 86,
+      "operator-error": 0
+    },
+    "relying-party-ceiling/removal": {
+      "pass": 4,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 1,
+      "unexpected": 0,
+      "unsupported": 86,
+      "operator-error": 0
+    },
+    "step-19-evidence": {
+      "pass": 12,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 170,
+      "operator-error": 0
+    },
+    "step-19-evidence/removal": {
+      "pass": 6,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 85,
+      "operator-error": 0
+    },
+    "step-19-evidence/claimWeakening": {
+      "pass": 6,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 85,
+      "operator-error": 0
+    },
+    "inclusion-proof": {
+      "pass": 130,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 52,
+      "operator-error": 0
+    },
+    "inclusion-proof/corruption": {
+      "pass": 65,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 26,
+      "operator-error": 0
+    },
+    "inclusion-proof/removal": {
+      "pass": 65,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 26,
+      "operator-error": 0
+    },
+    "credential-chain": {
+      "pass": 102,
+      "masked": 20,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 60,
+      "operator-error": 0
+    },
+    "credential-chain/removal": {
+      "pass": 31,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 60,
+      "operator-error": 0
+    },
+    "outcome-independence": {
+      "pass": 155,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 27,
+      "operator-error": 0
+    },
+    "outcome-independence/corruption": {
+      "pass": 78,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 13,
+      "operator-error": 0
+    },
+    "outcome-independence/removal": {
+      "pass": 77,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 14,
+      "operator-error": 0
+    },
+    "delegation": {
+      "pass": 91,
+      "masked": 80,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 11,
+      "operator-error": 0
+    },
+    "delegation/corruption": {
+      "pass": 0,
+      "masked": 80,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 11,
+      "operator-error": 0
+    },
+    "receipt-signature": {
+      "pass": 88,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 3,
+      "operator-error": 0
+    },
+    "receipt-signature/corruption": {
+      "pass": 88,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 3,
+      "operator-error": 0
+    },
+    "commitment": {
+      "pass": 91,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 0,
+      "operator-error": 0
+    },
+    "commitment/corruption": {
+      "pass": 91,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 0,
+      "operator-error": 0
+    },
+    "credential-chain/corruption": {
+      "pass": 71,
+      "masked": 20,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 0,
+      "operator-error": 0
+    },
+    "delegation/removal": {
+      "pass": 91,
+      "masked": 0,
+      "corruption-accepted": 0,
+      "claim-weakening-unmoved": 0,
+      "removal-accepted": 0,
+      "split": 0,
+      "unexpected": 0,
+      "unsupported": 0,
+      "operator-error": 0
+    }
+  },
+  "operator_errors": {},
+  "findings": [
+    {
+      "id": "leg-01737",
+      "leg": "relying-party-ceiling",
+      "class": "removal",
+      "outcome": "split",
+      "channel": "crash",
+      "seed": "kats/relying-party/rp-retained-under-policy.cbor",
+      "detail": "policy allowed_key_usages minus status_signing (a carried credential of that usage signs)",
+      "hash_seed_sensitive": false
+    }
+  ]
+}

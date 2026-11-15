@@ -1,0 +1,75 @@
+{
+  "stable": {
+    "id": "leg-01737",
+    "channel": "crash",
+    "operator": {
+      "name": "leg/relying-party-ceiling/removal",
+      "version": 1,
+      "layer": "payload",
+      "target_step": 8,
+      "repair_boundary": "per leg table"
+    },
+    "detail": "policy allowed_key_usages minus status_signing (a carried credential of that usage signs)",
+    "seed": {
+      "path": "kats/relying-party/rp-retained-under-policy.cbor",
+      "pinned": {
+        "result": "conformant",
+        "code": null,
+        "step": null,
+        "verdict_sha256": "bad33ad91443f5d40803121e6a27ee7c15af5cdfe40a7cd0dd2fe835bc44ac4d"
+      }
+    },
+    "identity": {
+      "product": "pyref",
+      "version": "v0.4.3",
+      "build_digest": "9b1c6e802bc09d613860f4c899bb9a8254040627649cf5e0b261248b74f2d4d6",
+      "config_digest": "aa9af962b4adb98dd718f82832bdc1f0767294b155b54d535012e4477a488ef4"
+    },
+    "harness": {
+      "result": null,
+      "reason": null,
+      "step": null,
+      "verdict_sha256": null,
+      "crash_type": "Error"
+    },
+    "pyref": {
+      "result": null,
+      "reason": null,
+      "step": null,
+      "verdict_sha256": null,
+      "crash_type": "UsageError"
+    },
+    "hash_seed_sensitive": false,
+    "leg": "relying-party-ceiling",
+    "class": "removal",
+    "outcome": "split",
+    "allowed": {
+      "results": [
+        "nonconformant"
+      ],
+      "codes": [
+        "credential/root-not-accepted@8"
+      ],
+      "limitsUnchangedOk": false,
+      "observationsMayDrop": [],
+      "mustMove": []
+    }
+  },
+  "volatile": {
+    "harness": {
+      "verdict_hex": null,
+      "crash": {
+        "type": "Error",
+        "message": "prior-state.retained_epochs[0] fails step 8 (credential/root-not-accepted)"
+      }
+    },
+    "pyref": {
+      "verdict_hex": null,
+      "crash": {
+        "type": "UsageError",
+        "message": "prior-state.retained_epochs[0] fails step 8 (credential/root-not-accepted)"
+      }
+    },
+    "directory": "docs/fuzz-runs/2026-10-28/leg-01737"
+  }
+}
