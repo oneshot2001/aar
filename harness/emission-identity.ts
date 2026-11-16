@@ -20,13 +20,25 @@ function uintField(value: unknown, label: string): number {
   return value as number;
 }
 
+// Python's string order: compare code points, including lone surrogate values.
+function codePointOrder(left: string, right: string): number {
+  let i = 0, j = 0;
+  while (i < left.length && j < right.length) {
+    const a = left.codePointAt(i)!, b = right.codePointAt(j)!;
+    if (a !== b) return a - b;
+    i += a > 0xffff ? 2 : 1;
+    j += b > 0xffff ? 2 : 1;
+  }
+  return (left.length - i) - (right.length - j);
+}
+
 // A closed entry: every field present, nothing else, named by its wire key when
 // missing (pyref's message). The JSON form uses wire keys, the typed form field names.
 function closedEntry(item: unknown, label: string, typed: boolean): Record<string, unknown> {
   if (!plain(item)) throw new Error(`${label} must be a JSON object`);
   const names: readonly string[] = PRIOR_KEYS.map(([key, field]) => typed ? field : key);
   const missing = PRIOR_KEYS.filter(([key, field]) => !Object.hasOwn(item, typed ? field : key)).map(([key]) => key).sort();
-  const unknown = Object.keys(item).filter((key) => !names.includes(key)).sort();
+  const unknown = Object.keys(item).filter((key) => !names.includes(key)).sort(codePointOrder);
   if (missing.length > 0 || unknown.length > 0) {
     throw new Error(`${label}: ${[...(missing.length > 0 ? [`missing ${missing.join(", ")}`] : []), ...(unknown.length > 0 ? [`unknown ${unknown.join(", ")}`] : [])].join("; ")}`);
   }
@@ -37,7 +49,7 @@ function closedEntry(item: unknown, label: string, typed: boolean): Record<strin
 // closed seven-key entries; hex strings are decoded here and nowhere else.
 export function parsePriorState(value: unknown): PriorEmission[] {
   if (!plain(value)) throw new Error("prior-state must be a JSON object");
-  const unknown = Object.keys(value).filter((key) => !["prior_emissions", "retained_epochs", "entries"].includes(key)).sort();
+  const unknown = Object.keys(value).filter((key) => !["prior_emissions", "retained_epochs", "entries"].includes(key)).sort(codePointOrder);
   if (unknown.length > 0) throw new Error(`prior-state: unknown ${unknown.join(", ")}`);
   const source = Object.hasOwn(value, "prior_emissions") ? value.prior_emissions : [];
   if (!Array.isArray(source)) throw new Error("prior-state.prior_emissions must be an array");

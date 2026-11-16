@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { equalBytes, toHex } from "./cbor";
 import { deterministicId } from "./crypto";
-import { HISTORY_CONTRADICTS_ITSELF, HISTORY_CONTRADICTS_RECEIPT } from "./emission-identity";
+import { checkPriorEmissions, HISTORY_CONTRADICTS_ITSELF, HISTORY_CONTRADICTS_RECEIPT, parsePriorState } from "./emission-identity";
 import { expectUsageError, harnessPrior, pyrefCli, pyrefLibrary, RawJson, UsageCase, withBundle } from "./prior-state-probe";
 import { buildD87Fixtures } from "./d87-fixtures";
 import { buildStatefulFixtures, exactEntries, FUZZ_SPLITS, mutated, parseStatefulPrior, priorJson, StatefulFixture, statefulOptions } from "./stateful-fixtures";
@@ -118,6 +118,47 @@ describe("D-86 emission identity", () => {
     withBundle(represent.bundle, (directory, bundle) => {
       expect(pyrefLibrary(directory, bundle, [whole])[0]!.slice(0, 2)).toEqual(["verdict", null]);
       expect(pyrefCli(directory, bundle, whole).exitCode).toBe(0);
+    });
+  });
+
+  for (const nested of [false, true]) {
+    test(`prior-state unknown keys are listed in code-point order ${nested ? "inside an entry" : "at top level"}`, () => {
+      const represent = fixture("d86-history-exact-represent");
+      const bmp = String.fromCodePoint(0xff61), astral = String.fromCodePoint(0x1f600);
+      const extra = { [astral]: 0, [bmp]: 0 };
+      const prior = nested ? { prior_emissions: [{ ...represent.prior!.prior_emissions![0], ...extra }] } : { ...represent.prior, ...extra };
+      const label = nested ? "prior-state.prior_emissions[0]" : "prior-state";
+      expectUsageError(represent.bundle, [[label, prior, `${label}: unknown ${bmp}, ${astral}`, "ValueError"]]);
+    });
+  }
+
+  test("prior-state unknown keys are listed in code-point order for surrogates, prefixes and the typed boundary", () => {
+    const represent = fixture("d86-history-exact-represent");
+    const exact = represent.prior!.prior_emissions![0]!;
+    const typed = parseStatefulPrior(represent.prior!)[0]!;
+    const astral = String.fromCodePoint(0x1f600), bmp = String.fromCodePoint(0xff61);
+    // Literal expected orders also distinguish code points from UTF-8 replacement bytes.
+    const orders = [
+      ["\ud800", "\udc00", bmp, astral],
+      ["prefix", "prefix\ud800", "prefix\udc00", `prefix${bmp}`, `prefix${astral}`],
+      [astral, `${astral}a`, `${astral}${bmp}`, `${astral}${astral}`],
+      ["a", "aa", "z"],
+    ];
+    const cases: UsageCase[] = [];
+    for (const keys of orders) {
+      const extra = Object.fromEntries([...keys].reverse().map((key) => [key, 0]));
+      const suffix = `unknown ${keys.join(", ")}`;
+      cases.push(
+        ["top level", { ...represent.prior, ...extra }, `prior-state: ${suffix}`, "ValueError"],
+        ["entry", { prior_emissions: [{ ...exact, ...extra }] }, `prior-state.prior_emissions[0]: ${suffix}`, "ValueError"],
+      );
+      expect(() => checkPriorEmissions([{ ...typed, ...extra }])).toThrow(`prior-state.prior_emissions[0]: ${suffix}`);
+    }
+    for (const [, prior, message] of cases) expect(() => parsePriorState(prior)).toThrow(message);
+    // pyrefLibrary transports messages with json.dumps, preserving lone surrogates
+    // without relying on the CLI's stderr encoding.
+    withBundle(represent.bundle, (directory, bundle) => {
+      expect(pyrefLibrary(directory, bundle, cases.map(([, prior]) => prior))).toEqual(cases.map(([, , message]) => ["ValueError", message]));
     });
   });
 
