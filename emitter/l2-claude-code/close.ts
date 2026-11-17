@@ -23,7 +23,10 @@ function main(): void {
   const statePath = join(dir, "state.json");
   const openedAt = existsSync(statePath)
     ? (JSON.parse(readFileSync(statePath, "utf8")) as { openedAt: number }).openedAt
-    : Math.floor(Date.now() / 1000);
+    : receipts.reduce((earliest, receipt) => {
+      const payload = openEnvelope(receipt, key.spki).payload as Record<string, CborValue>;
+      return Math.min(earliest, payload.committed_at as number);
+    }, receipts.length === 0 ? Math.floor(Date.now() / 1000) : Infinity);
 
   const payloadDigest = (envelopeBytes: Uint8Array): Uint8Array =>
     sha256(openEnvelope(envelopeBytes, key.spki).payloadBytes);

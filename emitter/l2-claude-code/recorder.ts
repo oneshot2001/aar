@@ -23,18 +23,22 @@ function main(): void {
     tool_input?: unknown;
     tool_response?: unknown;
   };
-  if (!event.session_id || !event.tool_name) return;
+  if (!event.session_id) return;
 
   const key = loadOrCreateRecorderKey();
   const sid = sessionId16(event.session_id);
   const dir = sessionDir(sid);
+  if (!event.tool_name) {
+    appendFileSync(join(dir, "errors.log"), "tool call without tool_name dropped\n");
+    return;
+  }
   const receiptsPath = join(dir, "receipts.hexl");
   const statePath = join(dir, "state.json");
 
   if (existsSync(join(dir, "close.hex"))) {
     // D-63: a closed session is never re-opened or re-closed. Receipts after
     // close would be unverifiable; record the starvation visibly instead.
-    appendFileSync(join(dir, "errors.log"), `post-close tool call dropped: ${event.tool_name}\n`);
+    appendFileSync(join(dir, "errors.log"), `post-close tool call dropped: ${JSON.stringify(event.tool_name)}\n`);
     return;
   }
 

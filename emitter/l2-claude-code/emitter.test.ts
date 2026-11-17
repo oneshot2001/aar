@@ -1,7 +1,7 @@
 // End-to-end: recorder → close → verify, then tamper/omission cases.
 // Runs the real entrypoints as subprocesses (the hook surface), isolated via AAR_L2_DIR.
 import { describe, expect, test, beforeAll } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync, cpSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, cpSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CborValue } from "./lib";
@@ -22,11 +22,11 @@ function verify(dir: string, sidHex?: string, json = false): { code: number; out
   return { code: proc.exitCode, out: proc.stdout.toString() + proc.stderr.toString(), stdout: proc.stdout.toString() };
 }
 
-function sessionPath(): string {
+function sessionPath(session = SESSION): string {
   // Pinned to SESSION's sid — never readdir order (a second session exists
   // after the replay test).
   const sidHex = (require("node:crypto") as typeof import("node:crypto"))
-    .createHash("sha256").update(SESSION).digest("hex").slice(0, 32);
+    .createHash("sha256").update(session).digest("hex").slice(0, 32);
   return join(base, "sessions", sidHex);
 }
 
@@ -207,5 +207,70 @@ describe("l2 emitter", () => {
     const json = verify(dir, undefined, true);
     expect(json.code).toBe(r.code);
     expect(JSON.parse(json.stdout)).toEqual({ ok: false, receipts: 3, chain_checks: [], close_present: false });
+  });
+
+  test("tool name with a newline is logged as one errors.log line", () => {
+    const session = "test-session-newline";
+    const dir = sessionPath(session);
+    run("recorder.ts", JSON.stringify({ session_id: session, tool_name: "Bash" }));
+    run("close.ts", JSON.stringify({ session_id: session }));
+    const name = "Bash\npost-close tool call dropped: Forged";
+    run("recorder.ts", JSON.stringify({ session_id: session, tool_name: name }));
+    const log = readFileSync(join(dir, "errors.log"), "utf8");
+    expect(log.endsWith("\n")).toBe(true);
+    expect(log.slice(0, -1).split("\n")).toEqual([
+      "post-close tool call dropped: " + JSON.stringify(name),
+    ]);
+  });
+
+  test("tool call without tool_name is dropped and logged, not silently", () => {
+    const session = "test-session-no-tool-name";
+    const dir = sessionPath(session);
+    run("recorder.ts", JSON.stringify({ session_id: session, tool_name: "Bash" }));
+    const state = readFileSync(join(dir, "state.json"));
+    run("recorder.ts", JSON.stringify({ session_id: session }));
+    expect(readFileSync(join(dir, "receipts.hexl"), "utf8").trim().split("\n")).toHaveLength(1);
+    expect(readFileSync(join(dir, "state.json"))).toEqual(state);
+    expect(readFileSync(join(dir, "errors.log"), "utf8")).toBe("tool call without tool_name dropped\n");
+  });
+
+  test("close after state.json loss takes opened_at from the earliest logged receipt: one receipt", async () => {
+    const session = "test-session-lost-state-one";
+    const dir = sessionPath(session);
+    run("recorder.ts", JSON.stringify({ session_id: session, tool_name: "Bash" }));
+    const lib = await import("./lib");
+    const spki = lib.fromHex(readFileSync(join(base, "recorder.pub"), "utf8").trim());
+    const receipt = lib.openEnvelope(lib.readHexLines(join(dir, "receipts.hexl"))[0]!, spki).payload as Record<string, CborValue>;
+    await Bun.sleep(1100);
+    unlinkSync(join(dir, "state.json"));
+    run("close.ts", JSON.stringify({ session_id: session }));
+    const close = lib.openEnvelope(lib.readHexLines(join(dir, "close.hex"))[0]!, spki).payload as Record<string, CborValue>;
+    expect(close.opened_at).toBe(receipt.committed_at);
+    expect(verify(dir, lib.toHex(lib.sessionId16(session))).code).toBe(0);
+  });
+
+  test("close after state.json loss takes opened_at from the earliest logged receipt: decreasing timestamps", async () => {
+    const session = "test-session-lost-state-decreasing";
+    const dir = sessionPath(session);
+    const earliest = Math.floor(Date.now() / 1000) - 60;
+    const preload = join(base, "clock.ts");
+    writeFileSync(preload, "Date.now = () => Number(process.env.AAR_TEST_NOW_MS);\n");
+    for (const timestamp of [earliest + 10, earliest]) {
+      const proc = Bun.spawnSync(["bun", "run", "--preload", preload, join(here, "recorder.ts")], {
+        stdin: Buffer.from(JSON.stringify({ session_id: session, tool_name: "Bash" })),
+        env: { ...env, AAR_TEST_NOW_MS: String(timestamp * 1000) },
+      });
+      expect(proc.exitCode).toBe(0);
+    }
+    const lib = await import("./lib");
+    const spki = lib.fromHex(readFileSync(join(base, "recorder.pub"), "utf8").trim());
+    const timestamps = lib.readHexLines(join(dir, "receipts.hexl")).map((receipt) =>
+      (lib.openEnvelope(receipt, spki).payload as Record<string, CborValue>).committed_at);
+    expect(timestamps).toEqual([earliest + 10, earliest]);
+    unlinkSync(join(dir, "state.json"));
+    run("close.ts", JSON.stringify({ session_id: session }));
+    const close = lib.openEnvelope(lib.readHexLines(join(dir, "close.hex"))[0]!, spki).payload as Record<string, CborValue>;
+    expect(close.opened_at).toBe(earliest);
+    expect(verify(dir, lib.toHex(lib.sessionId16(session))).code).toBe(0);
   });
 });
