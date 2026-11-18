@@ -23,10 +23,13 @@ function main(): void {
   const statePath = join(dir, "state.json");
   const openedAt = existsSync(statePath)
     ? (JSON.parse(readFileSync(statePath, "utf8")) as { openedAt: number }).openedAt
-    : receipts.reduce((earliest, receipt) => {
-      const payload = openEnvelope(receipt, key.spki).payload as Record<string, CborValue>;
-      return Math.min(earliest, payload.committed_at as number);
-    }, receipts.length === 0 ? Math.floor(Date.now() / 1000) : Infinity);
+    : receipts.reduce<number | undefined>((earliest, receipt) => {
+      const opened = openEnvelope(receipt, key.spki);
+      const payload = opened.payload as Record<string, CborValue>;
+      if (!opened.signatureValid || !opened.kidMatchesSpki
+        || !(payload.session_id instanceof Uint8Array) || toHex(payload.session_id) !== toHex(sid)) return earliest;
+      return Math.min(earliest ?? Infinity, payload.committed_at as number);
+    }, undefined) ?? Math.floor(Date.now() / 1000);
 
   const payloadDigest = (envelopeBytes: Uint8Array): Uint8Array =>
     sha256(openEnvelope(envelopeBytes, key.spki).payloadBytes);

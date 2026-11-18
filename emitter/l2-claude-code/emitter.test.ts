@@ -23,8 +23,7 @@ function verify(dir: string, sidHex?: string, json = false): { code: number; out
 }
 
 function sessionPath(session = SESSION): string {
-  // Pinned to SESSION's sid — never readdir order (a second session exists
-  // after the replay test).
+  // pinned to the given session's sid (default SESSION), never readdir order.
   const sidHex = (require("node:crypto") as typeof import("node:crypto"))
     .createHash("sha256").update(session).digest("hex").slice(0, 32);
   return join(base, "sessions", sidHex);
@@ -272,5 +271,84 @@ describe("l2 emitter", () => {
     const close = lib.openEnvelope(lib.readHexLines(join(dir, "close.hex"))[0]!, spki).payload as Record<string, CborValue>;
     expect(close.opened_at).toBe(earliest);
     expect(verify(dir, lib.toHex(lib.sessionId16(session))).code).toBe(0);
+  });
+  test("close after state.json loss takes opened_at from the earliest logged receipt: non-monotonic timestamps", async () => {
+    const session = "test-session-lost-state-non-monotonic";
+    const dir = sessionPath(session);
+    const earliest = Math.floor(Date.now() / 1000) - 60;
+    const preload = join(base, "clock.ts");
+    writeFileSync(preload, "Date.now = () => Number(process.env.AAR_TEST_NOW_MS);\n");
+    for (const timestamp of [earliest + 10, earliest, earliest + 20]) {
+      const proc = Bun.spawnSync(["bun", "run", "--preload", preload, join(here, "recorder.ts")], {
+        stdin: Buffer.from(JSON.stringify({ session_id: session, tool_name: "Bash" })),
+        env: { ...env, AAR_TEST_NOW_MS: String(timestamp * 1000) },
+      });
+      expect(proc.exitCode).toBe(0);
+    }
+    const lib = await import("./lib");
+    const spki = lib.fromHex(readFileSync(join(base, "recorder.pub"), "utf8").trim());
+    const timestamps = lib.readHexLines(join(dir, "receipts.hexl")).map((receipt) =>
+      (lib.openEnvelope(receipt, spki).payload as Record<string, CborValue>).committed_at);
+    expect(timestamps).toEqual([earliest + 10, earliest, earliest + 20]);
+    unlinkSync(join(dir, "state.json"));
+    run("close.ts", JSON.stringify({ session_id: session }));
+    const close = lib.openEnvelope(lib.readHexLines(join(dir, "close.hex"))[0]!, spki).payload as Record<string, CborValue>;
+    expect(close.opened_at).toBe(earliest);
+    expect(verify(dir, lib.toHex(lib.sessionId16(session))).code).toBe(0);
+  });
+
+  test("close after state.json loss ignores unauthenticated receipts for opened_at", async () => {
+    const session = "test-session-lost-state-unauthenticated";
+    const dir = sessionPath(session);
+    const earliest = Math.floor(Date.now() / 1000) - 60;
+    const preload = join(base, "clock.ts");
+    writeFileSync(preload, "Date.now = () => Number(process.env.AAR_TEST_NOW_MS);\n");
+    for (const timestamp of [earliest + 10, earliest]) {
+      const proc = Bun.spawnSync(["bun", "run", "--preload", preload, join(here, "recorder.ts")], {
+        stdin: Buffer.from(JSON.stringify({ session_id: session, tool_name: "Bash" })),
+        env: { ...env, AAR_TEST_NOW_MS: String(timestamp * 1000) },
+      });
+      expect(proc.exitCode).toBe(0);
+    }
+    const lib = await import("./lib");
+    const spki = lib.fromHex(readFileSync(join(base, "recorder.pub"), "utf8").trim());
+    const path = join(dir, "receipts.hexl");
+    const receipts = lib.readHexLines(path);
+    expect(receipts.map((receipt) =>
+      (lib.openEnvelope(receipt, spki).payload as Record<string, CborValue>).committed_at))
+      .toEqual([earliest + 10, earliest]);
+
+    const foreignBase = mkdtempSync(join(base, "foreign-recorder-"));
+    const proc = Bun.spawnSync(["bun", "run", "--preload", preload, join(here, "recorder.ts")], {
+      stdin: Buffer.from(JSON.stringify({ session_id: session, tool_name: "Bash" })),
+      env: { ...env, AAR_L2_DIR: foreignBase, AAR_TEST_NOW_MS: "1000000" },
+    });
+    expect(proc.exitCode).toBe(0);
+    const foreignSpki = lib.fromHex(readFileSync(join(foreignBase, "recorder.pub"), "utf8").trim());
+    const foreignReceipt = lib.readHexLines(join(foreignBase, "sessions", lib.toHex(lib.sessionId16(session)), "receipts.hexl"))[0]!;
+    const foreign = lib.openEnvelope(foreignReceipt, foreignSpki);
+    expect(foreign.signatureValid).toBe(true);
+    expect((foreign.payload as Record<string, CborValue>).committed_at).toBe(1000);
+    // Also claim the genuine kid while signing with the foreign key: the kid
+    // check alone must not authenticate the timestamp.
+    const claimedKidReceipt = lib.signEnvelope(foreign.payload, lib.RECEIPT_CONTENT_TYPE, {
+      privateKey: lib.fromHex(readFileSync(join(foreignBase, "recorder.key"), "utf8").trim()),
+      spki: foreignSpki,
+      kid: lib.sha256(spki),
+    });
+    expect(lib.openEnvelope(claimedKidReceipt, spki).kidMatchesSpki).toBe(true);
+    unlinkSync(join(dir, "state.json"));
+    for (const injected of [foreignReceipt, claimedKidReceipt]) {
+      expect(lib.openEnvelope(injected, spki).signatureValid).toBe(false);
+      writeFileSync(path, [receipts[0]!, injected, receipts[1]!].map(lib.toHex).join("\n") + "\n");
+      run("close.ts", JSON.stringify({ session_id: session }));
+      const close = lib.openEnvelope(lib.readHexLines(join(dir, "close.hex"))[0]!, spki);
+      expect(close.signatureValid).toBe(true);
+      expect((close.payload as Record<string, CborValue>).opened_at).toBe(earliest);
+      const result = verify(dir, lib.toHex(lib.sessionId16(session)));
+      expect(result.code).toBe(1);
+      expect(result.out).toContain("cose/receipt-signature");
+      unlinkSync(join(dir, "close.hex"));
+    }
   });
 });
