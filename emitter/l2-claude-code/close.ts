@@ -24,7 +24,12 @@ function main(): void {
   const openedAt = existsSync(statePath)
     ? (JSON.parse(readFileSync(statePath, "utf8")) as { openedAt: number }).openedAt
     : receipts.reduce<number | undefined>((earliest, receipt) => {
-      const opened = openEnvelope(receipt, key.spki);
+      let opened: ReturnType<typeof openEnvelope>;
+      try {
+        opened = openEnvelope(receipt, key.spki);
+      } catch {
+        return earliest;
+      }
       const payload = opened.payload as Record<string, CborValue>;
       if (!opened.signatureValid || !opened.kidMatchesSpki
         || !(payload.session_id instanceof Uint8Array) || toHex(payload.session_id) !== toHex(sid)) return earliest;
