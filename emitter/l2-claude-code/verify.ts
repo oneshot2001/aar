@@ -51,7 +51,12 @@ if (closeEnvs.length === 0) {
 if (closeEnvs.length > 1) fail("session/duplicate-close", `${closeEnvs.length} close records`);
 
 const openedReceipts = receiptEnvs.map((env, i) => {
-  const opened = openEnvelope(env, spki);
+  let opened: ReturnType<typeof openEnvelope>;
+  try {
+    opened = openEnvelope(env, spki);
+  } catch {
+    fail("cose/receipt-signature", `receipt index ${i}: undecodable`);
+  }
   if (!opened.signatureValid) fail("cose/receipt-signature", `receipt index ${i}`);
   if (!opened.kidMatchesSpki) fail("cose/receipt-signature", `receipt index ${i}: kid does not match spki`);
   if (opened.contentType !== RECEIPT_CONTENT_TYPE) fail("session/fields-inconsistent", `receipt index ${i}: wrong content type`);
