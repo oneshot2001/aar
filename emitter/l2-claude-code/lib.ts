@@ -5,8 +5,9 @@
 import { p256 } from "@noble/curves/nist.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { encodeCbor, decodeCbor, toHex, fromHex, type CborValue } from "../../harness/cbor";
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, existsSync, renameSync } from "node:fs";
 import { join } from "node:path";
+import { Database } from "bun:sqlite";
 
 export const RECEIPT_CONTENT_TYPE = "application/aar-l2-receipt+cbor;v=0.3-draft";
 export const CLOSE_CONTENT_TYPE = "application/aar-session-close+cbor;v=0.3-draft";
@@ -27,26 +28,76 @@ export interface RecorderKey {
   kid: Uint8Array;
 }
 
-export function loadOrCreateRecorderKey(): RecorderKey {
-  mkdirSync(BASE_DIR, { recursive: true, mode: 0o700 });
-  const keyPath = join(BASE_DIR, "recorder.key");
-  let privateKey: Uint8Array;
-  if (existsSync(keyPath)) {
-    privateKey = fromHex(readFileSync(keyPath, "utf8").trim());
-  } else {
-    privateKey = crypto.getRandomValues(new Uint8Array(32));
-    // Reject the (astronomically unlikely) out-of-range scalar rather than reduce.
-    p256.getPublicKey(privateKey, false);
-    writeFileSync(keyPath, toHex(privateKey) + "\n", { mode: 0o600 });
+// Runs fn while holding an exclusive SQLite transaction on <dir>/lock.db. The
+// operating system holds the file lock and releases it when the process dies,
+// so there is no stale lock to reclaim. No wait cap: the hook timeout bounds
+// the wait.
+export function withLock<T>(dir: string, fn: () => T): T {
+  const db = new Database(join(dir, "lock.db"));
+  try {
+    while (true) {
+      try {
+        db.run("BEGIN EXCLUSIVE");
+        break;
+      } catch (error) {
+        if ((error as { code?: string }).code !== "SQLITE_BUSY") throw error;
+        Bun.sleepSync(10);
+      }
+    }
+    let result: T;
+    try {
+      result = fn();
+    } catch (error) {
+      // fn's own error is the one to report, whatever the rollback does.
+      try {
+        db.run("ROLLBACK");
+      } catch {}
+      throw error;
+    }
+    db.run("COMMIT");
+    return result;
+  } finally {
+    db.close();
   }
+}
+
+// Writes under a temporary name and renames it into place, so a kill
+// mid-write never leaves a partial file at the final path.
+export function writeFileAtomic(path: string, data: string, mode?: number): void {
+  const tmpPath = `${path}.${process.pid}.tmp`;
+  writeFileSync(tmpPath, data, { mode });
+  renameSync(tmpPath, path);
+}
+
+function recorderKey(privateKey: Uint8Array): RecorderKey {
   const publicKey = p256.getPublicKey(privateKey, false);
   const spki = new Uint8Array(SPKI_PREFIX.length + publicKey.length);
   spki.set(SPKI_PREFIX);
   spki.set(publicKey, SPKI_PREFIX.length);
-  const kid = sha256(spki);
+  return { privateKey, spki, kid: sha256(spki) };
+}
+
+export function loadOrCreateRecorderKey(): RecorderKey {
+  mkdirSync(BASE_DIR, { recursive: true, mode: 0o700 });
+  const keyPath = join(BASE_DIR, "recorder.key");
   const pubPath = join(BASE_DIR, "recorder.pub");
-  if (!existsSync(pubPath)) writeFileSync(pubPath, toHex(spki) + "\n");
-  return { privateKey, spki, kid };
+  const readKey = (): Uint8Array => fromHex(readFileSync(keyPath, "utf8").trim());
+  // Both files are renamed into place whole, so once both exist the pair is
+  // read without the lock.
+  if (existsSync(keyPath) && existsSync(pubPath)) return recorderKey(readKey());
+  // Otherwise under the base lock: concurrent first use creates exactly one
+  // key pair. The private key is the completion marker: a new pair publishes
+  // the public key first, so a private key on disk always has its public key.
+  return withLock(BASE_DIR, () => {
+    const created = !existsSync(keyPath);
+    // recorderKey rejects the (astronomically unlikely) out-of-range scalar
+    // rather than reduce, before anything is written.
+    const key = recorderKey(created ? crypto.getRandomValues(new Uint8Array(32)) : readKey());
+    const pubHex = toHex(key.spki) + "\n";
+    if (!existsSync(pubPath) || readFileSync(pubPath, "utf8") !== pubHex) writeFileAtomic(pubPath, pubHex);
+    if (created) writeFileAtomic(keyPath, toHex(key.privateKey) + "\n", 0o600);
+    return key;
+  });
 }
 
 export function sessionDir(sessionId16: Uint8Array): string {
