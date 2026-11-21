@@ -62,7 +62,12 @@ const openedReceipts = receiptEnvs.map((env, i) => {
   if (opened.contentType !== RECEIPT_CONTENT_TYPE) fail("session/fields-inconsistent", `receipt index ${i}: wrong content type`);
   return { payload: opened.payload as Receipt, digest: sha256(opened.payloadBytes) };
 });
-const openedClose = openEnvelope(closeEnvs[0]!, spki);
+let openedClose: ReturnType<typeof openEnvelope>;
+try {
+  openedClose = openEnvelope(closeEnvs[0]!, spki);
+} catch {
+  fail("cose/close-signature", "session-close: undecodable");
+}
 if (!openedClose.signatureValid) fail("cose/close-signature", "session-close");
 if (!openedClose.kidMatchesSpki) fail("cose/close-signature", "close kid does not match spki");
 if (openedClose.contentType !== CLOSE_CONTENT_TYPE) fail("session/fields-inconsistent", "close has wrong content type");

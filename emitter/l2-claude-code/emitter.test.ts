@@ -327,6 +327,25 @@ describe("l2 emitter", () => {
     expect(close.opened_at).toBe(earliest);
   });
 
+  test("verify reports an undecodable close line", async () => {
+    const session = "test-session-verify-undecodable-close";
+    const dir = sessionPath(session);
+    for (let i = 0; i < 2; i++) {
+      run("recorder.ts", JSON.stringify({ session_id: session, tool_name: `Tool${i}` }));
+    }
+    run("close.ts", JSON.stringify({ session_id: session }));
+    writeFileSync(join(dir, "close.hex"), "00\n");
+    const lib = await import("./lib");
+    const sid = lib.toHex(lib.sessionId16(session));
+    const result = verify(dir, sid);
+    expect(result.code).toBe(1);
+    expect(result.out).toBe("nonconformant cose/close-signature — session-close: undecodable\n");
+    const json = verify(dir, sid, true);
+    expect(json.code).toBe(1);
+    expect(json.stdout.trim().split("\n")).toHaveLength(1);
+    expect(JSON.parse(json.stdout).ok).toBe(false);
+  });
+
   test("verify reports an undecodable receipt line", async () => {
     const session = "test-session-verify-undecodable";
     const dir = sessionPath(session);
