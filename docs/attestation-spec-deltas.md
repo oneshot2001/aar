@@ -469,3 +469,155 @@ then report"), or synthetic. Ratification question: is `hook_continuation`
 - **verification_gap:** no fixtures exist for any D-62..D-64 code — this doc
   is a proposal, and per the KAT bar nothing here is ratifiable until both
   impls carry covering fixtures.
+
+## L2 prompt entry and join fields (candidate, number unassigned)
+
+**Status: CANDIDATE**, same standing as D-62/D-63: a proposal against a future
+v0.3 wire, implemented only by the L2 reference emitter
+(`emitter/l2-claude-code/`) under a draft content type. No D-number is
+assigned here; the owner allocates one (the candidate D-68 above already
+shares its number with ratified D-68 in `spec/DECISIONS.md`).
+
+Source: Claude Code gives its hooks what is needed. `UserPromptSubmit` input
+carries `session_id`, `prompt` and `prompt_id`; `PostToolUse` and
+`PostToolUseFailure` input carry `tool_use_id`, `prompt_id` and
+`hook_event_name`, and `prompt_id` is the same on a prompt event and on every
+tool call processed under it. The emitter's tests drive these fields with
+synthetic events; no fixture from a live session exists yet.
+
+```cddl
+; Two entry kinds share the D-63 session chain. The kind is the signed
+; content type (protected header 3). Both maps are closed: a key not listed
+; for its kind is invalid, as is a missing or malformed listed key.
+;   "application/aar-l2-receipt+cbor;v=0.3-draft"  -> l2-receipt
+;   "application/aar-l2-prompt+cbor;v=0.3-draft"   -> l2-prompt-entry
+
+l2-common = (
+  v: 3,
+  seq: uint,
+  committed_at: int,
+  session_id: bstr .size 16,
+  tenant_id: bstr .size 16,
+  site_id: bstr .size 16,
+  session_prev_digest: bstr .size 32 / nil,
+  attestation: {                       ; D-62, closed
+    point: tstr,
+    recorder_kid: bstr .size 32,
+    agent_kid: bstr / nil,
+  },
+)
+
+l2-receipt = {
+  l2-common,
+  tool_name: text1,
+  input_digest: bstr .size 32,
+  ? response_digest: bstr .size 32,    ; exactly one of response_digest and
+  ? error_digest: bstr .size 32,       ; error_digest is present: error_digest
+                                       ; if and only if hook_event_name is
+                                       ; "PostToolUseFailure"
+  ? prompt_id: text1,                  ; the prompt the harness said it was
+                                       ; processing, as the hook gave it
+  ? tool_use_id: text1,                ; the harness's id for this tool call
+  ? hook_event_name: text1,            ; the hook that produced the receipt
+}
+
+l2-prompt-entry = {
+  l2-common,
+  prompt_id: text1,                    ; as the hook gave it
+  prompt_commitment: bstr .size 32,
+  ? hook_source: tstr,                 ; the hook input's `source`, when text
+}
+
+text1 = tstr .size (1..)               ; non-empty text
+
+; prompt_commitment = SHA-256(deterministic-CBOR([
+;   "AAR-L2-PROMPT-COMMITMENT-v1", opening: bstr .size 32, prompt: tstr ]))
+; error_digest = SHA-256 of the UTF-8 of JSON.stringify(error ?? null),
+;   computed by the recorder from the hook input's `error`
+```
+
+A receipt with the eleven fields the emitter wrote before this candidate
+(`l2-common`, `tool_name`, `input_digest`, `response_digest`) is a valid
+`l2-receipt`.
+
+- **The entry.** A prompt entry is a member of the session chain like any
+  receipt: it has a `seq`, links by `session_prev_digest`, counts toward the
+  close's `item_count`, and every D-63 chain, coordinate, window and signer
+  check applies to it unchanged. The verifier checks every entry against the
+  shape of its kind above before any other use; a violation is
+  `session/fields-inconsistent`, naming the entry and the field. A prompt
+  entry therefore cannot carry tool fields, and a receipt cannot carry
+  `prompt_commitment` or `hook_source`.
+- **Well-formed text.** Every text field is well-formed Unicode. A string
+  with a lone UTF-16 surrogate encodes to the same bytes as the string with
+  U+FFFD in its place, so one commitment would open two strings. The emitter
+  commits to and stores the prompt's well-formed form, treats any other
+  input text that is not well formed as absent, and the verifier treats a
+  text line whose `prompt` or `prompt_id` is not well formed as unreadable.
+- **Why a commitment, and why the opening is private (T-X1).** Prompt text is
+  guessable: short, repeated, often drawn from a small set. The threat model
+  records that a low-entropy commitment is dictionary-testable even when
+  salted if the salt ships with the bundle. So the opening is 32 fresh random
+  bytes per entry and stays out of the chain, beside the text, in a local
+  unsigned file (`prompts.jsonl`). Whoever is given an opening can test
+  guesses of that prompt; whoever is given the file has the text. R-17 (keyed
+  commitments, decommitment semantics, a verifier state for an unavailable
+  decommitment) may supersede this construction; the `unavailable` state
+  below is this candidate's version of that state.
+- **Write order.** Under the session lock the emitter appends the chain
+  entry first, then rewrites the text file whole (existing content plus the
+  new line) under a temporary name and renames it into place, owner-only. A
+  recorder killed between the two leaves an entry whose text is unavailable.
+  The recorder itself produces no partial line and no line without an entry.
+- **Join fields.** `prompt_id` on a receipt is the id of the prompt the
+  harness said it was processing. A prompt entry with that id may not exist;
+  that is what `unbound` reports. `tool_use_id` is the id the harness also
+  sends to an MCP server with the call (Claude Code:
+  `_meta["claudecode/toolUseId"]`), so it is the key for matching an L2
+  receipt to that server's own receipt for the same call. `hook_event_name`
+  says which hook produced the receipt. Those three are harness values the
+  recorder relays; `error_digest` is computed by the recorder, and replaces
+  `response_digest` on a failed call. None of the four is checked against
+  anything else on the wire.
+- **Verifier report.** After every existing check passes, the verifier
+  reports, without failing: `prompts`, `tool_receipts`, `bound`, `unbound`,
+  `duplicate_prompt_ids`, and `prompt_text: { available, unavailable,
+  orphan_lines }`. A tool receipt is bound when a prompt entry **earlier in
+  the chain walk** carries its `prompt_id`; the walk is the D-63 digest walk,
+  never file order, timestamps or `seq`. A prompt entry whose `prompt_id`
+  already appeared earlier in the walk is a duplicate. When two earlier
+  prompt entries carry the same id, a receipt with that id is bound, and the
+  record cannot say which of the two texts it ran under. A session that
+  fails any check reports none of these values.
+- **Prompt text check.** When the text file is presented, each non-blank
+  line is a JSON object with text `prompt_id`, `opening` as 64 lowercase hex
+  digits, and text `prompt`. A line either names no prompt entry (an orphan
+  line, counted; the emitter writes none), or must reproduce the commitment
+  of an entry with that `prompt_id`. A file that cannot be read, a line that
+  is not of that form, or one that names an entry and reproduces none, fails
+  with the new candidate code `session/prompt-text-mismatch` (a closed-table
+  addition). An entry no line reproduces, and every entry when the file is
+  withheld, is `unavailable`; that is reported and is not a failure, so
+  withholding or trimming the text file is not detectable as tampering.
+- **Claim boundary.** A prompt entry says the recorder saw this text arrive
+  as a prompt event before the entries that follow it in the chain. It does
+  not say a person typed it, and it does not say the calls stayed inside it.
+  `bound` repeats the harness's own statement of which prompt was being
+  processed. Everything here is recorder-asserted at L2 and inherits T-H1.
+- **Relation to the candidate `turn_trigger`.** This candidate does not emit
+  `turn_trigger`. A prompt entry is the recorded event a recorder would point
+  to for `kind: "user_input"`, and its payload digest is a possible
+  `evidence_digest`. Whether a prompt event that is not typed input (Claude
+  Code's Code Mode delivers script output as a prompt event with `source:
+  "poll_event"`) is `user_input` is left to that candidate's ratification.
+- **Relation to D-08.** D-08 keeps human-request roots commitment-only. A
+  prompt entry takes the same posture at L2: the signed record carries a
+  commitment and the text stays outside it. It is not a root descriptor and
+  defines no `request_commitment`.
+- **Relation to D-78.** D-78 classifies input by the origin of the content,
+  never its transport. `hook_source` is a transport label copied from the
+  hook input. It is not an `input-origin` value, and a prompt entry declares
+  no origin.
+- **verification_gap:** no fixtures exist for this candidate beyond the
+  emitter's own tests, and no second implementation; per the KAT bar nothing
+  here is ratifiable until both impls carry covering fixtures.

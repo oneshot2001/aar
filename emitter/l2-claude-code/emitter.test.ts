@@ -61,6 +61,12 @@ describe("l2 emitter", () => {
         { name: "walked_length", pass: true },
       ],
       close_present: true,
+      prompts: 0,
+      tool_receipts: 3,
+      bound: 0,
+      unbound: 3,
+      duplicate_prompt_ids: 0,
+      prompt_text: { available: 0, unavailable: 0, orphan_lines: 0 },
     });
 
     const dir = mkdtempSync(join(base, "aar-l2-fork-"));
