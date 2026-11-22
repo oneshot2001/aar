@@ -60,12 +60,15 @@ records — and is out of scope as evidence.
 ### L2 — The harness hook layer
 
 A recorder registered at the harness's tool-call boundary (PostToolUse-style
-hooks): a separate process the harness invokes on every tool call, outside
-the model's control, holding its own signing key.
+hooks): a separate process the harness invokes on every tool call that
+reaches a configured hook, holding its own signing key. It is outside the model's control only when the agent
+cannot run a process or write a file as the recorder's user (qualification
+3).
 
-**Defeats A1 within a session** — the model cannot un-invoke a hook or forge
-its input; the record of "tool X called with args Y, returned Z" is authored
-outside the agent. Two qualifications bound the claim:
+**Defeats A1 within a session, for an agent that cannot act as the
+recorder's user** — that model cannot un-invoke a hook or forge its input;
+the record of "tool X called with args Y, returned Z" is authored outside
+the agent. Three qualifications bound the claim:
 
 1. **A1 is defeated only down to the harness's honesty.** L2 attests what the
    *harness* reports at the hook boundary. A compromised or buggy harness is
@@ -80,6 +83,20 @@ outside the agent. Two qualifications bound the claim:
    (G2), a signed session-close record (§4), and an **external anchor** (G3;
    a SCITT transparency log is the candidate anchor class) are what turn L2
    from "signed notes" into evidence against A2/A3.
+3. **An agent with a shell under the recorder's account is not held by
+   L2.** A hook recorder usually runs as the same user as the agent's own
+   shell tool; the Claude Code emitter in this repository does. That agent
+   can run the recorder's programs itself: close its own session early,
+   after which later tool calls still run but get no receipt; close another
+   session before its first call, given that session's id; feed the hooks
+   invented prompt and tool events, which are then signed; or read the
+   signing key. A session changed in the first three ways still verifies as
+   intact. Against that agent L2 gives no A1 guarantee. A protected key
+   alone does not close the gap: event submission, close authorization, the
+   signing key and the public key the verifier is given all have to sit
+   where the agent cannot reach them (a different account, or a signing
+   service that authenticates the harness as its caller). Otherwise the
+   claim has to rest on an L3 counterparty.
 
 ### L3 — The tool boundary
 

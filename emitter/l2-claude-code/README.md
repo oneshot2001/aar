@@ -101,7 +101,11 @@ ratification, not a conformant producer.
 
 State lives under `~/.aar-l2/` (override: `AAR_L2_DIR`): a per-install P-256
 recorder key (0600) and per-session `receipts.hexl` / `state.json` /
-`close.hex` / `prompts.jsonl` (0600). The key, state, close and prompt-text
+`close.hex` / `prompts.jsonl`. Only the key and `prompts.jsonl` are created
+0600; the other per-session files and the session directories take the
+process umask (0644 and 0755 under the usual 022), inside the base directory,
+which is created 0700. An `AAR_L2_DIR` that already exists keeps the mode it
+has. The key, state, close and prompt-text
 files are written under a temporary name and renamed into place, so a killed
 hook leaves none of them partial; the receipt log is appended in place, under
 the session lock, with a newline written first when the file is non-empty
