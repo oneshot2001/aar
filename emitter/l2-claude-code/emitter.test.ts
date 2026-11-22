@@ -333,6 +333,51 @@ describe("l2 emitter", () => {
     expect(close.opened_at).toBe(earliest);
   });
 
+  test("verify reports a non-hex receipt line", async () => {
+    const session = "test-session-verify-non-hex";
+    const dir = sessionPath(session);
+    for (let i = 0; i < 3; i++) {
+      run("recorder.ts", JSON.stringify({ session_id: session, tool_name: `Tool${i}` }));
+    }
+    run("close.ts", JSON.stringify({ session_id: session }));
+    const lib = await import("./lib");
+    const sid = lib.toHex(lib.sessionId16(session));
+    const path = join(dir, "receipts.hexl");
+    const original = readFileSync(path, "utf8");
+    const lines = original.trim().split("\n");
+    const closePath = join(dir, "close.hex");
+    const originalClose = readFileSync(closePath, "utf8");
+    expect(verify(dir, sid).code).toBe(0);
+
+    for (const invalid of ["zz", "0"]) {
+      writeFileSync(closePath, originalClose);
+      writeFileSync(path, `\n${lines[0]}\n \t\n${invalid}\n${lines[2]}\n\n`);
+      const receipt = verify(dir, sid);
+      expect(receipt.code).toBe(1);
+      expect(receipt.out).toBe("nonconformant cose/receipt-signature — receipt index 1: undecodable\n");
+      const receiptJson = verify(dir, sid, true);
+      expect(receiptJson.code).toBe(1);
+      expect(receiptJson.out).toBe(receiptJson.stdout);
+      expect(receiptJson.stdout.trim().split("\n")).toHaveLength(1);
+      expect(JSON.parse(receiptJson.stdout)).toEqual({
+        ok: false, receipts: 3, chain_checks: [], close_present: true,
+      });
+
+      writeFileSync(path, original);
+      writeFileSync(closePath, `\n \t\n${invalid}\n\n`);
+      const close = verify(dir, sid);
+      expect(close.code).toBe(1);
+      expect(close.out).toBe("nonconformant cose/close-signature — session-close: undecodable\n");
+      const closeJson = verify(dir, sid, true);
+      expect(closeJson.code).toBe(1);
+      expect(closeJson.out).toBe(closeJson.stdout);
+      expect(closeJson.stdout.trim().split("\n")).toHaveLength(1);
+      expect(JSON.parse(closeJson.stdout)).toEqual({
+        ok: false, receipts: 3, chain_checks: [], close_present: true,
+      });
+    }
+  });
+
   test("verify reports an undecodable close line", async () => {
     const session = "test-session-verify-undecodable-close";
     const dir = sessionPath(session);
