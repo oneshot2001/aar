@@ -435,6 +435,46 @@ describe("l2 emitter", () => {
     expect(JSON.parse(json.stdout).ok).toBe(false);
   });
 
+  test("close after state.json loss ignores other sessions' receipts for opened_at", async () => {
+    const session = "test-session-lost-state-other-session";
+    const otherSession = "test-session-lost-state-other-session-source";
+    const dir = sessionPath(session);
+    const earliest = Math.floor(Date.now() / 1000) - 60;
+    const preload = join(base, "clock.ts");
+    writeFileSync(preload, "Date.now = () => Number(process.env.AAR_TEST_NOW_MS);\n");
+    for (const [sessionId, timestamp] of [
+      [otherSession, earliest - 5000], [session, earliest + 10], [session, earliest],
+    ] as const) {
+      const proc = Bun.spawnSync(["bun", "run", "--preload", preload, join(here, "recorder.ts")], {
+        stdin: Buffer.from(JSON.stringify({ session_id: sessionId, tool_name: "Bash" })),
+        env: { ...env, AAR_TEST_NOW_MS: String(timestamp * 1000) },
+      });
+      expect(proc.exitCode).toBe(0);
+    }
+    const lib = await import("./lib");
+    const spki = lib.fromHex(readFileSync(join(base, "recorder.pub"), "utf8").trim());
+    const path = join(dir, "receipts.hexl");
+    const receipts = lib.readHexLines(path);
+    expect(receipts.map((receipt) =>
+      (lib.openEnvelope(receipt, spki).payload as Record<string, CborValue>).committed_at))
+      .toEqual([earliest + 10, earliest]);
+    const otherReceipt = lib.readHexLines(join(sessionPath(otherSession), "receipts.hexl"))[0]!;
+    const other = lib.openEnvelope(otherReceipt, spki);
+    expect(other.signatureValid).toBe(true);
+    expect(other.kidMatchesSpki).toBe(true);
+    const otherPayload = other.payload as Record<string, CborValue>;
+    expect(otherPayload.session_id).toEqual(lib.sessionId16(otherSession));
+    expect(otherPayload.committed_at).toBe(earliest - 5000);
+    const lines = receipts.map(lib.toHex);
+    lines.splice(1, 0, lib.toHex(otherReceipt));
+    writeFileSync(path, lines.join("\n") + "\n");
+    unlinkSync(join(dir, "state.json"));
+    run("close.ts", JSON.stringify({ session_id: session }));
+    const close = lib.openEnvelope(lib.readHexLines(join(dir, "close.hex"))[0]!, spki);
+    expect(close.signatureValid).toBe(true);
+    expect((close.payload as Record<string, CborValue>).opened_at).toBe(earliest);
+  });
+
   test("close after state.json loss ignores unauthenticated receipts for opened_at", async () => {
     const session = "test-session-lost-state-unauthenticated";
     const dir = sessionPath(session);
