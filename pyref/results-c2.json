@@ -6702,7 +6702,7 @@
       "produced_class": null,
       "produced_code": "identity/coordinate-equivocation",
       "produced_result": "nonconformant",
-      "stateful_properties": "not_evaluated",
+      "stateful_properties": "skipped",
       "verdict_sha256": "82af06bab4e2d42a0b1ace37effd70cf4dde118481682c51481e068af775edd8"
     },
     {
@@ -6716,7 +6716,7 @@
       "produced_class": null,
       "produced_code": "identity/coordinate-equivocation",
       "produced_result": "nonconformant",
-      "stateful_properties": "not_evaluated",
+      "stateful_properties": "skipped",
       "verdict_sha256": "38a9c9aed43ab050dc57a238dff474c1916b417975e227c12f0414d13a8d072e"
     },
     {
@@ -6730,7 +6730,7 @@
       "produced_class": null,
       "produced_code": "identity/coordinate-equivocation",
       "produced_result": "nonconformant",
-      "stateful_properties": "not_evaluated",
+      "stateful_properties": "skipped",
       "verdict_sha256": "38a9c9aed43ab050dc57a238dff474c1916b417975e227c12f0414d13a8d072e"
     },
     {
@@ -6744,7 +6744,7 @@
       "produced_class": null,
       "produced_code": "identity/coordinate-equivocation",
       "produced_result": "nonconformant",
-      "stateful_properties": "not_evaluated",
+      "stateful_properties": "skipped",
       "verdict_sha256": "c148f40f5e436449edaec611ce5a813f02a2db3cc31f3c4ae218c7c20c9701ac"
     },
     {
@@ -6758,7 +6758,7 @@
       "produced_class": null,
       "produced_code": "identity/coordinate-equivocation",
       "produced_result": "nonconformant",
-      "stateful_properties": "not_evaluated",
+      "stateful_properties": "skipped",
       "verdict_sha256": "956a397538796fdccbd3ae70578f3695f5864400a0f0dd9c4f96554e68cc3f39"
     },
     {
@@ -6772,7 +6772,7 @@
       "produced_class": null,
       "produced_code": "identity/coordinate-equivocation",
       "produced_result": "nonconformant",
-      "stateful_properties": "not_evaluated",
+      "stateful_properties": "skipped",
       "verdict_sha256": "9c9e80c249b6d27df06e63b3b7e1675496ce42be6a11d4dbdcf4ade68951bf23"
     },
     {
@@ -6842,7 +6842,7 @@
       "produced_class": null,
       "produced_code": "identity/coordinate-equivocation",
       "produced_result": "nonconformant",
-      "stateful_properties": "not_evaluated",
+      "stateful_properties": "skipped",
       "verdict_sha256": "0c5df52a438f1bfe5ca121700d8e7be244d90fd9b3c0af1a5f1be287db8095b3"
     },
     {
@@ -6870,7 +6870,7 @@
       "produced_class": null,
       "produced_code": "key/not-found",
       "produced_result": "indeterminate",
-      "stateful_properties": "not_evaluated",
+      "stateful_properties": "skipped",
       "verdict_sha256": "2cffcc3c3e2acf28e06df39db0c91360a3fee1299e0a22b941b44299c16331cd"
     },
     {
@@ -6884,7 +6884,7 @@
       "produced_class": null,
       "produced_code": "hash/mismatch",
       "produced_result": "nonconformant",
-      "stateful_properties": "not_evaluated",
+      "stateful_properties": "skipped",
       "verdict_sha256": "bd8865639730e5e4458a6b2041b62a42213c33b175b426cc871f28f1740541a8"
     },
     {
@@ -6898,7 +6898,7 @@
       "produced_class": null,
       "produced_code": "graph/dangling-parent",
       "produced_result": "nonconformant",
-      "stateful_properties": "not_evaluated",
+      "stateful_properties": "skipped",
       "verdict_sha256": "3b8463233594543498dfb630e2f060caec3250c54fc1c0477f976231eb5782ef"
     },
     {
@@ -6912,7 +6912,7 @@
       "produced_class": null,
       "produced_code": "graph/dangling-parent",
       "produced_result": "nonconformant",
-      "stateful_properties": "not_evaluated",
+      "stateful_properties": "skipped",
       "verdict_sha256": "664327aa4fb21e5f864f4bde7b77cdf61632277e983782d700a584c3e11fda1d"
     },
     {
@@ -6926,7 +6926,7 @@
       "produced_class": null,
       "produced_code": "graph/dangling-parent",
       "produced_result": "nonconformant",
-      "stateful_properties": "not_evaluated",
+      "stateful_properties": "skipped",
       "verdict_sha256": "f181c91baac993b6285ddb267efc748f7fbfd1cbbc278699dd9ec86856a8905f"
     },
     {
@@ -8107,7 +8107,7 @@
       "produced_class": null,
       "produced_code": "cbor/malformed",
       "produced_result": "nonconformant",
-      "stateful_properties": "not_evaluated",
+      "stateful_properties": "skipped",
       "verdict_sha256": "0d73ba6d17cb7d0502e43922dc766c644a9b168a40b327c495507c9424ee15b7"
     },
     {
@@ -8149,7 +8149,7 @@
       "produced_class": null,
       "produced_code": "schema/missing-field",
       "produced_result": "nonconformant",
-      "stateful_properties": "not_evaluated",
+      "stateful_properties": "skipped",
       "verdict_sha256": "9c36429a8c260f15a6f1e0f2d25c8f6043fc005bfccab598d21cc3a32b97259c"
     },
     {

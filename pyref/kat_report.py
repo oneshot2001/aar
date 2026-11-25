@@ -10,6 +10,15 @@ ROOT = Path(__file__).resolve().parent.parent
 DIVERGENCES_PATH = Path(__file__).resolve().parent / "DIVERGENCES.md"
 
 
+def _stateful(evaluation: Any, arguments: dict[str, Any]) -> str:
+    if arguments["prior_state"] is None:
+        return "not_evaluated"
+    if evaluation is None:
+        return "evaluation_failed"
+    value = evaluation.report["stateful_properties"]
+    return "skipped" if value == "not_evaluated" else value
+
+
 def _divergence(
     fixture: Path,
     check: str,

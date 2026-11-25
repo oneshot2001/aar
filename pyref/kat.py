@@ -14,7 +14,7 @@ from . import hashes
 from .cbor import CBORError, dumps, loads
 from .crypto import TEST_KEYS_BY_KID, TEST_SCALARS, key_id, sign_es256
 from .kat_inputs import RELYING_PARTY_DIRECTORY, _bundle_path, _inputs_path, _prior_path, _rp_fixture_paths, _rp_inputs, _sidecar_path
-from .kat_report import _divergence, _divergence_hypothesis, _write_c2_divergences, _write_divergences
+from .kat_report import _divergence, _divergence_hypothesis, _stateful, _write_c2_divergences, _write_divergences
 from .verifier import Evaluation, evaluate
 
 
@@ -796,7 +796,7 @@ def run_c2() -> dict[str, Any]:
                 "matched": matched, "deterministic": deterministic,
                 "verdict_sha256": hashes.sha256(first.verdict_bytes).hex(),
                 "first_failure_step": first.report["first_failure_step"],
-                "stateful_properties": first.report["stateful_properties"],
+                "stateful_properties": _stateful(first, arguments),
             }
         except Exception as exc:  # Continue the corpus and surface internal failures.
             matched = False
@@ -807,7 +807,7 @@ def run_c2() -> dict[str, Any]:
                 "expected_class": sidecar.get("expected_class"), "produced_class": None,
                 "matched": False, "deterministic": False, "error": str(exc),
                 "first_failure_step": None,
-                "stateful_properties": "not_evaluated" if prior is None else "evaluation_failed",
+                "stateful_properties": _stateful(None, arguments),
             }
         fixtures.append(fixture)
         if not matched:

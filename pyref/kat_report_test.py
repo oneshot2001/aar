@@ -1,13 +1,15 @@
 """Section preservation regressions for the KAT divergence report writers."""
 
+import json
 import re
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from pyref import kat_report
+from pyref import kat, kat_report
 from pyref.kat import Audit, _audit_nested_maps
 
 
@@ -188,6 +190,84 @@ class SectionAwareDivergences(unittest.TestCase):
                 self.assert_outside_unchanged(edited, self.path.read_bytes(), heading)
                 writer([])
                 self.assert_outside_unchanged(edited, self.path.read_bytes(), heading)
+
+
+class StatefulProperties(unittest.TestCase):
+    def test_prior_state_supplied_but_history_phase_not_reached_reads_skipped(self):
+        evaluation = SimpleNamespace(report={"stateful_properties": "not_evaluated"})
+        self.assertEqual(kat_report._stateful(
+            evaluation, {"prior_state": {"prior_emissions": []}},
+        ), "skipped")
+
+    def test_other_cells_are_unchanged(self):
+        evaluation = SimpleNamespace(report={"stateful_properties": "evaluated"})
+        for value in (evaluation, None):
+            with self.subTest(evaluation=value):
+                self.assertEqual(kat_report._stateful(value, {"prior_state": None}), "not_evaluated")
+        arguments = {"prior_state": {"prior_emissions": []}}
+        self.assertEqual(kat_report._stateful(evaluation, arguments), "evaluated")
+        self.assertEqual(kat_report._stateful(None, arguments), "evaluation_failed")
+
+    def test_committed_c2_results_mark_exactly_the_prior_state_rows_that_stopped_early(self):
+        rows = json.loads(kat.C2_RESULTS_PATH.read_text())["fixtures"]
+        self.assertEqual(sorted(row["fixture"] for row in rows if row["stateful_properties"] == "skipped"), [
+            "kats/negative/stateful/d86-fuzz-m-01770.bundle.cbor",
+            "kats/negative/stateful/d86-fuzz-m-01906.bundle.cbor",
+            "kats/negative/stateful/d86-fuzz-m-01931.bundle.cbor",
+            "kats/negative/stateful/d86-fuzz-m-01946.bundle.cbor",
+            "kats/negative/stateful/d86-fuzz-m-01969.bundle.cbor",
+            "kats/negative/stateful/d86-fuzz-m-01986.bundle.cbor",
+            "kats/negative/stateful/d86-phase-order-with-prior.bundle.cbor",
+            "kats/negative/stateful/d87-history-after-key-not-found.bundle.cbor",
+            "kats/negative/stateful/d87-history-early-failure.bundle.cbor",
+            "kats/negative/stateful/d87-history-independence-dangling-parent.bundle.cbor",
+            "kats/negative/stateful/d87-history-independence-equivocation-membership.bundle.cbor",
+            "kats/negative/stateful/d87-history-independence-fork.bundle.cbor",
+            "kats/relying-party/rp-early-step2-state.cbor",
+            "kats/relying-party/rp-early-step3-state.cbor",
+        ])
+        self.assertEqual(sum(row["stateful_properties"] == "evaluated" for row in rows), 22)
+
+    def test_internal_error_uses_effective_prior_state(self):
+        paths = [kat.ROOT / "kats/relying-party" / name for name in (
+            "rp-early-step2-state.cbor", "rp-early-step2-alone.cbor",
+        )]
+        self.assertIsNone(kat._prior_path(paths[0]))
+        self.assertIsNotNone(kat._rp_inputs(paths[0])["prior_state"])
+        self.assertIsNone(kat._rp_inputs(paths[1])["prior_state"])
+        results_path = kat.C2_RESULTS_PATH
+        divergences_path = kat_report.DIVERGENCES_PATH
+        original_results = results_path.read_bytes()
+        original_divergences = divergences_path.read_bytes()
+        evaluate = kat.evaluate
+        calls = 0
+
+        def fail_second_evaluation(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls % 2 == 0:
+                raise RuntimeError("second evaluation failed")
+            return evaluate(*args, **kwargs)
+
+        with patch.object(kat, "_c2_fixture_paths", return_value=paths), \
+                patch.object(kat, "evaluate", side_effect=fail_second_evaluation), \
+                patch.object(kat, "C2_RESULTS_PATH") as results, \
+                patch.object(kat_report, "DIVERGENCES_PATH") as divergences:
+            divergences.read_bytes.return_value = original_divergences
+            output = kat.run_c2()
+            self.assertEqual(calls, 4)
+            results.write_text.assert_called_once()
+            self.assertEqual(json.loads(results.write_text.call_args.args[0]), output)
+            divergences.write_bytes.assert_called_once()
+            divergence_report = divergences.write_bytes.call_args.args[0]
+            self.assertIn(b"internal_error", divergence_report)
+            for row in output["fixtures"]:
+                self.assertEqual(row["produced_result"], "internal_error")
+                self.assertIn(row["fixture"].encode(), divergence_report)
+            self.assertEqual(output["fixtures"][0]["stateful_properties"], "evaluation_failed")
+            self.assertEqual(output["fixtures"][1]["stateful_properties"], "not_evaluated")
+        self.assertEqual(results_path.read_bytes(), original_results)
+        self.assertEqual(divergences_path.read_bytes(), original_divergences)
 
 
 if __name__ == "__main__":
