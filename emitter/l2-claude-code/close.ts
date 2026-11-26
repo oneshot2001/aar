@@ -69,6 +69,6 @@ try {
   main();
 } catch (err) {
   try {
-    appendFileSync(join(BASE_DIR, "errors.log"), `close: ${String(err)}\n`);
+    appendFileSync(join(BASE_DIR, "errors.log"), `close: ${String(err)}\n`, { mode: 0o600 });
   } catch {}
 }

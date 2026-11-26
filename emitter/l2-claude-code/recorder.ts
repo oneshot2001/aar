@@ -37,7 +37,7 @@ function main(): void {
   }
   const sid = sessionId16(sessionId);
   if (!isText(toolName)) {
-    appendFileSync(join(sessionDir(sid), "errors.log"), "tool call without tool_name dropped\n");
+    appendFileSync(join(sessionDir(sid), "errors.log"), "tool call without tool_name dropped\n", { mode: 0o600 });
     return;
   }
 
@@ -65,6 +65,6 @@ try {
   main();
 } catch (err) {
   try {
-    appendFileSync(join(BASE_DIR, "errors.log"), `recorder: ${String(err)}\n`);
+    appendFileSync(join(BASE_DIR, "errors.log"), `recorder: ${String(err)}\n`, { mode: 0o600 });
   } catch {}
 }

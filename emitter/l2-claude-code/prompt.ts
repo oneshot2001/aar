@@ -31,7 +31,7 @@ function main(): void {
   const sid = sessionId16(sessionId);
   const dir = sessionDir(sid);
   if (typeof event.prompt !== "string" || !isText(promptId)) {
-    withLock(dir, () => appendFileSync(join(dir, "errors.log"), "prompt event without prompt or prompt_id dropped\n"));
+    withLock(dir, () => appendFileSync(join(dir, "errors.log"), "prompt event without prompt or prompt_id dropped\n", { mode: 0o600 }));
     return;
   }
   // The committed text and the stored text are the same, well-formed string.
@@ -65,6 +65,6 @@ try {
   main();
 } catch (err) {
   try {
-    appendFileSync(join(BASE_DIR, "errors.log"), `prompt: ${String(err)}\n`);
+    appendFileSync(join(BASE_DIR, "errors.log"), `prompt: ${String(err)}\n`, { mode: 0o600 });
   } catch {}
 }

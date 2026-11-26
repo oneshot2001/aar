@@ -5,7 +5,7 @@
 import { p256 } from "@noble/curves/nist.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { encodeCbor, decodeCbor, toHex, fromHex, strictUtf8, type CborValue } from "../../harness/cbor";
-import { mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync, renameSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync, renameSync, openSync, closeSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 
@@ -34,7 +34,10 @@ export interface RecorderKey {
 // so there is no stale lock to reclaim. No wait cap: the hook timeout bounds
 // the wait.
 export function withLock<T>(dir: string, fn: () => T): T {
-  const db = new Database(join(dir, "lock.db"));
+  const path = join(dir, "lock.db");
+  // Create privately before SQLite opens it; an existing database keeps its mode.
+  closeSync(openSync(path, "a", 0o600));
+  const db = new Database(path);
   try {
     while (true) {
       try {
@@ -64,7 +67,7 @@ export function withLock<T>(dir: string, fn: () => T): T {
 
 // Writes under a temporary name and renames it into place, so a kill
 // mid-write never leaves a partial file at the final path.
-export function writeFileAtomic(path: string, data: string | Uint8Array, mode?: number): void {
+export function writeFileAtomic(path: string, data: string | Uint8Array, mode = 0o600): void {
   const tmpPath = `${path}.${process.pid}.tmp`;
   writeFileSync(tmpPath, data, { mode });
   renameSync(tmpPath, path);
@@ -103,7 +106,7 @@ export function loadOrCreateRecorderKey(): RecorderKey {
 
 export function sessionDir(sessionId16: Uint8Array): string {
   const dir = join(BASE_DIR, "sessions", toHex(sessionId16));
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
   return dir;
 }
 
@@ -156,7 +159,7 @@ export function appendEntry(
     if (existsSync(join(dir, "close.hex"))) {
       // D-63: a closed session is never re-opened or re-closed. Entries after
       // close would be unverifiable; record the starvation visibly instead.
-      appendFileSync(join(dir, "errors.log"), droppedLine + "\n");
+      appendFileSync(join(dir, "errors.log"), droppedLine + "\n", { mode: 0o600 });
       return;
     }
 
@@ -185,7 +188,7 @@ export function appendEntry(
         // Entries were lost or the log is a different chain: chain from the
         // recorded head, so the verifier reports the break.
         prevDigest = state.prevDigest;
-        appendFileSync(join(dir, "errors.log"), "receipt log does not contain the recorded chain head\n");
+        appendFileSync(join(dir, "errors.log"), "receipt log does not contain the recorded chain head\n", { mode: 0o600 });
       }
     }
     // openedAt: the recorded value; now for the first entry of a new session;
@@ -213,7 +216,7 @@ export function appendEntry(
     ]);
 
     const line = toHex(signEnvelope(payload, contentType, key));
-    appendFileSync(receiptsPath, framedLine(log, line));
+    appendFileSync(receiptsPath, framedLine(log, line), { mode: 0o600 });
     // Always rewritten, so checkpointing resumes after a lost state.json.
     writeFileAtomic(statePath, JSON.stringify({ seq: seq + 1, prevDigest: toHex(sha256(payloadOf(line))), openedAt }));
     afterAppend?.();

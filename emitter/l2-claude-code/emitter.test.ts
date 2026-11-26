@@ -1,7 +1,7 @@
 // End-to-end: recorder → close → verify, then tamper/omission cases.
 // Runs the real entrypoints as subprocesses (the hook surface), isolated via AAR_L2_DIR.
 import { describe, expect, test, beforeAll } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync, cpSync, unlinkSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, cpSync, unlinkSync, existsSync, statSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CborValue } from "./lib";
@@ -39,6 +39,43 @@ beforeAll(() => {
 });
 
 describe("l2 emitter", () => {
+  test("recorder creates private files", () => {
+    const scratch = mkdtempSync(join(tmpdir(), "aar-l2-private-"));
+    const privateBase = join(scratch, "recorder");
+    const session = "test-session-private";
+    const sidHex = (require("node:crypto") as typeof import("node:crypto"))
+      .createHash("sha256").update(session).digest("hex").slice(0, 32);
+    const dir = join(privateBase, "sessions", sidHex);
+    const runPrivate = (script: string, event: Record<string, unknown>): void => {
+      const proc = Bun.spawnSync(["sh", "-c", 'umask 022; exec bun run "$1"', "sh", join(here, script)], {
+        stdin: Buffer.from(JSON.stringify({ session_id: session, ...event })),
+        env: { ...process.env, AAR_L2_DIR: privateBase },
+      });
+      expect(proc.exitCode).toBe(0);
+    };
+    try {
+      runPrivate("prompt.ts", { hook_event_name: "UserPromptSubmit", prompt_id: "p1", prompt: "list the doors" });
+      runPrivate("recorder.ts", { hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: {}, tool_response: {} });
+      runPrivate("recorder.ts", { hook_event_name: "PostToolUse" });
+      runPrivate("recorder.ts", { hook_event_name: "Stop" });
+      runPrivate("close.ts", {});
+
+      for (const path of [privateBase, join(privateBase, "sessions"), dir]) {
+        expect(existsSync(path)).toBe(true);
+        expect(statSync(path).mode & 0o777).toBe(0o700);
+      }
+      for (const path of [
+        ...["recorder.key", "recorder.pub", "lock.db", "errors.log"].map((name) => join(privateBase, name)),
+        ...["lock.db", "receipts.hexl", "state.json", "close.hex", "prompts.jsonl", "errors.log"].map((name) => join(dir, name)),
+      ]) {
+        expect(existsSync(path)).toBe(true);
+        expect(statSync(path).mode & 0o777).toBe(0o600);
+      }
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+
   test("intact session verifies", () => {
     const r = verify(sessionPath());
     expect(r.out).toContain("intact");

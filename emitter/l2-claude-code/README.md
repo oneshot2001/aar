@@ -100,14 +100,18 @@ ratification, not a conformant producer.
   prompts and every tool receipt unbound.
 
 State lives under `~/.aar-l2/` (override: `AAR_L2_DIR`): a per-install P-256
-recorder key (0600) and per-session `receipts.hexl` / `state.json` /
-`close.hex` / `prompts.jsonl`. Only the key and `prompts.jsonl` are created
-0600; the other per-session files and the session directories take the
-process umask (0644 and 0755 under the usual 022), inside the base directory,
-which is created 0700. An `AAR_L2_DIR` that already exists keeps the mode it
-has. The key, state, close and prompt-text
-files are written under a temporary name and renamed into place, so a killed
-hook leaves none of them partial; the receipt log is appended in place, under
+recorder key and per-session `receipts.hexl` / `state.json` /
+`close.hex` / `prompts.jsonl`. The base, `sessions/` and each session directory
+are created 0700; directories that already exist keep their modes. Every file
+under the base is created 0600, including both recorder key files, both
+`lock.db` files and both `errors.log` files. Files written through
+`writeFileAtomic` (key, public key, state, close and prompt text) are replaced
+by a new 0600 file on every write, so a loose mode is tightened on the next
+write. Files appended in place (`receipts.hexl` and `errors.log`) are created
+0600 and keep their modes if they already exist. A missing `lock.db` is
+created 0600 before SQLite opens it; an existing database keeps its mode,
+with no chmod after opening. Atomic writes use a temporary name and rename
+into place, so a killed hook leaves none of them partial; the receipt log is appended in place, under
 the session lock, with a newline written first when the file is non-empty
 and does not end with one. A new key pair publishes
 `recorder.pub` first and `recorder.key` last, so a private key on disk always
