@@ -39,6 +39,24 @@ beforeAll(() => {
 });
 
 describe("l2 emitter", () => {
+  test("close ignores a non-text session_id", () => {
+    const scratch = mkdtempSync(join(tmpdir(), "aar-l2-close-no-session-"));
+    try {
+      for (const [index, sessionId] of [123, true, [1], { a: 1 }, "", "s\ud800"].entries()) {
+        const fresh = join(scratch, String(index));
+        expect(existsSync(fresh)).toBe(false);
+        const proc = Bun.spawnSync(["bun", "run", join(here, "close.ts")], {
+          stdin: Buffer.from(JSON.stringify({ session_id: sessionId })),
+          env: { ...process.env, AAR_L2_DIR: fresh },
+        });
+        expect(proc.exitCode).toBe(0);
+        expect(existsSync(fresh)).toBe(false);
+      }
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+
   test("recorder creates private files", () => {
     const scratch = mkdtempSync(join(tmpdir(), "aar-l2-private-"));
     const privateBase = join(scratch, "recorder");

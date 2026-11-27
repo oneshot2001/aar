@@ -5,14 +5,14 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import {
-  loadOrCreateRecorderKey, sessionDir, sessionId16, signEnvelope, openEnvelope,
+  loadOrCreateRecorderKey, sessionDir, sessionId16, signEnvelope, openEnvelope, isText,
   readHexLines, sha256, toHex, encodeCbor, withLock, writeFileAtomic, CLOSE_CONTENT_TYPE, TENANT_ID, SITE_ID,
   type CborValue,
 } from "./lib";
 
 function main(): void {
-  const event = JSON.parse(readFileSync(0, "utf8")) as { session_id?: string };
-  if (!event.session_id) return;
+  const event = JSON.parse(readFileSync(0, "utf8")) as { session_id?: unknown };
+  if (!isText(event.session_id)) return;
 
   const key = loadOrCreateRecorderKey();
   const sid = sessionId16(event.session_id);
